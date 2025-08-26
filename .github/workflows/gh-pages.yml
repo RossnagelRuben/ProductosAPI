@@ -18,23 +18,22 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "7.0.x"
+          dotnet-version: "7.0.x"   # usa 9.0.x si tu proyecto es net9
 
-      # ⬇️ compila tu proyecto (cambiá el nombre si tu .csproj es otro)
       - name: Publish
         run: dotnet publish ./BlazorApp_ProductosAPI.csproj -c Release -o publish
 
-      # ⬇️ configura Pages (clave para evitar el 404)
+      # Habilita Pages si aún no existe
       - name: Configure Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
-      # ⬇️ ajusta el <base href> para /ProductosAPI/
+      # Ajusta el <base href> para /ProductosAPI/
       - name: Fix base href for GitHub Pages
         run: |
           sed -i 's|<base href="/"|<base href="/ProductosAPI/"|g' publish/wwwroot/index.html
@@ -52,6 +51,5 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
+      - id: deployment
         uses: actions/deploy-pages@v4
