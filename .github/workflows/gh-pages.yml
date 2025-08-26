@@ -26,9 +26,15 @@ jobs:
         with:
           dotnet-version: "7.0.x"
 
+      # ⬇️ compila tu proyecto (cambiá el nombre si tu .csproj es otro)
       - name: Publish
         run: dotnet publish ./BlazorApp_ProductosAPI.csproj -c Release -o publish
 
+      # ⬇️ configura Pages (clave para evitar el 404)
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      # ⬇️ ajusta el <base href> para /ProductosAPI/
       - name: Fix base href for GitHub Pages
         run: |
           sed -i 's|<base href="/"|<base href="/ProductosAPI/"|g' publish/wwwroot/index.html
