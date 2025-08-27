@@ -10,61 +10,105 @@
 
 <h3>Productos</h3>
 
+<!-- Autenticación -->
 <div class="card">
     <h4>Autenticación</h4>
-    <div class="row">
-        <label>Token</label>
+    <div class="inline-row">
+        <label for="tokenInput">Token</label>
+
+        @* 
+          Usamos oninput para que el binding ocurra mientras se escribe.
+          OJO: el setter de la propiedad Token (ver sección 2) dispara la recarga de familias.
+        *@
         @if (showToken)
         {
-            <InputText @bind-Value="token" style="min-width:480px" />
+            <InputText id="tokenInput"
+                       @bind-Value="Token"
+                       @bind-Value:event="oninput"
+                       style="min-width:320px"
+                       aria-label="Token de autenticación" />
         }
         else
         {
-            <input type="password" @bind="token" style="min-width:480px" />
+            <input id="tokenInput"
+                   type="password"
+                   @bind="Token"
+                   @bind:event="oninput"
+                   style="min-width:320px"
+                   aria-label="Token de autenticación" />
         }
-        <button @onclick="ToggleToken">@((showToken ? "Ocultar" : "Mostrar"))</button>
+
+        <button type="button" class="btn" @onclick="ToggleToken" aria-pressed="@showToken">
+            @(showToken ? "Ocultar" : "Mostrar")
+        </button>
     </div>
     <small class="muted">Se enviará en el header: <code>Authorization: Bearer …</code></small>
 </div>
 
+
+<!-- Filtros -->
 <div class="card">
     <h4>Filtros</h4>
-    <div class="grid">
-        <label>Cantidad (pageSize)</label>
-        <InputNumber @bind-Value="pageSize" />
-        <label>Página (pageNumber)</label>
-        <InputNumber @bind-Value="pageNumber" />
 
-        <label>Rubro (rubroCodigo)</label>
-        <InputText @bind-Value="rubroCodigo" />
+    <div class="form-grid">
 
-        <label>Código de Barra (codigoBarra)</label>
-        <InputText @bind-Value="codigoBarra" />
+        <div class="field">
+            <label for="pageSize">Cantidad (pageSize)</label>
+            <InputNumber id="pageSize" @bind-Value="pageSize" aria-label="Cantidad por página" />
+        </div>
 
-        <label>Descripción (descripcionLarga)</label>
-        <InputText @bind-Value="descripcionLarga" />
+        <div class="field">
+            <label for="pageNumber">Página (pageNumber)</label>
+            <InputNumber id="pageNumber" @bind-Value="pageNumber" aria-label="Número de página" />
+        </div>
 
-        <label>Familia (familiaID)</label>
-        <select @bind="familiaID">
-            @foreach (var f in familiasConTodo)
-            {
-                <option value="@f.FamiliaID">@f.Descripcion (@f.FamiliaID)</option>
-            }
-        </select>
+        <div class="field">
+            <label for="rubroCodigo">Rubro (rubroCodigo)</label>
+            <InputText id="rubroCodigo" @bind-Value="rubroCodigo" />
+        </div>
 
-        <label>Fecha modif. desde (yyyy-MM-dd)</label>
-        <InputDate @bind-Value="fechaModifDesde" TValue="DateTime?" />
+        <div class="field">
+            <label for="codigoBarra">Código de Barra (codigoBarra)</label>
+            <InputText id="codigoBarra" @bind-Value="codigoBarra" />
+        </div>
 
-        <label>Fecha modif. hasta (yyyy-MM-dd)</label>
-        <InputDate @bind-Value="fechaModifHasta" TValue="DateTime?" />
+        <div class="field">
+            <label for="descripcionLarga">Descripción (descripcionLarga)</label>
+            <InputText id="descripcionLarga" @bind-Value="descripcionLarga" />
+        </div>
 
-        <label>Sucursal (sucursalID)</label>
-        <InputNumber @bind-Value="sucursalID" TValue="short?" />
+        <div class="field">
+            <label for="familiaID">Familia (familiaID)</label>
+            <InputSelect id="familiaID" @bind-Value="familiaID">
+                @foreach (var f in familiasConTodo)
+                {
+                    <option value="@f.FamiliaID">@f.Descripcion (@f.FamiliaID)</option>
+                }
+            </InputSelect>
+        </div>
+
+        <div class="field">
+            <label for="fechaModifDesde">Fecha modif. desde</label>
+            <InputDate id="fechaModifDesde" @bind-Value="fechaModifDesde" TValue="DateTime?" />
+            <small class="hint">Formato: yyyy-MM-dd</small>
+        </div>
+
+        <div class="field">
+            <label for="fechaModifHasta">Fecha modif. hasta</label>
+            <InputDate id="fechaModifHasta" @bind-Value="fechaModifHasta" TValue="DateTime?" />
+            <small class="hint">Formato: yyyy-MM-dd</small>
+        </div>
+
+        <div class="field">
+            <label for="sucursalID">Sucursal (sucursalID)</label>
+            <InputNumber id="sucursalID" @bind-Value="sucursalID" TValue="short?" />
+        </div>
+
     </div>
 
     <div class="actions">
-        <button @onclick="Buscar">Buscar</button>
-        <button class="ghost" @onclick="Limpiar">Limpiar</button>
+        <button type="button" class="btn primary" @onclick="Buscar">Buscar</button>
+        <button type="button" class="btn ghost" @onclick="Limpiar">Limpiar</button>
     </div>
 </div>
 
@@ -82,10 +126,18 @@ else if (items.Count == 0)
 }
 else
 {
+    <!-- Encabezado de tabla -->
     <div class="table">
         <div class="thead">
             <div>Código</div>
             <div>Descripción</div>
+            <div>Presentación</div>
+            <div>Unid. por bulto</div>
+            <div>Precio (texto)</div>
+            <div>Precio x unidad</div>
+            <div>Stock</div>
+            <div>Código de barra</div>
+            <div>Fecha modif.</div>
         </div>
 
         @foreach (var p in items)
@@ -93,15 +145,22 @@ else
             <div class="row">
                 <div>@p.codigo</div>
                 <div>@p.descripcionLarga</div>
+                <div>@p.Presentacion</div>
+                <div>@(p.CantidadUnidadesBulto?.ToString() ?? "-")</div>
+                <div>@(string.IsNullOrWhiteSpace(p.PrecioFormateado) ? "-" : p.PrecioFormateado)</div>
+                <div>@(p.PrecioPorUnidad?.ToString("0.##") ?? "-")</div>
+                <div>@(p.stock?.ToString() ?? "-")</div>
+                <div>@(string.IsNullOrWhiteSpace(p.codigoBarra) ? "-" : p.codigoBarra)</div>
+                <div>@(p.fechaModif?.ToString("yyyy-MM-dd") ?? "-")</div>
             </div>
         }
     </div>
 
     <div class="pager">
-        <button @onclick="Primera" disabled="@(pageNumber <= 1)">« Primero</button>
-        <button @onclick="Anterior" disabled="@(pageNumber <= 1)">‹ Anterior</button>
-        <span>Página @pageNumber</span>
-        <button @onclick="Siguiente" disabled="@(!puedeSiguiente)">Siguiente ›</button>
+        <button type="button" class="btn" @onclick="Primera" disabled="@(pageNumber <= 1)">« Primero</button>
+        <button type="button" class="btn" @onclick="Anterior" disabled="@(pageNumber <= 1)">‹ Anterior</button>
+        <span class="page-indicator">Página @pageNumber</span>
+        <button type="button" class="btn" @onclick="Siguiente" disabled="@(!puedeSiguiente)">Siguiente ›</button>
     </div>
 }
 
@@ -116,8 +175,49 @@ else
     // =======================
     // Estado
     // =======================
-    string token = DEFAULT_TOKEN;
+    // Visibilidad del token en el input (texto / password)
     bool showToken = false;
+
+    // Antes: string token = DEFAULT_TOKEN;
+    // Ahora: propiedad con setter que dispara recarga de familias
+    private string _token = DEFAULT_TOKEN;
+
+    /// <summary>
+    /// Token actual. Cada vez que cambia su valor, recarga las familias.
+    /// Nota: como el setter no puede ser async, disparamos una tarea "fire-and-forget".
+    /// </summary>
+    string Token
+    {
+        get => _token;
+        set
+        {
+            if (_token == value) return;
+            _token = value;
+
+            // Si querés evitar múltiples llamados mientras el usuario tipea,
+            // podés agregar un debounce. Por simplicidad, recargamos directo.
+            _ = OnTokenChangedAsync();
+        }
+    }
+
+    private async Task OnTokenChangedAsync()
+    {
+        // Limpiamos errores previos relacionados a familias
+        error = null;
+
+        // Si el token está vacío, podés decidir limpiar la lista:
+        // familiasConTodo = new() { new Familia { FamiliaID = 0, Descripcion = "TODO" } };
+
+        // Reintenta cargar las familias con el nuevo token
+        await CargarFamiliasAsync();
+
+        // Si querés refrescar resultados también:
+        // await ConsultarAsync();
+
+        // Forzamos render si hace falta
+        StateHasChanged();
+    }
+
 
     // Filtros
     int pageSize = 25;       // 1..500
@@ -200,7 +300,10 @@ else
         try
         {
             using var req = new HttpRequestMessage(HttpMethod.Get, FamiliasApiUrl);
-            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            // 🔧 usar la propiedad Token (no "token")
+            req.Headers.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", Token);
+
             using var resp = await Http.SendAsync(req);
             var json = await resp.Content.ReadAsStringAsync();
 
@@ -218,7 +321,6 @@ else
                     }
                 }
             }
-            // Insertar opción TODO (0)
             familiasConTodo = new List<Familia> { new Familia { FamiliaID = 0, Descripcion = "TODO" } };
             familiasConTodo.AddRange(familias.OrderBy(f => f.Descripcion ?? ""));
         }
@@ -232,6 +334,7 @@ else
         }
     }
 
+
     async Task ConsultarAsync()
     {
         try
@@ -239,17 +342,16 @@ else
             loading = true;
             error = null;
 
-            // Validaciones similares a WPF
-            if (pageSize < 1 || pageSize > 500) pageSize = Math.Clamp(pageSize, 1, 500);
+            pageSize = Math.Clamp(pageSize, 1, 500);
             if (pageNumber < 1) pageNumber = 1;
             if (fechaModifDesde.HasValue && fechaModifHasta.HasValue && fechaModifHasta < fechaModifDesde)
                 throw new InvalidOperationException("La fecha 'Hasta' debe ser posterior a 'Desde'.");
 
             var qs = new List<string>
-            {
-                $"pageSize={pageSize}",
-                $"pageNumber={pageNumber}"
-            };
+        {
+            $"pageSize={pageSize}",
+            $"pageNumber={pageNumber}"
+        };
 
             if (!string.IsNullOrWhiteSpace(rubroCodigo))
                 qs.Add($"rubroCodigo={Uri.EscapeDataString(rubroCodigo.Trim())}");
@@ -275,7 +377,9 @@ else
             var url = $"{ApiUrl}?{string.Join("&", qs)}";
 
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            // 🔧 usar la propiedad Token (no "token")
+            req.Headers.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", Token);
 
             using var resp = await Http.SendAsync(req);
             var json = await resp.Content.ReadAsStringAsync();
@@ -285,7 +389,6 @@ else
 
             var lista = new List<Product>();
             using var doc = JsonDocument.Parse(json);
-            // Esperamos { data: [...] }
             if (doc.RootElement.TryGetProperty("data", out var dataArr) && dataArr.ValueKind == JsonValueKind.Array)
             {
                 var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
@@ -297,11 +400,7 @@ else
             }
 
             items = lista;
-            // Fallback paginación: si recibimos exactamente pageSize, asumimos que puede haber siguiente
             puedeSiguiente = items.Count == pageSize;
-
-            // Si tu API devuelve metadatos (total, totalPages, etc.), podés parsearlos aquí
-            // y setear puedeSiguiente según esos metadatos en lugar del fallback.
         }
         catch (Exception ex)
         {
@@ -315,6 +414,7 @@ else
             StateHasChanged();
         }
     }
+
 
     // =======================
     // Modelos locales
@@ -357,57 +457,97 @@ else
 }
 
 <style>
-    .card {
-        border: 1px solid #e3e3e3;
-        border-radius: 10px;
-        padding: 12px;
-        margin: 12px 0;
-        background: #fafafa;
+    :root {
+        --border: #e3e3e3;
+        --bg: #fafafa;
+        --bg-white: #fff;
+        --text-muted: #666;
+        --radius: 12px;
+        --gap: 12px;
     }
 
-    .row {
+    h3 {
+        margin-bottom: 8px;
+    }
+
+    .card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 12px;
+        margin: 12px 0;
+        background: var(--bg);
+    }
+
+    .inline-row {
         display: flex;
+        flex-wrap: wrap;
         gap: 8px;
         align-items: center;
         margin-bottom: 8px;
     }
 
-        .row label {
-            width: 120px;
+        .inline-row label {
+            min-width: 90px;
         }
 
     .muted {
-        color: #666;
+        color: var(--text-muted);
     }
 
-    .grid {
+    /* GRID de filtros: responsive elegante */
+    .form-grid {
         display: grid;
-        grid-template-columns: 200px 1fr 200px 1fr;
-        gap: 10px;
+        gap: var(--gap);
+        /* En desktop: columnas fluidas de al menos 280px, acomodándose solas */
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        margin-top: 10px;
     }
 
-        .grid label {
-            align-self: center;
+    .field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        background: var(--bg-white);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 10px;
+    }
+
+        .field label {
+            font-weight: 600;
         }
+
+    .hint {
+        color: var(--text-muted);
+        font-size: .85rem;
+    }
 
     .actions {
-        margin-top: 10px;
+        margin-top: 12px;
         display: flex;
         gap: 8px;
+        flex-wrap: wrap;
     }
 
-        .actions button {
-            padding: 8px 12px;
-            border-radius: 8px;
-            border: 1px solid #ccc;
-            background: #f7f7f7;
-            cursor: pointer;
+    .btn {
+        padding: 8px 12px;
+        border-radius: 10px;
+        border: 1px solid #cfcfcf;
+        background: #f7f7f7;
+        cursor: pointer;
+    }
+
+        .btn.primary {
+            background: #0d6efd;
+            color: #fff;
+            border-color: #0d6efd;
         }
 
-        .actions .ghost {
+        .btn.ghost {
             background: transparent;
         }
 
+    /* Tabla */
     .table {
         display: grid;
         gap: 6px;
@@ -419,17 +559,17 @@ else
         grid-template-columns: 120px 1fr 140px 140px 120px 140px 100px 220px 170px;
         gap: 8px;
         padding: 10px;
-        border: 1px solid #e3e3e3;
-        border-radius: 10px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--bg-white);
+        overflow: auto;
     }
 
     .thead {
         font-weight: 700;
-        background: #fff;
-    }
-
-    .row {
-        background: #fff;
+        position: sticky;
+        top: 0;
+        z-index: 1;
     }
 
     .pager {
@@ -437,18 +577,33 @@ else
         align-items: center;
         gap: 10px;
         margin-top: 12px;
+        flex-wrap: wrap;
     }
 
-        .pager button {
-            padding: 6px 10px;
-            border-radius: 8px;
-            border: 1px solid #ccc;
-            background: #f7f7f7;
-            cursor: pointer;
-        }
+    .page-indicator {
+        font-weight: 600;
+    }
 
     .error {
         color: #c00;
         white-space: pre-wrap;
+    }
+
+    /* Mobile first: ya apilamos fields; reforzamos pequeñas pantallas */
+    @@media (max-width: 480px) {
+        .inline-row label {
+            width: 100%;
+        }
+
+        .thead, .row {
+            font-size: .92rem;
+        }
+    }
+
+
+    .thead, .row {
+        font-size: .92rem;
+    }
+
     }
 </style>

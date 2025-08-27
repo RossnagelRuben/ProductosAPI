@@ -36,7 +36,7 @@ html, body, #app {
     min-height: 100vh; /* ocupa el alto de la ventana */
     display: grid;
     place-items: center; /* centra vertical y horizontal */
-    gap: 18px;
+    gap: 5px;
     padding: 0; /* quita padding extra */
     text-align: center;
 }

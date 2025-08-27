@@ -1,0 +1,609 @@
+﻿@page "/imagen"
+@using System.Net.Http.Headers
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<h3 style="margin-bottom:10px;">Imagen</h3>
+
+<div class="card">
+    <div class="row">
+        <label>Google Vision API Key</label>
+        <input type="text" @bind="GoogleApiKey" @bind:event="oninput" placeholder="API key de Google Vision..." />
+    </div>
+
+    <div class="row">
+        <InputFile OnChange="OnFileSelected" accept=".png,.jpg,.jpeg,.bmp,.webp" />
+        <button class="btn" @onclick="RunOCR" disabled="@IsOcrLoading">@(IsOcrLoading ? "Procesando OCR..." : "Procesar OCR")</button>
+        <button class="btn btn-gray" @onclick="CopyOcrText" disabled="@string.IsNullOrWhiteSpace(FullOcrText)">Copiar texto OCR</button>
+        <button class="btn btn-purple" @onclick="ExtraerProductosIA" disabled="@IsIaLoading || string.IsNullOrWhiteSpace(FullOcrText)">
+            @(IsIaLoading ? "Extrayendo..." : "Extraer productos (IA)")
+        </button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Error))
+    {
+        <div class="alert error">@Error</div>
+    }
+</div>
+
+@if (!string.IsNullOrWhiteSpace(ImageDataUrl))
+{
+    <div class="stage">
+        <div class="img-wrap">
+            <img id="ocr-img" src="@ImageDataUrl" @ref="ImgRef" @onload="OnImageLoaded" />
+            <!-- OJO: preserveAspectRatio="none" y SIN width/height en CSS -->
+            <svg class="overlay" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+                @if (Polygons?.Count > 0)
+                {
+                    @foreach (var p in Polygons)
+                    {
+                        <polygon points="@p.PointsAttr" class="poly"
+                                 @onmouseover="@(() => HoverText = p.Text)" @onmouseout="@(() => HoverText = null)"
+                                 @onclick="@(() => CopyText(p.Text))"></polygon>
+                    }
+                }
+            </svg>
+        </div>
+
+        <div class="side">
+            <div class="section">
+                <div class="section-title">Texto OCR</div>
+                <textarea readonly rows="12">@FullOcrText</textarea>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Productos (IA)</div>
+                <textarea readonly rows="12">@ProductosJson</textarea>
+            </div>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(HoverText))
+{
+    <div class="tooltip-fixed">
+        <div class="tooltip-title">Texto en área</div>
+        <div class="tooltip-body">@HoverText</div>
+        <div class="tooltip-foot">Click para copiar</div>
+    </div>
+}
+
+<style>
+    .card {
+        background: #fff;
+        border-radius: 14px;
+        padding: 12px 14px;
+        box-shadow: 0 6px 18px rgba(0,0,0,.08);
+        margin-bottom: 12px
+    }
+
+    .row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 8px
+    }
+
+        .row label {
+            font-weight: 600;
+            color: #334155
+        }
+
+        .row input {
+            flex: 1 1 280px;
+            padding: 8px 10px;
+            border-radius: 10px;
+            border: 1px solid #d0d7de
+        }
+
+            .row input:focus {
+                outline: none;
+                border-color: #1DA1F2;
+                box-shadow: 0 0 0 3px rgba(29,161,242,.15)
+            }
+
+    .btn {
+        padding: 8px 14px;
+        border-radius: 10px;
+        border: none;
+        background: #1DA1F2;
+        color: #fff;
+        cursor: pointer
+    }
+
+        .btn[disabled] {
+            opacity: .6;
+            cursor: default
+        }
+
+    .btn-gray {
+        background: #e2e8f0;
+        color: #111827
+    }
+
+    .btn-purple {
+        background: #7c3aed
+    }
+
+    .alert.error {
+        margin-top: 6px;
+        padding: 8px 10px;
+        color: #842029;
+        background: #f8d7da;
+        border: 1px solid #f5c2c7;
+        border-radius: 10px
+    }
+
+    .stage {
+        display: flex;
+        gap: 14px;
+        align-items: flex-start
+    }
+
+    .img-wrap {
+        position: relative;
+        max-width: 60%;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        overflow: auto;
+        background: #fff
+    }
+
+        .img-wrap img {
+            display: block;
+            max-width: 100%;
+            height: auto
+        }
+
+    /* ⚠️ Importante: SIN width/height aquí. Se los pone JS en px. */
+    .overlay {
+        position: absolute;
+        left: 0;
+        top: 0;
+        pointer-events: auto
+    }
+
+    .poly {
+        fill: rgba(255,0,0,.15);
+        stroke: #ef4444;
+        stroke-width: 2;
+        vector-effect: non-scaling-stroke; /* el borde no se deforma con el zoom del browser */
+    }
+
+    .side {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 12px
+    }
+
+    .section {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 10px
+    }
+
+    .section-title {
+        font-weight: 700;
+        margin-bottom: 8px
+    }
+
+    textarea {
+        width: 100%;
+        border: 1px solid #d0d7de;
+        border-radius: 8px;
+        padding: 8px;
+        resize: vertical
+    }
+
+    .tooltip-fixed {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        background: #111827;
+        color: #fff;
+        border-radius: 12px;
+        box-shadow: 0 10px 22px rgba(0,0,0,.25);
+        max-width: 420px
+    }
+
+    .tooltip-title {
+        font-weight: 700;
+        padding: 10px 12px;
+        border-bottom: 1px solid rgba(255,255,255,.1)
+    }
+
+    .tooltip-body {
+        padding: 10px 12px;
+        white-space: pre-wrap
+    }
+
+    .tooltip-foot {
+        padding: 8px 12px;
+        color: #cbd5e1;
+        border-top: 1px solid rgba(255,255,255,.1)
+    }
+</style>
+
+@code {
+    // ===== Estado UI =====
+    private string? BearerToken { get; set; } // si usás tu API intermedia
+    private string? GoogleApiKey { get; set; }
+    private string? GeminiApiKey { get; set; }
+    private bool IsOcrLoading { get; set; }
+    private bool IsIaLoading { get; set; }
+    private string? Error { get; set; }
+
+    // ===== Imagen & Overlay =====
+    private ElementReference ImgRef;
+    private string? ImageDataUrl { get; set; }
+    private byte[]? ImageBytes { get; set; }
+    private string? HoverText { get; set; }
+    private readonly List<PolyModel> Polygons = new();
+
+    // ===== Resultados =====
+    private string FullOcrText = "";
+    private string ProductosJson = "";
+
+    // ===== LocalStorage keys =====
+    private const string LS_TOKEN = "img_token";
+    private const string LS_GKEY = "img_gkey";
+    private const string LS_GEM = "img_gemini";
+
+    protected override async Task OnInitializedAsync()
+    {
+        BearerToken = await JS.InvokeAsync<string?>("localStorage.getItem", LS_TOKEN);
+        GoogleApiKey = await JS.InvokeAsync<string?>("localStorage.getItem", LS_GKEY);
+        GeminiApiKey = await JS.InvokeAsync<string?>("localStorage.getItem", LS_GEM);
+    }
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        Error = null;
+        FullOcrText = "";
+        ProductosJson = "";
+        Polygons.Clear();
+
+        var file = e.File;
+        if (file is null) return;
+
+        using var ms = new MemoryStream();
+        await file.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024).CopyToAsync(ms);
+        ImageBytes = ms.ToArray();
+        var base64 = Convert.ToBase64String(ImageBytes);
+        ImageDataUrl = $"data:{file.ContentType};base64,{base64}";
+    }
+
+    private async Task RunOCR()
+    {
+        Error = null;
+        FullOcrText = "";
+        Polygons.Clear();
+
+        if (ImageBytes is null) { Error = "Elegí una imagen primero."; return; }
+        if (string.IsNullOrWhiteSpace(GoogleApiKey)) { Error = "Pegá la Google Vision API Key."; return; }
+
+        await JS.InvokeVoidAsync("localStorage.setItem", LS_TOKEN, BearerToken ?? "");
+        await JS.InvokeVoidAsync("localStorage.setItem", LS_GKEY, GoogleApiKey ?? "");
+
+        IsOcrLoading = true;
+        try
+        {
+            // Vision REST - DOCUMENT_TEXT_DETECTION
+            var url = $"https://vision.googleapis.com/v1/images:annotate?key={GoogleApiKey}";
+            var body = new VisionRequest
+            {
+                Requests = new[]
+                {
+                    new VisionRequestItem
+                    {
+                        Image = new VisionImage { Content = Convert.ToBase64String(ImageBytes!) },
+                        Features = new[]{ new VisionFeature { Type = "DOCUMENT_TEXT_DETECTION" } }
+                    }
+                }
+            };
+
+            var req = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(body), System.Text.Encoding.UTF8, "application/json")
+            };
+
+            var res = await Http.SendAsync(req);
+            var json = await res.Content.ReadAsStringAsync();
+
+            if (!res.IsSuccessStatusCode)
+            {
+                Error = $"Vision API error {(int)res.StatusCode} - {res.ReasonPhrase}. Respuesta: {json}";
+                return;
+            }
+
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var parsed = JsonSerializer.Deserialize<VisionResponse>(json, options);
+
+            var ann = parsed?.Responses?.FirstOrDefault()?.FullTextAnnotation;
+            if (ann is null)
+            {
+                Error = "No se detectó texto en la imagen.";
+                return;
+            }
+
+            FullOcrText = ann.Text ?? "";
+
+            // ===== Construcción de polígonos =====
+            foreach (var page in ann.Pages)
+            {
+                foreach (var block in page.Blocks)
+                {
+                    var text = new System.Text.StringBuilder();
+                    foreach (var paragraph in block.Paragraphs)
+                    {
+                        foreach (var word in paragraph.Words)
+                        {
+                            foreach (var symbol in word.Symbols) text.Append(symbol.Text);
+                            text.Append(' ');
+                        }
+                        text.AppendLine();
+                    }
+
+                    // 1) Probar vertices en pixeles
+                    var rawPts = block.BoundingBox?.Vertices?
+                        .Where(v => v != null)
+                        .Select(v => new Pt(v.X, v.Y))
+                        .ToList() ?? new List<Pt>();
+
+                    bool bad = rawPts.Count < 3 || rawPts.Count(p => p.X == 0 && p.Y == 0) >= 2;
+
+                    // 2) Si no sirven, usar normalizedVertices (0..1)
+                    if (bad && block.BoundingBox?.NormalizedVertices?.Count >= 3)
+                    {
+                        rawPts = block.BoundingBox.NormalizedVertices
+                            .Select(v => new Pt(v.X, v.Y))
+                            .ToList();
+                    }
+
+                    if (rawPts.Count < 3) continue;
+
+                    // 3) Escalar si venían normalizados
+                    var pts = NormalizeIfNeeded(rawPts, NaturalW, NaturalH);
+
+                    Polygons.Add(new PolyModel(pts, text.ToString().Trim()));
+                }
+            }
+
+            // Re-sincroniza el overlay por si cambió el layout
+            try
+            {
+                var s2 = await JS.InvokeAsync<DomSize2>("getImageSizes", "#ocr-img");
+                await JS.InvokeVoidAsync("sizeSvgOverImage", ".overlay", s2.ClientWidth, s2.ClientHeight, s2.NaturalWidth, s2.NaturalHeight);
+            }
+            catch { /* no rompemos si falla */ }
+        }
+        catch (Exception ex)
+        {
+            Error = $"Excepción OCR: {ex.Message}";
+        }
+        finally
+        {
+            IsOcrLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ExtraerProductosIA()
+    {
+        Error = null;
+        ProductosJson = "";
+        if (string.IsNullOrWhiteSpace(FullOcrText)) { Error = "Primero corré el OCR."; return; }
+        if (string.IsNullOrWhiteSpace(GeminiApiKey)) { Error = "Pegá tu Gemini API Key (Google AI Studio)."; return; }
+        await JS.InvokeVoidAsync("localStorage.setItem", LS_GEM, GeminiApiKey ?? "");
+
+        IsIaLoading = true;
+        try
+        {
+            var prompt =
+@"Devolvé únicamente un array JSON de objetos con:
+- codigo
+- descripcion
+- cantidad
+- precio_unitario
+
+Solo ítems de productos/servicios (no subtotales ni totales).
+Usá punto (.) para decimales.
+
+Texto OCR:
+" + (FullOcrText.Length > 6000 ? FullOcrText.Substring(0, 6000) : FullOcrText);
+
+            var model = "gemini-1.5-flash-latest";
+            var url = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GeminiApiKey}";
+
+            var body = new
+            {
+                contents = new[] {
+                    new {
+                        parts = new object[] {
+                            new { text = "Sos un extractor de ítems de facturas. Devolvé solo JSON válido." },
+                            new { text = prompt }
+                        }
+                    }
+                }
+            };
+
+            var req = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(body), System.Text.Encoding.UTF8, "application/json")
+            };
+            var res = await Http.SendAsync(req);
+            var json = await res.Content.ReadAsStringAsync();
+
+            if (!res.IsSuccessStatusCode)
+            {
+                Error = $"Gemini error {(int)res.StatusCode} - {res.ReasonPhrase}. Respuesta: {json}";
+                return;
+            }
+
+            string textOut = TryParseGemini(json);
+            ProductosJson = textOut;
+
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", textOut);
+        }
+        catch (Exception ex)
+        {
+            Error = $"Excepción IA: {ex.Message}";
+        }
+        finally
+        {
+            IsIaLoading = false;
+        }
+    }
+
+    private void CopyOcrText()
+    {
+        _ = JS.InvokeVoidAsync("navigator.clipboard.writeText", FullOcrText ?? "");
+    }
+
+    private async Task CopyText(string txt)
+    {
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", txt ?? "");
+        HoverText = "📋 Copiado al portapapeles.\n\n" + txt;
+        StateHasChanged();
+    }
+
+    // ===== Tamaños naturales de la imagen =====
+    private double NaturalW, NaturalH;
+
+    private async Task OnImageLoaded()
+    {
+        try
+        {
+            var s = await JS.InvokeAsync<DomSize2>("getImageSizes", "#ocr-img");
+            NaturalW = s.NaturalWidth;
+            NaturalH = s.NaturalHeight;
+
+            // SVG = tamaño visible (px) y viewBox = tamaño natural
+            await JS.InvokeVoidAsync("sizeSvgOverImage", ".overlay", s.ClientWidth, s.ClientHeight, s.NaturalWidth, s.NaturalHeight);
+        }
+        catch
+        {
+            Error = "No se pudo medir la imagen. Verificá que js/dom.js esté cargado en index.html";
+        }
+        StateHasChanged();
+    }
+
+    // === Normalización (0..1 → px naturales) ===
+    private static bool LooksNormalized(List<Pt> pts)
+    {
+        if (pts.Count == 0) return false;
+        return pts.All(p => p.X >= 0 && p.Y >= 0 && p.X <= 1.05 && p.Y <= 1.05);
+    }
+    private static List<Pt> NormalizeIfNeeded(List<Pt> pts, double naturalW, double naturalH)
+    {
+        if (naturalW <= 0 || naturalH <= 0) return pts;
+        if (!LooksNormalized(pts)) return pts;
+        return pts.Select(p => new Pt(
+            (float)(p.X * naturalW),
+            (float)(p.Y * naturalH)
+        )).ToList();
+    }
+
+    // DTO para JS interop
+    private sealed class DomSize2
+    {
+        public double ClientWidth { get; set; }
+        public double ClientHeight { get; set; }
+        public double NaturalWidth { get; set; }
+        public double NaturalHeight { get; set; }
+    }
+
+    private static string TryParseGemini(string responseJson)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(responseJson);
+            var root = doc.RootElement;
+
+            var candidates = root.GetProperty("candidates");
+            if (candidates.ValueKind != JsonValueKind.Array || candidates.GetArrayLength() == 0) return responseJson;
+
+            var parts = candidates[0].GetProperty("content").GetProperty("parts");
+            if (parts.ValueKind != JsonValueKind.Array || parts.GetArrayLength() == 0) return responseJson;
+
+            var text = parts[0].GetProperty("text").GetString() ?? "";
+            var start = text.IndexOf('[');
+            var end = text.LastIndexOf(']');
+            if (start >= 0 && end > start)
+                return text.Substring(start, end - start + 1).Trim();
+
+            return text.Trim();
+        }
+        catch
+        {
+            return responseJson;
+        }
+    }
+
+    // ===== Modelos Vision (mínimos) =====
+    private sealed class VisionRequest
+    {
+        [JsonPropertyName("requests")] public VisionRequestItem[] Requests { get; set; } = Array.Empty<VisionRequestItem>();
+    }
+    private sealed class VisionRequestItem
+    {
+        [JsonPropertyName("image")] public VisionImage Image { get; set; } = new();
+        [JsonPropertyName("features")] public VisionFeature[] Features { get; set; } = Array.Empty<VisionFeature>();
+    }
+    private sealed class VisionImage { [JsonPropertyName("content")] public string Content { get; set; } = ""; }
+    private sealed class VisionFeature { [JsonPropertyName("type")] public string Type { get; set; } = "DOCUMENT_TEXT_DETECTION"; }
+
+    private sealed class VisionResponse
+    {
+        [JsonPropertyName("responses")] public VisionOne[] Responses { get; set; } = Array.Empty<VisionOne>();
+    }
+    private sealed class VisionOne
+    {
+        [JsonPropertyName("fullTextAnnotation")] public FullTextAnnotation? FullTextAnnotation { get; set; }
+    }
+    private sealed class FullTextAnnotation
+    {
+        [JsonPropertyName("text")] public string? Text { get; set; }
+        [JsonPropertyName("pages")] public List<Page> Pages { get; set; } = new();
+    }
+    private sealed class Page
+    {
+        [JsonPropertyName("blocks")] public List<Block> Blocks { get; set; } = new();
+    }
+    private sealed class Block
+    {
+        [JsonPropertyName("boundingBox")] public BoundingPoly? BoundingBox { get; set; }
+        [JsonPropertyName("paragraphs")] public List<Paragraph> Paragraphs { get; set; } = new();
+    }
+    private sealed class Paragraph
+    {
+        [JsonPropertyName("words")] public List<Word> Words { get; set; } = new();
+    }
+    private sealed class Word
+    {
+        [JsonPropertyName("symbols")] public List<Symbol> Symbols { get; set; } = new();
+    }
+    private sealed class Symbol { [JsonPropertyName("text")] public string Text { get; set; } = ""; }
+
+    private sealed class BoundingPoly
+    {
+        [JsonPropertyName("vertices")] public List<Vertex> Vertices { get; set; } = new();
+        [JsonPropertyName("normalizedVertices")] public List<NVertex> NormalizedVertices { get; set; } = new();
+    }
+    private sealed class Vertex { [JsonPropertyName("x")] public float X { get; set; } public float Y { get; set; } }
+    private sealed class NVertex { [JsonPropertyName("x")] public float X { get; set; } public float Y { get; set; } }
+
+    private sealed record Pt(float X, float Y);
+    private sealed class PolyModel
+    {
+        public List<Pt> Points { get; }
+        public string PointsAttr => string.Join(' ', Points.Select(p => $"{p.X},{p.Y}"));
+        public string Text { get; }
+        public PolyModel(List<Pt> pts, string text) { Points = pts; Text = text; }
+    }
+}
