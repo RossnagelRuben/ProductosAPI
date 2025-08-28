@@ -5,12 +5,18 @@
 @using System.Text.Json.Serialization
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@using Microsoft.AspNetCore.Components.Web
+@using System.Linq
+@inject IJSRuntime JS
 
 @inject HttpClient Http
 
 <h3>Productos</h3>
 
 <!-- Autenticación -->
+@if (showAuthCard)
+{
 <div class="card">
     <h4>Autenticación</h4>
     <div class="inline-row">
@@ -42,9 +48,111 @@
             @(showToken ? "Ocultar" : "Mostrar")
         </button>
     </div>
-    <small class="muted">Se enviará en el header: <code>Authorization: Bearer …</code></small>
+    @* Estado del token: rojo si inválido, verde si OK *@
+    @if (tokenChecked)
+    {
+        if (tokenOk)
+        {
+            <p class="ok">@tokenStatus</p>
+        }
+        else
+        {
+            <p class="error">@tokenStatus</p>
+        }
+    }
 </div>
+}
 
+@* Modal buscador de familias *@
+<AppModal IsOpen="showFamiliasModal" 
+          Title="Buscar familia" 
+          OnClose="CerrarBuscadorFamilias"
+          Size="AppModal.ModalSize.Medium">
+    <ChildContent>
+        <input id="filtroFamilia" 
+               class="modal-input" 
+               placeholder="Filtrar por descripción o ID" 
+               @bind="filtroFamilia" 
+               @bind:event="oninput" />
+        <div class="modal-list">
+            @foreach (var f in GetFamiliasFiltradas())
+            {
+                <div class="modal-item" @onclick="() => SeleccionarFamilia(f.FamiliaID)">
+                    @f.Descripcion (@f.FamiliaID)
+                </div>
+            }
+        </div>
+    </ChildContent>
+</AppModal>
+
+@* Modal buscador de marcas *@
+<AppModal IsOpen="showMarcasModal" 
+          Title="Buscar marca" 
+          OnClose="CerrarBuscadorMarcas"
+          Size="AppModal.ModalSize.Medium">
+    <ChildContent>
+        <input id="filtroMarca" 
+               class="modal-input" 
+               placeholder="Filtrar por descripción o ID" 
+               @bind="filtroMarca" 
+               @bind:event="oninput" />
+        <div class="modal-list">
+            @foreach (var m in GetMarcasFiltradas())
+            {
+                <div class="modal-item" @onclick="() => SeleccionarMarca(m.MarcaID)">
+                    @m.Descripcion (@m.MarcaID)
+                </div>
+            }
+        </div>
+    </ChildContent>
+</AppModal>
+
+@* Modal configurar columnas *@
+<AppModal IsOpen="showConfigCols" 
+          Title="Configurar columnas" 
+          OnClose="ToggleConfigCols"
+          Size="AppModal.ModalSize.Medium">
+    <ChildContent>
+        <div class="columns-panel">
+            <label><input type="checkbox" @bind="showColCodigo" /> Código</label>
+            <label><input type="checkbox" @bind="showColDescripcion" /> Descripción</label>
+            <label><input type="checkbox" @bind="showColPresentacion" /> Presentación</label>
+            <label><input type="checkbox" @bind="showColBulto" /> Unid. por bulto</label>
+            <label><input type="checkbox" @bind="showColPrecioTexto" /> Precio (texto)</label>
+            <label><input type="checkbox" @bind="showColPrecioUnidad" /> Precio x unidad</label>
+            <label><input type="checkbox" @bind="showColStock" /> Stock</label>
+            <label><input type="checkbox" @bind="showColCodBarra" /> Código de barra</label>
+            <label><input type="checkbox" @bind="showColFechaModif" /> Fecha modif.</label>
+        </div>
+    </ChildContent>
+</AppModal>
+
+@* Modal de detalles de producto *@
+<AppModal IsOpen="showDetailsModal && selectedProduct != null" 
+          Title="Detalles del producto" 
+          OnClose="CerrarDetalles"
+          Size="AppModal.ModalSize.Large">
+    <ChildContent>
+        <div class="details-grid">
+            <div class="details-image">
+                <img src="https://ardiaprod.vtexassets.com/arquivos/ids/321558/Yerba-Mate-Amanda-Suave-500-Gr-_1.jpg" alt="Imagen del producto" />
+            </div>
+            <div class="details-desc">@selectedProduct?.descripcionLarga</div>
+            <div><strong>Código:</strong> @selectedProduct?.codigo</div>
+            <div><strong>Presentación:</strong> @selectedProduct?.Presentacion</div>
+            <div><strong>Unidades por bulto:</strong> @(selectedProduct?.CantidadUnidadesBulto?.ToString() ?? "-")</div>
+            <div><strong>Precio (texto):</strong> @(string.IsNullOrWhiteSpace(selectedProduct?.PrecioFormateado) ? "-" : selectedProduct.PrecioFormateado)</div>
+            <div><strong>Precio x unidad:</strong> @(selectedProduct?.PrecioPorUnidad?.ToString("0.##") ?? "-")</div>
+            <div><strong>Stock:</strong> @(selectedProduct?.stock?.ToString() ?? "-")</div>
+            <div><strong>Código de barra:</strong> @(string.IsNullOrWhiteSpace(selectedProduct?.codigoBarra) ? "-" : selectedProduct.codigoBarra)</div>
+            <div><strong>Fecha modif.:</strong> @(selectedProduct?.fechaModif?.ToString("yyyy-MM-dd") ?? "-")</div>
+        </div>
+    </ChildContent>
+    
+    <FooterContent>
+        <button type="button" class="btn" @onclick="() => EditarProducto(selectedProduct)">Modificar</button>
+    </FooterContent>
+</AppModal>
 
 <!-- Filtros -->
 <div class="card">
@@ -57,19 +165,13 @@
             <InputNumber id="pageSize" @bind-Value="pageSize" aria-label="Cantidad por página" />
         </div>
 
-        <div class="field">
-            <label for="pageNumber">Página (pageNumber)</label>
-            <InputNumber id="pageNumber" @bind-Value="pageNumber" aria-label="Número de página" />
-        </div>
+        @* Se oculta filtro Página por pedido *@
 
-        <div class="field">
-            <label for="rubroCodigo">Rubro (rubroCodigo)</label>
-            <InputText id="rubroCodigo" @bind-Value="rubroCodigo" />
-        </div>
+        @* Se oculta filtro Rubro por pedido *@
 
-        <div class="field">
+        <div class="field barcode-field">
             <label for="codigoBarra">Código de Barra (codigoBarra)</label>
-            <InputText id="codigoBarra" @bind-Value="codigoBarra" />
+            <InputText id="codigoBarra" @bind-Value="codigoBarra" autofocus />
         </div>
 
         <div class="field">
@@ -77,7 +179,7 @@
             <InputText id="descripcionLarga" @bind-Value="descripcionLarga" />
         </div>
 
-        <div class="field">
+        <div class="field" @ondblclick="AbrirBuscadorFamilias">
             <label for="familiaID">Familia (familiaID)</label>
             <InputSelect id="familiaID" @bind-Value="familiaID">
                 @foreach (var f in familiasConTodo)
@@ -87,6 +189,22 @@
             </InputSelect>
         </div>
 
+        <div class="field" @ondblclick="AbrirBuscadorMarcas">
+            <label for="marcaID">Marca (marcaID)</label>
+            <InputSelect id="marcaID" @bind-Value="marcaID">
+                @foreach (var m in marcasConTodo)
+                {
+                    <option value="@m.MarcaID">@m.Descripcion (@m.MarcaID)</option>
+                }
+            </InputSelect>
+        </div>
+
+        <div class="field">
+            <label for="sucursalID">Sucursal (sucursalID)</label>
+            <InputNumber id="sucursalID" @bind-Value="sucursalID" TValue="short?" />
+        </div>
+
+        @* Fechas al final como solicitaste *@
         <div class="field">
             <label for="fechaModifDesde">Fecha modif. desde</label>
             <InputDate id="fechaModifDesde" @bind-Value="fechaModifDesde" TValue="DateTime?" />
@@ -99,16 +217,13 @@
             <small class="hint">Formato: yyyy-MM-dd</small>
         </div>
 
-        <div class="field">
-            <label for="sucursalID">Sucursal (sucursalID)</label>
-            <InputNumber id="sucursalID" @bind-Value="sucursalID" TValue="short?" />
-        </div>
-
     </div>
 
     <div class="actions">
         <button type="button" class="btn primary" @onclick="Buscar">Buscar</button>
         <button type="button" class="btn ghost" @onclick="Limpiar">Limpiar</button>
+
+        @* Exportaciones movidas a la barra de herramientas de la grilla *@
     </div>
 </div>
 
@@ -126,35 +241,49 @@ else if (items.Count == 0)
 }
 else
 {
-    <!-- Encabezado de tabla -->
-    <div class="table">
+    <div id="print-area" class="table">
         <div class="thead">
-            <div>Código</div>
-            <div>Descripción</div>
-            <div>Presentación</div>
-            <div>Unid. por bulto</div>
-            <div>Precio (texto)</div>
-            <div>Precio x unidad</div>
-            <div>Stock</div>
-            <div>Código de barra</div>
-            <div>Fecha modif.</div>
+            @if (showColCodigo) { <div style="width:140px">Código</div>; }
+            @if (showColDescripcion) { <div class="col-desc" style="width:1fr">Descripción</div>; }
+            @if (showColPresentacion) { <div style="width:160px">Presentación</div>; }
+            @if (showColBulto) { <div style="width:150px">Unid. por bulto</div>; }
+            @if (showColPrecioTexto) { <div style="width:160px">Precio (texto)</div>; }
+            @if (showColPrecioUnidad) { <div style="width:160px">Precio x unidad</div>; }
+            @if (showColStock) { <div style="width:120px">Stock</div>; }
+            @if (showColCodBarra) { <div class="barcode" style="width:220px">Código de barra</div>; }
+            @if (showColFechaModif) { <div style="width:160px">Fecha modif.</div>; }
+            <div class="thead-actions" style="width:auto;min-width:340px">
+                <button type="button" class="btn icon" title="Configurar columnas" aria-label="Configurar columnas" @onclick="ToggleConfigCols">⚙</button>
+                @if (items.Count > 0)
+                {
+                    <button type="button" class="btn" @onclick="ExportarTxt">Exportar TXT</button>
+                    <button type="button" class="btn" @onclick="ExportarPdf">Exportar PDF</button>
+                    <button type="button" class="btn" @onclick="Imprimir">Imprimir</button>
+                }
+            </div>
         </div>
 
         @foreach (var p in items)
         {
             <div class="row">
-                <div>@p.codigo</div>
-                <div>@p.descripcionLarga</div>
-                <div>@p.Presentacion</div>
-                <div>@(p.CantidadUnidadesBulto?.ToString() ?? "-")</div>
-                <div>@(string.IsNullOrWhiteSpace(p.PrecioFormateado) ? "-" : p.PrecioFormateado)</div>
-                <div>@(p.PrecioPorUnidad?.ToString("0.##") ?? "-")</div>
-                <div>@(p.stock?.ToString() ?? "-")</div>
-                <div>@(string.IsNullOrWhiteSpace(p.codigoBarra) ? "-" : p.codigoBarra)</div>
-                <div>@(p.fechaModif?.ToString("yyyy-MM-dd") ?? "-")</div>
+                @if (showColCodigo) { <div style="width:140px">@p.codigo</div>; }
+                @if (showColDescripcion) { <div class="col-desc" style="flex:1 1 auto">@p.descripcionLarga</div>; }
+                @if (showColPresentacion) { <div style="width:160px">@p.Presentacion</div>; }
+                @if (showColBulto) { <div style="width:150px">@(p.CantidadUnidadesBulto?.ToString() ?? "-")</div>; }
+                @if (showColPrecioTexto) { <div style="width:160px">@(string.IsNullOrWhiteSpace(p.PrecioFormateado) ? "-" : p.PrecioFormateado)</div>; }
+                @if (showColPrecioUnidad) { <div style="width:160px">@(p.PrecioPorUnidad?.ToString("0.##") ?? "-")</div>; }
+                @if (showColStock) { <div style="width:120px">@(p.stock?.ToString() ?? "-")</div>; }
+                @if (showColCodBarra) { <div class="barcode" style="width:220px">@(string.IsNullOrWhiteSpace(p.codigoBarra) ? "-" : p.codigoBarra)</div>; }
+                @if (showColFechaModif) { <div style="width:160px">@(p.fechaModif?.ToString("yyyy-MM-dd") ?? "-")</div>; }
+                <div class="row-actions">
+                    <button type="button" class="btn" @onclick="() => VerDetalles(p)">Detalles</button>
+                    <button type="button" class="btn" @onclick="() => EditarProducto(p)">Modificar</button>
+                </div>
             </div>
         }
     </div>
+
+    <div class="record-count"><strong>@($"{items.Count} registro{(items.Count==1?"":"s")}")</strong></div>
 
     <div class="pager">
         <button type="button" class="btn" @onclick="Primera" disabled="@(pageNumber <= 1)">« Primero</button>
@@ -169,7 +298,8 @@ else
     // CONFIG: endpoints/token
     // =======================
     const string ApiUrl = "https://drrsystemas4.azurewebsites.net/Producto/GetProducto";
-    const string FamiliasApiUrl = "https://drrsystemas4.azurewebsites.net/Producto/GetFamilia";
+    const string FamiliasApiUrl = "https://drrsystemas4.azurewebsites.net/Producto/Familia";
+    const string MarcasApiUrl = "https://drrsystemas4.azurewebsites.net/Producto/Marca";
     const string DEFAULT_TOKEN = "pega aca el token";
 
     // =======================
@@ -204,15 +334,39 @@ else
     {
         // Limpiamos errores previos relacionados a familias
         error = null;
+        statusOk = null;
+        tokenChecked = false;
+        tokenOk = false;
+        tokenStatus = null;
+        lastLoadFamiliasOk = false;
+        lastLoadMarcasOk = false;
+        Log("Token actualizado. Recargando catálogos (familias y marcas)...");
 
         // Si el token está vacío, podés decidir limpiar la lista:
         // familiasConTodo = new() { new Familia { FamiliaID = 0, Descripcion = "TODO" } };
 
         // Reintenta cargar las familias con el nuevo token
         await CargarFamiliasAsync();
+        await CargarMarcasAsync();
 
         // Si querés refrescar resultados también:
         // await ConsultarAsync();
+
+        tokenChecked = true;
+        tokenOk = lastLoadFamiliasOk && lastLoadMarcasOk;
+        tokenStatus = tokenOk ? "Token OK. Catálogos cargados." : "Token inválido o sin permisos. Revísalo.";
+        Log(tokenOk ? "Token verificado: OK" : "Token inválido: error al cargar catálogos");
+        if (tokenOk)
+        {
+            try { await JS.InvokeVoidAsync("blazorFocusById", "codigoBarra"); } catch { }
+            // Ocultar automáticamente la tarjeta de autenticación a los 5 segundos
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(5000);
+                showAuthCard = false;
+                await InvokeAsync(StateHasChanged);
+            });
+        }
 
         // Forzamos render si hace falta
         StateHasChanged();
@@ -226,6 +380,7 @@ else
     string? codigoBarra;
     string? descripcionLarga;
     int familiaID = 0;       // 0 = TODO
+    int marcaID = 0;         // 0 = TODO
     DateTime? fechaModifDesde;
     DateTime? fechaModifHasta;
     short? sucursalID;
@@ -233,16 +388,67 @@ else
     // Datos
     List<Product> items = new();
     List<Familia> familiasConTodo = new();
+    List<Marca> marcasConTodo = new();
 
     // UI
     bool loading = true;
     string? error;
+    string? statusOk;
+    List<string> logs = new();
+    void Log(string message)
+    {
+        var line = $"[{DateTime.Now:HH:mm:ss}] {message}";
+        logs.Add(line);
+        if (logs.Count > 200) logs.RemoveAt(0);
+    }
+    // Estado del token en UI
+    bool tokenChecked = false; // true cuando intentamos validar con al menos un llamado
+    bool tokenOk = false;      // true si las cargas protegidas responden OK
+    string? tokenStatus;       // mensaje visible bajo Autenticación
+
+    // Resultado de los últimos intentos de carga protegida
+    bool lastLoadFamiliasOk = false;
+    bool lastLoadMarcasOk = false;
+
+    // Toggles globales
+    bool showAuthCard = true;
+    bool showLogs = false; // Por defecto oculto, se puede alternar con el botón
+
+    // Configuración visible de columnas
+    // Por defecto solo se muestra la descripción; el resto opcional
+    bool showColCodigo = false;
+    bool showColDescripcion = true;
+    bool showColPresentacion = false;
+    bool showColBulto = false;
+    bool showColPrecioTexto = false;
+    bool showColPrecioUnidad = false;
+    bool showColStock = false;
+    bool showColCodBarra = false;
+    bool showColFechaModif = false;
     bool puedeSiguiente = false; // fallback: se calcula por cantidad de items == pageSize
+    bool showFamiliasModal = false;
+    bool showMarcasModal = false;
+    string? filtroFamilia;
+    string? filtroMarca;
 
     protected override async Task OnInitializedAsync()
     {
+        Log("Inicializando página de productos");
         await CargarFamiliasAsync();
+        await CargarMarcasAsync();
         await ConsultarAsync(); // primera carga
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("blazorFocusById", "codigoBarra");
+            }
+            catch { }
+        }
     }
 
     void ToggleToken() => showToken = !showToken;
@@ -260,6 +466,7 @@ else
         pageNumber = 1;
         rubroCodigo = codigoBarra = descripcionLarga = null;
         familiaID = 0;
+        marcaID = 0;
         fechaModifDesde = fechaModifHasta = null;
         sucursalID = null;
         await ConsultarAsync();
@@ -292,6 +499,99 @@ else
         }
     }
 
+    void AbrirBuscadorFamilias()
+    {
+        showFamiliasModal = true;
+        filtroFamilia = null;
+        Log("Abrir buscador de familias");
+    }
+
+    void CerrarBuscadorFamilias()
+    {
+        showFamiliasModal = false;
+        Log("Cerrar buscador de familias");
+    }
+
+    IEnumerable<Familia> GetFamiliasFiltradas()
+    {
+        var query = familiasConTodo.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(filtroFamilia))
+        {
+            var s = filtroFamilia.Trim().ToLowerInvariant();
+            query = query.Where(f => ($"{f.FamiliaID}").Contains(s) || (f.Descripcion ?? "").ToLowerInvariant().Contains(s));
+        }
+        return query.Take(100);
+    }
+
+    void SeleccionarFamilia(int id)
+    {
+        familiaID = id;
+        showFamiliasModal = false;
+        Log($"Familia seleccionada: {id}");
+        StateHasChanged();
+    }
+
+    void AbrirBuscadorMarcas()
+    {
+        showMarcasModal = true;
+        filtroMarca = null;
+        Log("Abrir buscador de marcas");
+    }
+
+    void CerrarBuscadorMarcas()
+    {
+        showMarcasModal = false;
+        Log("Cerrar buscador de marcas");
+    }
+
+    IEnumerable<Marca> GetMarcasFiltradas()
+    {
+        var query = marcasConTodo.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(filtroMarca))
+        {
+            var s = filtroMarca.Trim().ToLowerInvariant();
+            query = query.Where(m => ($"{m.MarcaID}").Contains(s) || (m.Descripcion ?? "").ToLowerInvariant().Contains(s));
+        }
+        return query.Take(100);
+    }
+
+    void SeleccionarMarca(int id)
+    {
+        marcaID = id;
+        showMarcasModal = false;
+        Log($"Marca seleccionada: {id}");
+        StateHasChanged();
+    }
+
+    // Acciones de fila: Detalles y Editar
+    bool showDetailsModal = false;
+    Product? selectedProduct;
+    void VerDetalles(Product p)
+    {
+        selectedProduct = p;
+        showDetailsModal = true;
+        Log($"Ver detalles de producto {p.ProductoID} ({p.codigo})");
+    }
+
+    void CerrarDetalles()
+    {
+        showDetailsModal = false;
+        selectedProduct = null;
+    }
+
+    void EditarProducto(Product p)
+    {
+        Log($"Editar producto {p.ProductoID} ({p.codigo})");
+        // Aquí podríamos habilitar edición inline, drawer o navegar a formulario de edición
+    }
+
+    // Toggle del panel de configuración de columnas
+    bool showConfigCols = false;
+    void ToggleConfigCols() 
+    { 
+        showConfigCols = !showConfigCols;
+    }
+
     // =======================
     // Llamadas a API
     // =======================
@@ -299,6 +599,7 @@ else
     {
         try
         {
+            Log("Cargando familias...");
             using var req = new HttpRequestMessage(HttpMethod.Get, FamiliasApiUrl);
             // 🔧 usar la propiedad Token (no "token")
             req.Headers.Authorization =
@@ -308,6 +609,7 @@ else
             var json = await resp.Content.ReadAsStringAsync();
 
             var familias = new List<Familia>();
+            var dataOk = false;
             if (resp.IsSuccessStatusCode)
             {
                 using var doc = JsonDocument.Parse(json);
@@ -319,14 +621,64 @@ else
                         var fapi = JsonSerializer.Deserialize<FamiliaApi>(el.GetRawText(), opts);
                         if (fapi != null) familias.Add(Familia.MapFromApi(fapi));
                     }
+                    dataOk = true;
                 }
             }
             familiasConTodo = new List<Familia> { new Familia { FamiliaID = 0, Descripcion = "TODO" } };
             familiasConTodo.AddRange(familias.OrderBy(f => f.Descripcion ?? ""));
+            Log($"Familias cargadas: {familias.Count}");
+            lastLoadFamiliasOk = dataOk;
         }
         catch (Exception ex)
         {
             error = "Error cargando familias: " + ex.Message;
+            Log(error);
+            lastLoadFamiliasOk = false;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    async Task CargarMarcasAsync()
+    {
+        try
+        {
+            Log("Cargando marcas...");
+            using var req = new HttpRequestMessage(HttpMethod.Get, MarcasApiUrl);
+            req.Headers.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", Token);
+
+            using var resp = await Http.SendAsync(req);
+            var json = await resp.Content.ReadAsStringAsync();
+
+            var marcas = new List<Marca>();
+            var dataOk = false;
+            if (resp.IsSuccessStatusCode)
+            {
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("data", out var dataArr) && dataArr.ValueKind == JsonValueKind.Array)
+                {
+                    var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    foreach (var el in dataArr.EnumerateArray())
+                    {
+                        var mapi = JsonSerializer.Deserialize<MarcaApi>(el.GetRawText(), opts);
+                        if (mapi != null) marcas.Add(Marca.MapFromApi(mapi));
+                    }
+                    dataOk = true;
+                }
+            }
+            marcasConTodo = new List<Marca> { new Marca { MarcaID = 0, Descripcion = "TODO" } };
+            marcasConTodo.AddRange(marcas.OrderBy(m => m.Descripcion ?? ""));
+            Log($"Marcas cargadas: {marcas.Count}");
+            lastLoadMarcasOk = dataOk;
+        }
+        catch (Exception ex)
+        {
+            error = "Error cargando marcas: " + ex.Message;
+            Log(error);
+            lastLoadMarcasOk = false;
         }
         finally
         {
@@ -364,6 +716,8 @@ else
 
             if (familiaID != 0)
                 qs.Add($"familiaID={familiaID}");
+            if (marcaID != 0)
+                qs.Add($"marcaID={marcaID}");
 
             if (fechaModifDesde.HasValue)
                 qs.Add($"fechaModifDesde={fechaModifDesde.Value:yyyy-MM-dd}");
@@ -387,6 +741,7 @@ else
             if (!resp.IsSuccessStatusCode)
                 throw new InvalidOperationException($"Error API: {(int)resp.StatusCode} - {resp.ReasonPhrase}\n{json}");
 
+            Log($"Consulta productos OK. Bytes JSON: {json?.Length ?? 0}");
             var lista = new List<Product>();
             using var doc = JsonDocument.Parse(json);
             if (doc.RootElement.TryGetProperty("data", out var dataArr) && dataArr.ValueKind == JsonValueKind.Array)
@@ -394,19 +749,26 @@ else
                 var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                 foreach (var el in dataArr.EnumerateArray())
                 {
-                    var prod = JsonSerializer.Deserialize<Product>(el.GetRawText(), opts);
-                    if (prod != null) lista.Add(prod);
+                    // El API devuelve un objeto complejo (ver APIS.txt). Mapeamos al modelo local.
+                    var apiItem = JsonSerializer.Deserialize<ProductoApi>(el.GetRawText(), opts);
+                    if (apiItem != null)
+                    {
+                        lista.Add(Product.MapFromApi(apiItem));
+                    }
                 }
             }
 
             items = lista;
             puedeSiguiente = items.Count == pageSize;
+            Log($"Productos cargados: {items.Count}");
         }
         catch (Exception ex)
         {
             items = new();
             puedeSiguiente = false;
             error = ex.Message;
+            Log("Error consultando productos: " + ex.Message);
+            showLogs = true; // Mostrar logs automáticamente ante error de consultas
         }
         finally
         {
@@ -431,9 +793,117 @@ else
         [JsonPropertyName("precioFormateado")] public string? PrecioFormateado { get; set; }
         [JsonPropertyName("precioPorUnidad")] public decimal? PrecioPorUnidad { get; set; }
 
-        [JsonPropertyName("stock")] public int? stock { get; set; }
+        [JsonPropertyName("stock")] public decimal? stock { get; set; }
         [JsonPropertyName("codigoBarra")] public string? codigoBarra { get; set; }
         [JsonPropertyName("fechaModif")] public DateTime? fechaModif { get; set; }
+
+        // Campos adicionales (según JSON real)
+        public int? FamiliaID { get; set; }
+        public PrecioInfo[] ListaPrecio { get; set; } = Array.Empty<PrecioInfo>();
+        public string[] listaCodigoBarra { get; set; } = Array.Empty<string>();
+
+        // Mapeo desde el objeto complejo del API
+        public static Product MapFromApi(ProductoApi a)
+        {
+            // Precio por unidad: intentamos usar listaPrecio de presentaciones si existe
+            decimal? precioUnidad = null;
+            string? precioTexto = null;
+            PrecioInfo[] listaPrecio = Array.Empty<PrecioInfo>();
+            string[] codigos = Array.Empty<string>();
+            int unidadesBulto = 1;
+            string presentacionTexto = "Unidad";
+
+            if (a.presentaciones != null && a.presentaciones.Count > 0)
+            {
+                var pres = a.presentaciones.First();
+                presentacionTexto = pres.presentacionID == 0 ? "Unidad" : pres.presentacionID?.ToString() ?? "Unidad";
+                unidadesBulto = (int)(pres.fracciones ?? 1);
+                if (pres.listaPrecio != null)
+                {
+                    listaPrecio = pres.listaPrecio
+                        .Select(x => new PrecioInfo { Precio = x.precio ?? 0, PrecioFinal = x.precioFinal ?? 0, FechaActualizacion = x.fechaActualizacion ?? DateTime.MinValue })
+                        .ToArray();
+                    var lp = pres.listaPrecio.OrderByDescending(l => l.fechaActualizacion).FirstOrDefault();
+                    precioUnidad = lp?.precioFinal ?? lp?.precio;
+                    precioTexto = (lp?.precioFinal ?? lp?.precio)?.ToString("0.##");
+                }
+                if (pres.listaCodigoBarra != null)
+                {
+                    codigos = pres.listaCodigoBarra
+                        .Select(cb => cb.codigoBarra)
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                        .Distinct()
+                        .ToArray();
+                }
+            }
+
+            return new Product
+            {
+                ProductoID = a.codigoID,
+                codigo = a.codigoFabrica ?? a.codigoID.ToString(),
+                descripcionLarga = a.descripcionLarga,
+                Presentacion = presentacionTexto,
+                CantidadUnidadesBulto = unidadesBulto,
+                PrecioFormateado = presentacionTexto.ToLower() == "bulto" && precioUnidad.HasValue
+                    ? $"${(precioUnidad.Value * unidadesBulto):#,##0.00} (Bulto de {unidadesBulto})" : (precioUnidad.HasValue ? $"${precioUnidad.Value:#,##0.00}" : null),
+                PrecioPorUnidad = precioUnidad,
+                stock = a.stock,
+                codigoBarra = a.presentaciones?
+                    .SelectMany(p => (p.listaCodigoBarra ?? new List<CodigoBarraApi>()))
+                    .Select(cb => cb.codigoBarra)
+                    .FirstOrDefault(s => !string.IsNullOrWhiteSpace(s)),
+                fechaModif = a.fechaModificacion,
+                FamiliaID = a.familiaID,
+                ListaPrecio = listaPrecio,
+                listaCodigoBarra = codigos
+            };
+        }
+    }
+
+    public class PrecioInfo
+    {
+        public decimal Precio { get; set; }
+        public decimal PrecioFinal { get; set; }
+        public DateTime FechaActualizacion { get; set; }
+    }
+
+    // Modelos para mapear el JSON real del API (parcial)
+    public class ProductoApi
+    {
+        public int codigoBaseID { get; set; }
+        public int codigoID { get; set; }
+        public string? descripcionLarga { get; set; }
+        public int? familiaID { get; set; }
+        public string? rubroCodigo { get; set; }
+        public DateTime? fechaModificacion { get; set; }
+        public string? codigoFabrica { get; set; }
+        public int? marcaID { get; set; }
+        public decimal? stock { get; set; }
+        public List<ProductoPresentacion>? presentaciones { get; set; }
+    }
+
+    public class ProductoPresentacion
+    {
+        public int? productoPresenstacionID { get; set; }
+        public int? presentacionID { get; set; }
+        public decimal? fracciones { get; set; }
+        public int? empaqueID { get; set; }
+        public List<CodigoBarraApi>? listaCodigoBarra { get; set; }
+        public List<ProductoListaPrecio>? listaPrecio { get; set; }
+    }
+
+    public class CodigoBarraApi
+    {
+        public string? codigoBarra { get; set; }
+        public int? tipoCodigoBarraID { get; set; }
+    }
+
+    public class ProductoListaPrecio
+    {
+        public int listaPrecID { get; set; }
+        public decimal? precio { get; set; }
+        public decimal? precioFinal { get; set; }
+        public DateTime? fechaActualizacion { get; set; }
     }
 
     public class FamiliaApi
@@ -452,6 +922,25 @@ else
         {
             FamiliaID = f.FamiliaID,
             Descripcion = f.Descripcion
+        };
+    }
+
+    public class MarcaApi
+    {
+        [JsonPropertyName("marcaID")] public int MarcaID { get; set; }
+        [JsonPropertyName("descripcion")] public string? Descripcion { get; set; }
+        [JsonPropertyName("codigo")] public string? Codigo { get; set; }
+    }
+
+    public class Marca
+    {
+        public int MarcaID { get; set; }
+        public string? Descripcion { get; set; }
+
+        public static Marca MapFromApi(MarcaApi m) => new()
+        {
+            MarcaID = m.MarcaID,
+            Descripcion = m.Descripcion
         };
     }
 }
@@ -522,6 +1011,13 @@ else
         font-size: .85rem;
     }
 
+    /* Resaltado del campo de filtro Código de Barra */
+    .barcode-field {
+        background: #f3f7ff;
+        border: 1px solid #cfe0ff;
+        box-shadow: 0 0 0 2px rgba(207, 224, 255, .25) inset;
+    }
+
     .actions {
         margin-top: 12px;
         display: flex;
@@ -556,7 +1052,9 @@ else
 
     .thead, .row {
         display: grid;
-        grid-template-columns: 120px 1fr 140px 140px 120px 140px 100px 220px 170px;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(140px, auto);
+        align-items: center;
         gap: 8px;
         padding: 10px;
         border: 1px solid var(--border);
@@ -572,6 +1070,25 @@ else
         z-index: 1;
     }
 
+    .thead-actions {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        align-items: center;
+    }
+    .row-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        min-width: 220px;
+    }
+    .btn.icon {
+        width: 36px;
+        min-width: 36px;
+        text-align: center;
+        padding: 8px 0;
+    }
+
     .pager {
         display: flex;
         align-items: center;
@@ -580,13 +1097,41 @@ else
         flex-wrap: wrap;
     }
 
+    .toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 12px;
+    }
+    .toolbar-right {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
     .page-indicator {
         font-weight: 600;
+    }
+
+    .record-count {
+        margin-top: 8px;
+        text-align: right;
     }
 
     .error {
         color: #c00;
         white-space: pre-wrap;
+    }
+
+    .ok {
+        color: #0a7d28;
+        background: #e7f7ec;
+        border: 1px solid #b6e2c2;
+        border-radius: 8px;
+        padding: 6px 10px;
+        display: inline-block;
+        margin: 6px 0;
     }
 
     /* Mobile first: ya apilamos fields; reforzamos pequeñas pantallas */
@@ -605,5 +1150,154 @@ else
         font-size: .92rem;
     }
 
+    /* Columna descripción y resaltados */
+    .thead .barcode, .row .barcode {
+        background: #f3f7ff;
+        border: 1px solid #cfe0ff;
+        border-radius: 8px;
+        padding: 6px 8px;
     }
+    .col-desc {
+        min-width: 300px;
+    }
+
+    .thead > div, .row > div {
+        word-break: break-word;
+    }
+
+    /* Estilos para contenido de modales */
+    .details-grid { 
+        display: flex; 
+        flex-direction: column; 
+        align-items: center; 
+        gap: 15px; 
+        text-align: center; 
+    }
+    .details-image { display: flex; justify-content: center; }
+    .details-image img { max-width: 280px; border-radius: 8px; border: 1px solid var(--border); }
+    .details-desc { font-size: 1.15rem; font-weight: 600; }
+    .details-actions { display: flex; justify-content: center; margin-top: 10px; }
+    .modal-list {
+        overflow: auto;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg);
+        max-height: 50vh;
+    }
+    .modal-item {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+    }
+    .modal-item:hover { background: #eef4ff; }
+
+    .columns-panel {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 6px 12px;
+        margin-top: 8px;
+        background: var(--bg-white);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px;
+    }
+
+    }
+    /* Panel de logs */
+    .logs {
+        margin-top: 16px;
+        border: 1px dashed var(--border);
+        background: #fcfcfc;
+        border-radius: 8px;
+        padding: 8px;
+        max-height: 140px;
+        overflow: auto;
+        font-size: .9rem;
+    }
+    .actions-bottom {
+        margin-top: 28px; /* Botones más abajo, separados del contenido anterior */
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .actions-bottom .spacer { width: 18px; display: inline-block; }
 </style>
+
+
+
+@* Panel visible de logs temporales *@
+<div class="logs">
+    @if (showLogs)
+    {
+        <strong>Logs</strong>
+        <div>
+            @foreach (var line in logs)
+            {
+                <div>@line</div>
+            }
+        </div>
+        @if (logs.Count == 0)
+        {
+            <div class="muted">Sin eventos por ahora…</div>
+        }
+    }
+</div>
+<div class="actions actions-bottom">
+    <button type="button" class="btn" @onclick="() => showAuthCard = !showAuthCard">@(showAuthCard ? "Ocultar token" : "Mostrar token")</button>
+    <span class="spacer"></span>
+    <button type="button" class="btn" @onclick="() => showLogs = !showLogs">@(showLogs ? "Ocultar logs" : "Mostrar logs")</button>
+</div>
+
+@code {
+    // Exportaciones TXT/PDF/Imprimir
+    async Task ExportarTxt()
+    {
+        try
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("codigo\tdescripcion\tpresentacion\tunidBulto\tprecioTexto\tprecioUnidad\tstock\tcodigoBarra\tfechaModif");
+            foreach (var p in items)
+            {
+                sb.AppendLine($"{p.codigo}\t{p.descripcionLarga}\t{p.Presentacion}\t{p.CantidadUnidadesBulto}\t{p.PrecioFormateado}\t{p.PrecioPorUnidad}\t{p.stock}\t{p.codigoBarra}\t{p.fechaModif:yyyy-MM-dd}");
+            }
+            var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(sb.ToString()));
+            await JS.InvokeVoidAsync("blazorDownloadText", "productos.txt", base64);
+            Log("Exportación TXT generada");
+        }
+        catch (Exception ex)
+        {
+            error = "Error exportando TXT: " + ex.Message;
+            Log(error);
+            showLogs = true; // Abre logs automáticamente si hay error
+        }
+    }
+
+    async Task ExportarPdf()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("blazorPrint", "print-area");
+            Log("Impresión/PDF invocada");
+        }
+        catch (Exception ex)
+        {
+            error = "Error exportando PDF: " + ex.Message;
+            Log(error);
+            showLogs = true; // Abre logs automáticamente si hay error
+        }
+    }
+
+    async Task Imprimir()
+    {
+        try
+        {
+            await ExportarPdf();
+        }
+        catch (Exception ex)
+        {
+            error = "Error al imprimir: " + ex.Message;
+            Log(error);
+            showLogs = true;
+        }
+    }
+}

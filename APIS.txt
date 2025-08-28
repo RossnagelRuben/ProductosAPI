@@ -1,0 +1,4750 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "DRRApi",
+    "version": "1.0"
+  },
+  "paths": {
+    "/Archivo": {
+      "post": {
+        "tags": [
+          "Archivo"
+        ],
+        "summary": "Permite subir archivos y relacionarlas a una operación en particular",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Archivo"
+        ],
+        "summary": "Obtener lista de archivos",
+        "parameters": [
+          {
+            "name": "TipoOperacionID",
+            "in": "query",
+            "description": "1-VTA, 2-CPA, 3-CBO, 4-PGO, 8-ORDSERV, 23-PCPA, 24-PVTA",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "RegistroOperacionID",
+            "in": "query",
+            "description": "ID de la operación",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Filtros",
+            "in": "query",
+            "description": "Lista de filtros",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Operacion"
+              }
+            }
+          },
+          {
+            "name": "Type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Auth/slots/release": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Libera manualmente un slot previamente otorgado para una clave específica.",
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/Permiso_Release_DTO"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Permiso_Release_DTO"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Permiso_Release_DTO"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/Permiso_Release_DTO"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Auth/slots": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Solicita un slot exclusivo para una operación limitada en concurrencia",
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/Permiso_DTO"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Permiso_DTO"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Permiso_DTO"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/Permiso_DTO"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Auth/TokenDeveloper": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Obtiene el token de acceso a nivel desarrollador. Bearer = Token DRR",
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Auth/TokenUser": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Obtiene el token de acceso a nivel usuario. Bearer = Token DEV",
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Auth/Developer/Empresas": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Obtiene información de empresas relacionada al usuario developer",
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Centralizadora/Producto": {
+      "get": {
+        "tags": [
+          "Centralizadora"
+        ],
+        "summary": "Obtiene datos del producto por código de barra",
+        "description": "Exclusivo AlmaNET",
+        "parameters": [
+          {
+            "name": "codigoBarra",
+            "in": "query",
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": { }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": { }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": { }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/Centralizadora/CodigosBarraRelacionadosPorRubro": {
+      "get": {
+        "tags": [
+          "Centralizadora"
+        ],
+        "summary": "Obtiene los codigos de barra de productos de la misma familia",
+        "description": "Exclusivo AlmaNET",
+        "parameters": [
+          {
+            "name": "codigoBarra",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": { }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": { }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": { }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/Centralizadora/CodigosBarraRelacionadosPorFabricante": {
+      "get": {
+        "tags": [
+          "Centralizadora"
+        ],
+        "summary": "Obtiene los codigos de barra de productos del mismo fabricante",
+        "description": "Exclusivo AlmaNET",
+        "parameters": [
+          {
+            "name": "codigoBarra",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": { }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": { }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": { }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/Colector": {
+      "get": {
+        "tags": [
+          "Colector"
+        ],
+        "summary": "Obtiene lista de registros cargados al colector",
+        "parameters": [
+          {
+            "name": "FechaDesde",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "FechaHasta",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "SucursalID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "AlmaUserID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "DepositoID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Colector"
+        ],
+        "summary": "Permite cargar registros al colector de datos",
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/Colector"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Colector"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Colector"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/Colector"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Configuracion/Ciudades": {
+      "get": {
+        "tags": [
+          "Configuracion"
+        ],
+        "parameters": [
+          {
+            "name": "ciudadID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "ciudad",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "provinciaID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "provincia",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "paisID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pais",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Configuracion/ImpuestoCategoria": {
+      "get": {
+        "tags": [
+          "Configuracion"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Deposito": {
+      "get": {
+        "tags": [
+          "Deposito"
+        ],
+        "summary": "Obtener lista de productos",
+        "parameters": [
+          {
+            "name": "DepositoID",
+            "in": "query",
+            "description": "ID depósito",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int32"
+              }
+            }
+          },
+          {
+            "name": "Descripcion",
+            "in": "query",
+            "description": "Descripción depósito",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Inhabilitado",
+            "in": "query",
+            "description": "Inhabilitado",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Deposito/Ubicaciones": {
+      "get": {
+        "tags": [
+          "Deposito"
+        ],
+        "summary": "Obtener ubicaciones de stock",
+        "parameters": [
+          {
+            "name": "ProductoUbicacionID",
+            "in": "query",
+            "description": "ID de la ubicación",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Descripcion",
+            "in": "query",
+            "description": "Descripción de la ubicación",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Orden",
+            "in": "query",
+            "description": "Orden jerarquico",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "IncluirStock",
+            "in": "query",
+            "description": "1 = Incluir. 2 - Incluir solo con stock",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "EstadoItem",
+            "in": "query",
+            "description": "1 - Habilitados, 0 - Inhabilitados. Null - todos",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Deposito/Encargados": {
+      "get": {
+        "tags": [
+          "Deposito"
+        ],
+        "summary": "Obtener los encargados de depósito",
+        "parameters": [
+          {
+            "name": "EncargDepositoID",
+            "in": "query",
+            "description": "ID del encargado",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "default": null
+            }
+          },
+          {
+            "name": "RazonSocial",
+            "in": "query",
+            "description": "Nombre del empleado",
+            "schema": {
+              "type": "string",
+              "default": null
+            }
+          },
+          {
+            "name": "EmpleadoID",
+            "in": "query",
+            "description": "ID de empleado",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "default": null
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Deposito/Stock": {
+      "get": {
+        "tags": [
+          "Deposito"
+        ],
+        "summary": "Obtener stock y reservas",
+        "parameters": [
+          {
+            "name": "DepositoID",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "default": null
+            }
+          },
+          {
+            "name": "ProductoUbicacionID",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "default": null
+            }
+          },
+          {
+            "name": "Orden",
+            "in": "query",
+            "description": "ProductoUbicacion.Orden (incluye todas las subs ubicaciones)",
+            "schema": {
+              "type": "string",
+              "default": null
+            }
+          },
+          {
+            "name": "CodigoID",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "default": null
+            }
+          },
+          {
+            "name": "ConStock",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": null
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Empresa": {
+      "get": {
+        "tags": [
+          "Empresa"
+        ],
+        "summary": "Obtiene los datos de Empresa",
+        "parameters": [
+          {
+            "name": "empresaID",
+            "in": "query",
+            "description": "ID de empresa",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "include",
+            "in": "query",
+            "description": "1 = Incluir Logo",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Empresa/Sector": {
+      "get": {
+        "tags": [
+          "Empresa"
+        ],
+        "summary": "Obtiene los sectores de la empresa",
+        "parameters": [
+          {
+            "name": "sectorID",
+            "in": "query",
+            "description": "ID del sector",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "empresaID",
+            "in": "query",
+            "description": "ID de la empresa",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "include",
+            "in": "query",
+            "description": "1 = Incluir logo",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Empresa/Sucursal": {
+      "get": {
+        "tags": [
+          "Empresa"
+        ],
+        "summary": "Obtiene las sucursales",
+        "parameters": [
+          {
+            "name": "sucursalID",
+            "in": "query",
+            "description": "ID de la sucursal",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "include",
+            "in": "query",
+            "description": "1 = Incluir logo",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Empresa/ListaPrecio": {
+      "get": {
+        "tags": [
+          "Empresa"
+        ],
+        "summary": "Obtiene las listas de precio",
+        "parameters": [
+          {
+            "name": "ListaPrecID",
+            "in": "query",
+            "description": "ID de lista",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Descripcion",
+            "in": "query",
+            "description": "Descripción de lista",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "SucursalID",
+            "in": "query",
+            "description": "ID sucursal relacionada",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "CalcularUtilidadSobre",
+            "in": "query",
+            "description": "0 = Sobre lista general, 1 = sobre costo, 10 = manual.",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Inhabilitado",
+            "in": "query",
+            "description": "Estado de la lista",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "FechaModDesde",
+            "in": "query",
+            "description": "Fecha de última modificación, en adelante",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Empresa/FormaPago": {
+      "get": {
+        "tags": [
+          "Empresa"
+        ],
+        "summary": "Obtiene lista de formas de pago",
+        "parameters": [
+          {
+            "name": "FormaPagoID",
+            "in": "query",
+            "description": "ID de forma de pago",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PagoTipoRegistroID",
+            "in": "query",
+            "description": "Tipo: 0-Contado, 10-CtaCte, 30 Cheque tercero, 30 Cuenta BancoTarjeta...",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "FechaModifDesde",
+            "in": "query",
+            "description": "Ultima modificación",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "TipoOperacionID",
+            "in": "query",
+            "description": "1 VTA, 2 CPA, 3 CBO, 4 PGO",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Inhabilitado",
+            "in": "query",
+            "description": "Estado",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Empresa/BancoTarjeta": {
+      "get": {
+        "tags": [
+          "Empresa"
+        ],
+        "summary": "Obtiene lista de bancos tarjetas",
+        "parameters": [
+          {
+            "name": "BancoTarjetaID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Descripcion",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "TipoCuenta",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "SectorID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "SucursalID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Entidad": {
+      "get": {
+        "tags": [
+          "Entidad"
+        ],
+        "summary": "Obtiene lista de entidades",
+        "parameters": [
+          {
+            "name": "RazonSocial",
+            "in": "query",
+            "description": "Razon social, nombre fantasia",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Cliente",
+            "in": "query",
+            "description": "La entidad debe ser tipo cliente",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "Proveedor",
+            "in": "query",
+            "description": "La entidad debe ser tipo proveedor",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "Empleado",
+            "in": "query",
+            "description": "La entidad debe ser tipo empleado",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "Vendedor",
+            "in": "query",
+            "description": "La entidad debe ser tipo vendedor",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "Conductor",
+            "in": "query",
+            "description": "La entidad debe ser tipo conductor",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "ClienteID",
+            "in": "query",
+            "description": "ID Cliente",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "ProveedorID",
+            "in": "query",
+            "description": "ID Proveedor",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "EmpleadoID",
+            "in": "query",
+            "description": "ID Empleado",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "VendedorID",
+            "in": "query",
+            "description": "ID Vendedor",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "EntidadID",
+            "in": "query",
+            "description": "ID Entidad",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "EntidadSucID",
+            "in": "query",
+            "description": "ID EntidadSucursal",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "ConductorID",
+            "in": "query",
+            "description": "ID Conductor",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "NroIdentificacion",
+            "in": "query",
+            "description": "CUIT DNI",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "CiudadID",
+            "in": "query",
+            "description": "ID Ciudad",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "FechaModDesde",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Entidad/EstadoCuentaCliente": {
+      "get": {
+        "tags": [
+          "Entidad"
+        ],
+        "summary": "Obtiene el estado de cuenta de un cliente",
+        "parameters": [
+          {
+            "name": "ClienteID",
+            "in": "query",
+            "description": "ID de cliente",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "FechaDesde",
+            "in": "query",
+            "description": "Periodo desde",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "FechaHasta",
+            "in": "query",
+            "description": "Periodo hasta",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "UsarFechaComp",
+            "in": "query",
+            "description": "Usar fecha de comprobante, imputación",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "OcultarSinSaldo",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Entidad/EntidadDRR": {
+      "get": {
+        "tags": [
+          "Entidad"
+        ],
+        "summary": "Obtiene los datos oficiales de una entidad",
+        "description": "Exclusivo AlmaNET, AlmaMovil",
+        "parameters": [
+          {
+            "name": "nroIdentificacion",
+            "in": "query",
+            "description": "",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": { }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": { }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": { }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/Licencia": {
+      "get": {
+        "tags": [
+          "Licencia"
+        ],
+        "summary": "Consultar licencia de sistema",
+        "parameters": [
+          {
+            "name": "LicenciaID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "NroIdentificacion",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Licencia"
+        ],
+        "summary": "Permite activar una terminal, sobre una licencia",
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/Licencia_Activar_DTO"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Licencia_Activar_DTO"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Licencia_Activar_DTO"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/Licencia_Activar_DTO"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Logistica/RepartoDetalle": {
+      "get": {
+        "tags": [
+          "Logistica"
+        ],
+        "summary": "Obtiene lista de detalles de reparto",
+        "parameters": [
+          {
+            "name": "MovID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": null
+            }
+          },
+          {
+            "name": "CargaID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": null
+            }
+          },
+          {
+            "name": "ConductorID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": null
+            }
+          },
+          {
+            "name": "Conductor",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "Pendiente",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Logistica/Reparto": {
+      "get": {
+        "tags": [
+          "Logistica"
+        ],
+        "summary": "Obtiene lista de repartos",
+        "parameters": [
+          {
+            "name": "MovID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "MovTipo",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "CargaID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "ConductorID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Conductor",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "Pendiente",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Logistica/Remito": {
+      "get": {
+        "tags": [
+          "Logistica"
+        ],
+        "summary": "Obtiene lista de remitos",
+        "parameters": [
+          {
+            "name": "RemitoID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "FechaDesde",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "FechaHasta",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "DepositoIDOrigen",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "CargaID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "EncargadoDeposito",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Logistica/ConformarRecepcion": {
+      "post": {
+        "tags": [
+          "Logistica"
+        ],
+        "summary": "Permite conformar, finalizar una carga adjuntando una imagen",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "file": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Logistica/Guia": {
+      "get": {
+        "tags": [
+          "Logistica"
+        ],
+        "parameters": [
+          {
+            "name": "CargaID",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ClienteID",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Hash",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "IncludeImages",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "FechaDesde",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "FechaHasta",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "EstadoCargaID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "TalonarioRemito",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "NroCompRemito",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "CodSeguimiento",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "MovID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Logistica/EstadosGuia": {
+      "get": {
+        "tags": [
+          "Logistica"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Logistica/ArchivosPorGuia": {
+      "get": {
+        "tags": [
+          "Logistica"
+        ],
+        "summary": "Obtiene los archivos relacionados a TranporteCarga, TransporteRemitos y TransporteCargaMovimiento",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "description": "",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Operaciones/Compra": {
+      "get": {
+        "tags": [
+          "Operaciones"
+        ],
+        "summary": "Obtiene lista de compras",
+        "description": "Bearer: TokenDev.TokenUser",
+        "parameters": [
+          {
+            "name": "CompraID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "ProveedorID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "FechaCmpDesde",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "FechaCmpHasta",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "FechaImpDesde",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "FechaImpHasta",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "AlmaUserID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "EncargadoDeposito",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "Include",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OperacionesInclude"
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Operaciones/Venta": {
+      "get": {
+        "tags": [
+          "Operaciones"
+        ],
+        "summary": "Obtiene lista de ventas",
+        "description": "Bearer: TokenDev.TokenUser",
+        "parameters": [
+          {
+            "name": "VentaID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "ClienteID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "FechaCmpDesde",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "FechaCmpHasta",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "FechaImpDesde",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "FechaImpHasta",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "AlmaUserID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "FormaPagoID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PagoTipoRegistroID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Include",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OperacionesInclude"
+            }
+          },
+          {
+            "name": "ConSaldo",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "VencimientoDesde",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "VencimientoHasta",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "EncargadoDeposito",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Operaciones/PedidoVentaWeb": {
+      "get": {
+        "tags": [
+          "Operaciones"
+        ],
+        "summary": "Obtiene pedidos de venta web",
+        "description": "Bearer: TokenDev.TokenUser",
+        "parameters": [
+          {
+            "name": "PedidoIDDesde",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PedidoIDHasta",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "FechaDesde",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "FechaHasta",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "VendedorID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "NroCompDesde",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "NroCompHasta",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "IncluirItems",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Operaciones"
+        ],
+        "summary": "Genera pedido venta web",
+        "description": "Bearer: TokenDev.TokenUser - Header: Idempotency-Key",
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PedidoVentaWeb_Post"
+                }
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PedidoVentaWeb_Post"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PedidoVentaWeb_Post"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PedidoVentaWeb_Post"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Operaciones/CobroWeb": {
+      "get": {
+        "tags": [
+          "Operaciones"
+        ],
+        "summary": "Obtiene cobros web",
+        "description": "Bearer: TokenDev.TokenUser",
+        "parameters": [
+          {
+            "name": "CobroWebID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "TalonarioID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "NroCompDesde",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "NroCompHasta",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "CobradorID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "FechaDesde",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "FechaHasta",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Operaciones"
+        ],
+        "summary": "Genera pedido venta web",
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CobroWeb_Post"
+                }
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CobroWeb_Post"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CobroWeb_Post"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CobroWeb_Post"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Operaciones/Inventario": {
+      "get": {
+        "tags": [
+          "Operaciones"
+        ],
+        "summary": "Obtiene lista de inventarios",
+        "description": "Bearer: TokenDev.TokenUser",
+        "parameters": [
+          {
+            "name": "InventarioID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "DepositoID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "FechaDesde",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "FechaHasta",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "SucursalID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "SectorID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "AlmaUserID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "EstadoID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Include",
+            "in": "query",
+            "description": "0 Ninguno. 1 Items. 2 Hojas adicionales",
+            "schema": {
+              "$ref": "#/components/schemas/InventarioInclude"
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Operaciones"
+        ],
+        "summary": "Permite abrir un inventario",
+        "description": "Bearer: TokenDev.TokenUser - Header: Idempotency-Key",
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/Inventario_Post"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Inventario_Post"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Inventario_Post"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/Inventario_Post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Operaciones/HojaAdicional": {
+      "post": {
+        "tags": [
+          "Operaciones"
+        ],
+        "summary": "Permite agregar hojas adicionales a un inventario",
+        "description": "Bearer: TokenDev.TokenUser - Header: Idempotency-Key",
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/HojaAdicional_Post"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HojaAdicional_Post"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HojaAdicional_Post"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/HojaAdicional_Post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Producto": {
+      "get": {
+        "tags": [
+          "Producto"
+        ],
+        "summary": "Obtener lista de productos",
+        "parameters": [
+          {
+            "name": "CodigoID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": null
+            }
+          },
+          {
+            "name": "RubroCodigo",
+            "in": "query",
+            "description": "Rubro/código de producto",
+            "schema": {
+              "type": "string",
+              "default": null
+            }
+          },
+          {
+            "name": "DescripcionLarga",
+            "in": "query",
+            "description": "Descripción larga",
+            "schema": {
+              "type": "string",
+              "default": null
+            }
+          },
+          {
+            "name": "CodigoBarra",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": null
+            }
+          },
+          {
+            "name": "FechaModifDesde",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "default": null
+            }
+          },
+          {
+            "name": "FechaModifHasta",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "default": null
+            }
+          },
+          {
+            "name": "SucursalID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": null
+            }
+          },
+          {
+            "name": "FamiliaID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": null
+            }
+          },
+          {
+            "name": "SectorID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": null
+            }
+          },
+          {
+            "name": "Imagen",
+            "in": "query",
+            "description": "Incluir imagen principal",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "ImagenWeb",
+            "in": "query",
+            "description": "Incluir imagen web",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "Caracteristica1ID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": null
+            }
+          },
+          {
+            "name": "Caracteristica2ID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": null
+            }
+          },
+          {
+            "name": "Caracteristica3ID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": null
+            }
+          },
+          {
+            "name": "Include",
+            "in": "query",
+            "description": "0 Ninguno. 1 Stock",
+            "schema": {
+              "$ref": "#/components/schemas/ProductoInclude"
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Producto"
+        ],
+        "summary": "Dar de alta un producto",
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductoBase"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductoBase"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductoBase"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductoBase"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Producto/Combo": {
+      "get": {
+        "tags": [
+          "Producto"
+        ],
+        "summary": "Obtener lista de combos",
+        "parameters": [
+          {
+            "name": "ComboID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "FechaModifDesde",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "SectorID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "SucursalID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Inhabilitado",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Producto/Familia": {
+      "get": {
+        "tags": [
+          "Producto"
+        ],
+        "summary": "Obtener lista de familias",
+        "parameters": [
+          {
+            "name": "filterPuntoCatalogo",
+            "in": "query",
+            "description": "",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Producto/Marca": {
+      "get": {
+        "tags": [
+          "Producto"
+        ],
+        "summary": "Obtener lista de marcas",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Producto/Clasificacion": {
+      "get": {
+        "tags": [
+          "Producto"
+        ],
+        "summary": "Obtener lista clasificaciones",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Vehiculo": {
+      "get": {
+        "tags": [
+          "Vehiculo"
+        ],
+        "summary": "Obtiene lista de vehiculos",
+        "parameters": [
+          {
+            "name": "VehiculoID",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "MovilNro",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Patente",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Include",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/VehiculoInclude"
+            }
+          },
+          {
+            "name": "OrderByDefault",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PageNumber",
+            "in": "query",
+            "description": "Numero de página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Cantidad de registros por página",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "OrderBy",
+            "in": "query",
+            "description": "Ordenar por",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Order",
+            "in": "query",
+            "description": "Tipo orden (ASC/DESC)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Vehiculo/Marca": {
+      "get": {
+        "tags": [
+          "Vehiculo"
+        ],
+        "summary": "Lista de marcas de vehiculos (AlmaNET)",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/Vehiculo/Tipo": {
+      "get": {
+        "tags": [
+          "Vehiculo"
+        ],
+        "summary": "Lista de tipos de vehiculos (AlmaNET)",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CobroWeb_Post": {
+        "type": "object",
+        "properties": {
+          "cobroWebID": {
+            "type": "integer",
+            "description": "ID del pedido local",
+            "format": "int32"
+          },
+          "cobroWebID_Servidor": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "clienteID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "cliente": {
+            "type": "string",
+            "nullable": true
+          },
+          "fechaComprobante": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "talonarioID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nroComprobante": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalCobro": {
+            "type": "number",
+            "format": "double"
+          },
+          "sectorID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "fechaImputacion": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "sucursalID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "proyectoID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "cobradorID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "observacion": {
+            "type": "string",
+            "default": null,
+            "nullable": true
+          },
+          "almaUserID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "terminalID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "movID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "jsonStringConfig": {
+            "type": "string",
+            "default": null,
+            "nullable": true
+          },
+          "recargoDescuento": {
+            "type": "number",
+            "format": "double",
+            "default": null,
+            "nullable": true
+          },
+          "cobroWebItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CobroWebItem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CobroWebItem": {
+        "type": "object",
+        "properties": {
+          "importePago": {
+            "type": "number",
+            "format": "double"
+          },
+          "detalle": {
+            "type": "string",
+            "default": null,
+            "nullable": true
+          },
+          "ctaCteRegID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "tipoOperacionID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "registroOperacionID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "tipoCobroID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nuevoRegistro": {
+            "type": "boolean",
+            "default": null,
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "codigoBarra": {
+        "type": "object",
+        "properties": {
+          "codigoBarra": {
+            "type": "string",
+            "nullable": true
+          },
+          "tipoCodigoBarraID": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Colector": {
+        "type": "object",
+        "properties": {
+          "colectorEncabID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "fechaHora": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sucursalID": {
+            "type": "integer",
+            "description": "ID de sucursal",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "depositoID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "tipoOperacionID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "clienteID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "proveedorID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "registroOperacionID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "estadoID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "pedirAlDepositoID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "colectorItem": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/colectorItem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "colectorItem": {
+        "type": "object",
+        "properties": {
+          "itemColectorID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "presentacionID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "codigoID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "listaPrecID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cantidad": {
+            "type": "number",
+            "format": "double"
+          },
+          "codigoBarra": {
+            "type": "string",
+            "nullable": true
+          },
+          "descripcion": {
+            "type": "string",
+            "nullable": true
+          },
+          "cantidadPiezas": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "costo": {
+        "type": "object",
+        "properties": {
+          "precioCompra": {
+            "type": "number",
+            "format": "double"
+          },
+          "coeficienteCosto": {
+            "type": "number",
+            "format": "double"
+          },
+          "precioCosto": {
+            "type": "number",
+            "format": "double"
+          },
+          "sucursalID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "hojaAdicional": {
+        "type": "object",
+        "properties": {
+          "codigoID": {
+            "type": "integer",
+            "description": "Código del producto",
+            "format": "int32"
+          },
+          "cantidad": {
+            "type": "number",
+            "description": "Cantidad real que se contó de producto, permite 0, pero no negativo.",
+            "format": "double"
+          },
+          "fechaHora": {
+            "type": "string",
+            "description": "Fecha hora que se contó",
+            "format": "date-time"
+          },
+          "detalle": {
+            "type": "string",
+            "default": null,
+            "nullable": true
+          },
+          "productoUbicacionID": {
+            "type": "integer",
+            "description": "Asignar solo para productos sin ubicación",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "HojaAdicional_Post": {
+        "type": "object",
+        "properties": {
+          "inventarioID": {
+            "type": "integer",
+            "description": "ID de inventario. Debe existir y estar abierto.",
+            "format": "int32"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/hojaAdicional"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Inventario_Post": {
+        "type": "object",
+        "properties": {
+          "fechaHora": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "depositoID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "talonarioID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "nroComprobante": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "detalle": {
+            "type": "string",
+            "default": null,
+            "nullable": true
+          },
+          "sucursalID": {
+            "type": "integer",
+            "description": "Sucursal. Verifica con permiso de usuario AlmaNET",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "sectorID": {
+            "type": "integer",
+            "description": "Sector. Verifica con permiso de usuario AlmaNET",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "estadoID": {
+            "type": "integer",
+            "description": "0 Abierto, 100 No vinculante",
+            "format": "int32"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventarioItem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "InventarioInclude": {
+        "enum": [
+          0,
+          1,
+          2
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "InventarioItem": {
+        "type": "object",
+        "properties": {
+          "codigoID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cantidad": {
+            "type": "number",
+            "format": "double"
+          },
+          "detalle": {
+            "type": "string",
+            "default": null,
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Licencia_Activar_DTO": {
+        "type": "object",
+        "properties": {
+          "licenciaID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nroIdentificacion": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "user": {
+            "type": "string",
+            "nullable": true
+          },
+          "key": {
+            "type": "string",
+            "nullable": true
+          },
+          "detalle": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Operacion": {
+        "type": "object",
+        "properties": {
+          "tipoOperacionID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "registroOperacionID": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OperacionesInclude": {
+        "enum": [
+          0,
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "PedidoVentaWeb_Post": {
+        "type": "object",
+        "properties": {
+          "pedidoID": {
+            "type": "integer",
+            "description": "ID del pedido local",
+            "format": "int32"
+          },
+          "fecha": {
+            "type": "string",
+            "description": "Fecha hora de toma del pedido",
+            "format": "date-time"
+          },
+          "clienteID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "cliente": {
+            "type": "string",
+            "nullable": true
+          },
+          "categoriaImpuestoID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nroComprobante": {
+            "type": "integer",
+            "description": "Nro de pedido. Unico por vendedor",
+            "format": "int32"
+          },
+          "vendedorID": {
+            "type": "integer",
+            "description": "ID del vendedor",
+            "format": "int32"
+          },
+          "estadoID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "formaPagoID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "descuento": {
+            "type": "number",
+            "format": "double",
+            "default": null,
+            "nullable": true
+          },
+          "observacion": {
+            "type": "string",
+            "default": null,
+            "nullable": true
+          },
+          "listaPrecID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "poseeRepresentada": {
+            "type": "boolean"
+          },
+          "cantidadItems": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "totalPedido": {
+            "type": "number",
+            "format": "double"
+          },
+          "latitud": {
+            "type": "number",
+            "format": "double",
+            "default": null,
+            "nullable": true
+          },
+          "longitud": {
+            "type": "number",
+            "format": "double",
+            "default": null,
+            "nullable": true
+          },
+          "filer": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "sectorID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "sucursalID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "sincronizado": {
+            "type": "string",
+            "format": "date-time",
+            "default": null,
+            "nullable": true
+          },
+          "almaUserID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "configuracion": {
+            "type": "string",
+            "nullable": true
+          },
+          "registraOperacionTipo": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "webUserID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "transporteID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "descuento2": {
+            "type": "number",
+            "format": "double",
+            "default": null,
+            "nullable": true
+          },
+          "importeDescuento": {
+            "type": "number",
+            "format": "double"
+          },
+          "importeImpuestos": {
+            "type": "number",
+            "format": "double"
+          },
+          "configuracionJON": {
+            "type": "string",
+            "default": null,
+            "nullable": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PedidoVentaWebItem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PedidoVentaWebItem": {
+        "type": "object",
+        "properties": {
+          "itemPedidoID": {
+            "type": "integer",
+            "description": "ID del item local",
+            "format": "int32"
+          },
+          "presentacionID": {
+            "type": "integer",
+            "description": "Presentación unidad/bulto",
+            "format": "int32"
+          },
+          "codigoID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cantidad": {
+            "type": "number",
+            "format": "double"
+          },
+          "precioUnidad": {
+            "type": "number",
+            "format": "double"
+          },
+          "bonificacion": {
+            "type": "number",
+            "format": "double"
+          },
+          "nroItem": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalItem": {
+            "type": "number",
+            "format": "double"
+          },
+          "filer": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "listaPrecID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "comboItemID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "porImpuesto": {
+            "type": "number",
+            "format": "double",
+            "default": null,
+            "nullable": true
+          },
+          "detalle": {
+            "type": "string",
+            "default": null,
+            "nullable": true
+          },
+          "productoOfertaID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Permiso_DTO": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "nullable": true
+          },
+          "maxSlots": {
+            "type": "integer",
+            "format": "int32",
+            "default": 1
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "format": "int32",
+            "default": 30
+          },
+          "requester": {
+            "type": "string",
+            "nullable": true
+          },
+          "token": {
+            "type": "string",
+            "description": "Para sobreescribir un permiso de mismo usuario",
+            "default": null,
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Permiso_Release_DTO": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Nombre del permiso",
+            "nullable": true
+          },
+          "token": {
+            "type": "string",
+            "description": "Token del slot a limpiar",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "precio": {
+        "type": "object",
+        "properties": {
+          "listaPrecID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "porcUtilidad": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "registraNroSerie": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "precio": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "precioFinal": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "presentacion": {
+        "type": "object",
+        "properties": {
+          "presentacionID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "unidadesContiene": {
+            "type": "number",
+            "format": "double"
+          },
+          "fracciones": {
+            "type": "number",
+            "format": "double"
+          },
+          "seUtilizaEnVenta": {
+            "type": "boolean"
+          },
+          "seUtilizaEnCompra": {
+            "type": "boolean"
+          },
+          "utilizaNroSerie": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "unidadMedidaID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cantidadUnidaMedida": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "empaqueID": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "productoListaPrecio": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/precio"
+            },
+            "nullable": true
+          },
+          "productoCodigoBarra": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/codigoBarra"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "producto": {
+        "type": "object",
+        "properties": {
+          "codigoID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "rubroCodigo": {
+            "type": "string",
+            "nullable": true
+          },
+          "descripcionLarga": {
+            "type": "string",
+            "nullable": true
+          },
+          "descripcionCorta": {
+            "type": "string",
+            "nullable": true
+          },
+          "codigoFabrica": {
+            "type": "string",
+            "nullable": true
+          },
+          "caracteristica1ID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "caracteristica2ID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "caracteristica3ID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "defaultPresentacionVentaID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "defaultPresentacionCompraID": {
+            "type": "integer",
+            "format": "int32",
+            "default": null,
+            "nullable": true
+          },
+          "codigoAlfanum": {
+            "type": "string",
+            "nullable": true
+          },
+          "productoPresentacion": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/presentacion"
+            },
+            "nullable": true
+          },
+          "productoCosto": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/costo"
+            },
+            "nullable": true
+          },
+          "productoProveedor": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/proveedores"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductoBase": {
+        "type": "object",
+        "properties": {
+          "codigoBaseID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "descripcionLargaBase": {
+            "type": "string",
+            "nullable": true
+          },
+          "descripcionCortaBase": {
+            "type": "string",
+            "nullable": true
+          },
+          "familiaID": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "proveedorPrincipalID": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "productoTipoID": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "marcaID": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "sectorID": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "impuestos": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "imagen": {
+            "type": "string",
+            "format": "byte",
+            "nullable": true
+          },
+          "productoImpuesto": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/productoImpuesto"
+            },
+            "nullable": true
+          },
+          "producto": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/producto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "productoImpuesto": {
+        "type": "object",
+        "properties": {
+          "impuestoID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "porcImpuesto": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductoInclude": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "proveedores": {
+        "type": "object",
+        "properties": {
+          "proveedorID": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "codigoProveedor": {
+            "type": "string",
+            "nullable": true
+          },
+          "bonificacion1": {
+            "type": "number",
+            "format": "double",
+            "default": null,
+            "nullable": true
+          },
+          "bonificacion2": {
+            "type": "number",
+            "format": "double",
+            "default": null,
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "TokenRequest": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "type": "string",
+            "description": "Nombre de usuario",
+            "nullable": true
+          },
+          "pwd": {
+            "type": "string",
+            "description": "Constraseña",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "VehiculoInclude": {
+        "enum": [
+          0,
+          1,
+          2,
+          4
+        ],
+        "type": "integer",
+        "format": "int32"
+      }
+    },
+    "securitySchemes": {
+      "Bearer": {
+        "type": "http",
+        "description": "JWT Authorization header usando el esquema Bearer. Ejemplo: 'Bearer 12345abcdef'",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [
+    {
+      "Bearer": [ ]
+    }
+  ]
+}
