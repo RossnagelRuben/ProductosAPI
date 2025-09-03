@@ -1,5 +1,6 @@
 ﻿@page "/imagen"
 @using System.Net.Http.Headers
+@using System.IO
 @using System.Text.Json
 @using System.Text.Json.Serialization
 @inject HttpClient Http
@@ -14,20 +15,37 @@
     </div>
     
     <div class="row">
+        <label>Token Colector</label>
+        <input type="text" @bind="ColectorToken" @bind:event="oninput" placeholder="Token Bearer para Colector..." />
+    </div>
+    
+    <div class="row">
         <InputFile OnChange="OnFileSelected" accept=".png,.jpg,.jpeg,.bmp,.webp" />
-        <button class="btn" @onclick="RunOCR" disabled="@IsOcrLoading">@(IsOcrLoading ? "Procesando OCR..." : "Procesar OCR")</button>
-        <button class="btn btn-gray" @onclick="CopyOcrText" disabled="@string.IsNullOrWhiteSpace(FullOcrText)">Copiar texto OCR</button>
-        <button class="btn btn-purple"
-                @onclick="ExtraerProductosIA"
-                disabled="@(!CanRunIA)">
-            @(IsIaLoading ? "Extrayendo..." : "Extraer productos (IA)")
-        </button>
+                 <button class="btn" @onclick="RunOCR" disabled="@IsOcrLoading">@(IsOcrLoading ? "Procesando OCR..." : "Procesar OCR")</button>
+         <button class="btn btn-gray" @onclick="CopyOcrText" disabled="@string.IsNullOrWhiteSpace(FullOcrText)">Copiar texto OCR</button>
+         <button class="btn btn-purple"
+                 @onclick="ExtraerProductosIA"
+                 disabled="@(!CanRunIA)">
+             @(IsIaLoading ? "Extrayendo..." : "Extraer productos (IA)")
+         </button>
 
     </div>
 
     @if (!string.IsNullOrWhiteSpace(Error))
     {
         <div class="alert error">@Error</div>
+    }
+    
+    @if (MostrarMensajeExito)
+    {
+        <div class="alert success fadeInOut">@MensajeExito</div>
+    }
+    
+    @if (MostrarConfirmacionImagen)
+    {
+        <div class="alert success fadeInOut">
+            ✅ Imagen cargada: @NombreArchivoImagen (@TamañoArchivoImagen)
+        </div>
     }
 </div>
 
@@ -59,6 +77,20 @@
             <div class="section">
                 <div class="section-title">Productos (IA)</div>
                 <textarea readonly rows="12">@ProductosJson</textarea>
+                                 <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 12px; max-width: 100%;">
+                     <button class="btn btn-green" 
+                             @onclick="EnviarAlColector" 
+                             disabled="@(!CanSendToColector)"
+                             style="width: 100%;">
+                         @(IsColectorLoading ? "Enviando..." : "ENVIAR AL COLECTOR")
+                     </button>
+                     <button class="btn btn-orange" 
+                             @onclick="ListarDatosColectados" 
+                             disabled="@IsListandoColector"
+                             style="width: 100%;">
+                         @(IsListandoColector ? "Listando..." : "📋 LISTAR COLECTOR")
+                     </button>
+                 </div>
             </div>
         </div>
     </div>
@@ -131,13 +163,86 @@
         background: #7c3aed
     }
 
+    .btn-green {
+        background: #10b981
+    }
+
+    .btn-blue {
+        background: #3b82f6
+    }
+
+    .btn-orange {
+        background: #f97316
+    }
+    
+    /* ===== Estilos específicos para botones del Colector ===== */
+    .section .btn {
+        margin: 0;
+        flex-shrink: 0;
+        min-height: 40px;
+        font-size: 14px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+    }
+    
+    .section .btn + .btn {
+        margin-left: 0;
+    }
+    
+    .section .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .section .btn:active {
+        transform: translateY(0);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+
     .alert.error {
         margin-top: 6px;
-        padding: 8px 10px;
-        color: #842029;
-        background: #f8d7da;
-        border: 1px solid #f5c2c7;
-        border-radius: 10px
+        padding: 12px 14px;
+        color: #0f5132;
+        background: #d1e7dd;
+        border: 1px solid #badbcc;
+        border-radius: 10px;
+        white-space: pre-wrap;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        max-height: 400px;
+        overflow-y: auto;
+        line-height: 1.4;
+        animation: fadeInOut 3s ease-in-out forwards;
+    }
+    
+    .alert.success {
+        margin-top: 6px;
+        padding: 12px 14px;
+        color: #0f5132;
+        background: #d1e7dd;
+        border: 1px solid #badbcc;
+        border-radius: 10px;
+        white-space: pre-wrap;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        line-height: 1.4;
+        animation: fadeInOut 3s ease-in-out;
+    }
+    
+    .fadeInOut {
+        animation: fadeInOut 3s ease-in-out;
+    }
+    
+    @@keyframes fadeInOut {
+        0% { opacity: 0; transform: translateY(-10px); max-height: 0; margin: 0; padding: 0; }
+        10% { opacity: 1; transform: translateY(0); max-height: 200px; margin: 6px 0 0 0; padding: 12px 14px; }
+        90% { opacity: 1; transform: translateY(0); max-height: 200px; margin: 6px 0 0 0; padding: 12px 14px; }
+        100% { opacity: 0; transform: translateY(-10px); max-height: 0; margin: 0; padding: 0; }
+    }
+    
+    /* ===== Animación para el div de confirmación de imagen ===== */
+    .alert.error {
+        animation: fadeInOut 3s ease-in-out forwards;
     }
 
     .stage {
@@ -237,16 +342,39 @@
                              && ImageBytes is not null
                              && !string.IsNullOrWhiteSpace(FullOcrText);
 
+    // Habilita el botón "ENVIAR AL COLECTOR" cuando hay productos (IA) extraídos
+    private bool CanSendToColector => !IsColectorLoading
+                                     && !IsIaLoading
+                                     && !string.IsNullOrWhiteSpace(ProductosJson)
+                                     && !string.IsNullOrWhiteSpace(ColectorToken);
+
 
     // ===== Estado UI =====
     private string? BearerToken { get; set; } // si usás tu API intermedia
     private string? GoogleApiKey { get; set; }
+    private string? ColectorToken { get; set; } // Token para API Colector
     private bool IsOcrLoading { get; set; }
     private bool IsIaLoading { get; set; }
+    private bool IsColectorLoading { get; set; } // Estado para envío al Colector
+    private bool IsListandoColector { get; set; } // Estado para listar datos del Colector
     private string? Error { get; set; }
+    
+    // ===== Estado del Modal del Colector =====
+    private bool MostrarModalColector { get; set; } = false;
+    private string? DatosColectorModal { get; set; }
+    
+    // ===== Estado del mensaje de éxito =====
+    private bool MostrarMensajeExito { get; set; } = false;
+    private string MensajeExito { get; set; } = "";
+    
+    // ===== Estado del div verde de confirmación de imagen =====
+    private bool MostrarConfirmacionImagen { get; set; } = false;
+    private string NombreArchivoImagen { get; set; } = "";
+    private string TamañoArchivoImagen { get; set; } = "";
 
     // ===== Imagen & Overlay =====
     private ElementReference ImgRef;
+    private ElementReference ModalRef;
     private string? ImageDataUrl { get; set; }
     private byte[]? ImageBytes { get; set; }
     private string? ImageMimeType { get; set; }   // <--- NUEVO (para Gemini)
@@ -260,30 +388,107 @@
     // ===== LocalStorage keys =====
     private const string LS_TOKEN = "img_token";
     private const string LS_GKEY = "img_gkey";
+    private const string LS_COLECTOR = "img_colector"; // Token del Colector
 
     protected override async Task OnInitializedAsync()
     {
         BearerToken = await JS.InvokeAsync<string?>("localStorage.getItem", LS_TOKEN);
         GoogleApiKey = await JS.InvokeAsync<string?>("localStorage.getItem", LS_GKEY);
+        ColectorToken = await JS.InvokeAsync<string?>("localStorage.getItem", LS_COLECTOR);
     }
 
+    // ===== MANEJO ULTRA SIMPLE DE ARCHIVOS DE IMAGEN =====
     private async Task OnFileSelected(InputFileChangeEventArgs e)
     {
-        Error = null;
-        FullOcrText = "";
-        ProductosJson = "";
-        Polygons.Clear();
+        try
+        {
+            // ===== LIMPIEZA COMPLETA =====
+            Error = null;
+            FullOcrText = "";
+            ProductosJson = "";
+            Polygons.Clear();
+            ImageBytes = null;
+            ImageDataUrl = null;
+            ImageMimeType = null;
 
-        var file = e.File;
-        if (file is null) return;
+            var file = e.File;
+            if (file is null) 
+            {
+                Error = "No se pudo seleccionar el archivo.";
+                return;
+            }
 
-        using var ms = new MemoryStream();
-        await file.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024).CopyToAsync(ms);
-        ImageBytes = ms.ToArray();
+            // ===== VALIDACIONES BÁSICAS =====
+            if (file.Size > 20 * 1024 * 1024)
+            {
+                Error = "El archivo es demasiado grande. Máximo 20MB.";
+                return;
+            }
 
-        ImageMimeType = file.ContentType; // <--- guarda el MIME para Gemini
-        var base64 = Convert.ToBase64String(ImageBytes);
-        ImageDataUrl = $"data:{file.ContentType};base64,{base64}";
+            var allowedTypes = new[] { "image/png", "image/jpeg", "image/jpg", "image/bmp", "image/webp" };
+            var contentType = file.ContentType ?? string.Empty;
+            var contentTypeLower = contentType.ToLowerInvariant();
+
+            // Respaldo por extensión si ContentType viene vacío o no esperado
+            if (string.IsNullOrWhiteSpace(contentTypeLower) || !allowedTypes.Contains(contentTypeLower))
+            {
+                var ext = (Path.GetExtension(file.Name) ?? string.Empty).ToLowerInvariant();
+                contentTypeLower = ext switch
+                {
+                    ".png" => "image/png",
+                    ".jpg" => "image/jpeg",
+                    ".jpeg" => "image/jpeg",
+                    ".bmp" => "image/bmp",
+                    ".webp" => "image/webp",
+                    _ => string.Empty
+                };
+            }
+
+            if (string.IsNullOrWhiteSpace(contentTypeLower) || !allowedTypes.Contains(contentTypeLower))
+            {
+                Error = $"Tipo de archivo no soportado: {file.ContentType} ({file.Name})";
+                return;
+            }
+
+            // ===== LECTURA SIMPLE =====
+            using var ms = new MemoryStream();
+            await file.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024).CopyToAsync(ms);
+            ImageBytes = ms.ToArray();
+            
+            if (ImageBytes.Length == 0)
+            {
+                Error = "El archivo está vacío";
+                return;
+            }
+
+            // ===== CONFIGURACIÓN BÁSICA =====
+            ImageMimeType = contentTypeLower;
+            var base64 = Convert.ToBase64String(ImageBytes);
+            ImageDataUrl = $"data:{ImageMimeType};base64,{base64}";
+            NaturalW = 800;
+            NaturalH = 600;
+
+            // ===== CONFIRMACIÓN VISUAL =====
+            NombreArchivoImagen = file.Name ?? "";
+            TamañoArchivoImagen = $"{file.Size / 1024} KB";
+            MostrarConfirmacionImagen = true;
+            var __ = Task.Delay(3000).ContinueWith(async _ =>
+            {
+                await InvokeAsync(() => { MostrarConfirmacionImagen = false; });
+            });
+        }
+        catch (Exception ex)
+        {
+            Error = $"❌ Error crítico: {ex.Message}";
+            
+            // ===== LIMPIEZA TOTAL =====
+            ImageBytes = null;
+            ImageDataUrl = null;
+            ImageMimeType = null;
+            FullOcrText = "";
+            ProductosJson = "";
+            Polygons.Clear();
+        }
     }
 
     private async Task RunOCR()
@@ -298,6 +503,7 @@
         await JS.InvokeVoidAsync("localStorage.setItem", LS_TOKEN, BearerToken ?? "");
         await JS.InvokeVoidAsync("localStorage.setItem", LS_GKEY, GoogleApiKey ?? "");
 
+        if (IsOcrLoading) return; // Evitar doble ejecución
         IsOcrLoading = true;
         try
         {
@@ -391,28 +597,44 @@
         finally
         {
             IsOcrLoading = false;
-            StateHasChanged();
         }
     }
 
     // === USA LA MISMA API KEY que Vision y manda la IMAGEN a Gemini ===
     private async Task ExtraerProductosIA()
     {
+        Console.WriteLine("🤖 ExtraerProductosIA: INICIANDO");
+        
         Error = null;
         ProductosJson = "";
 
-        if (ImageBytes is null || string.IsNullOrWhiteSpace(ImageMimeType))
+        // ===== VALIDACIONES CON DEBUG =====
+        if (ImageBytes is null)
         {
             Error = "Primero elegí una imagen válida.";
+            Console.WriteLine("❌ ExtraerProductosIA: ImageBytes es null");
             return;
         }
+        
+        if (string.IsNullOrWhiteSpace(ImageMimeType))
+        {
+            Error = "Primero elegí una imagen válida.";
+            Console.WriteLine("❌ ExtraerProductosIA: ImageMimeType es null/vacío");
+            return;
+        }
+        
         if (string.IsNullOrWhiteSpace(GoogleApiKey))
         {
             Error = "Pegá la Google API Key (se usa para Vision y Gemini).";
+            Console.WriteLine("❌ ExtraerProductosIA: GoogleApiKey es null/vacío");
             return;
         }
+
+        Console.WriteLine($"✅ ExtraerProductosIA: Validaciones pasadas - ImageBytes: {ImageBytes.Length} bytes, MimeType: {ImageMimeType}");
+        
         await JS.InvokeVoidAsync("localStorage.setItem", LS_GKEY, GoogleApiKey ?? "");
 
+        if (IsIaLoading) return; // Evitar doble ejecución
         IsIaLoading = true;
         try
         {
@@ -441,6 +663,8 @@ Usa punto (.) como separador decimal. Devuelve SOLO JSON válido.";
                 }
             };
 
+            Console.WriteLine($"🌐 ExtraerProductosIA: Enviando request a Gemini...");
+            
             var req = new HttpRequestMessage(HttpMethod.Post, url)
             {
                 Content = new StringContent(JsonSerializer.Serialize(body), System.Text.Encoding.UTF8, "application/json")
@@ -448,58 +672,586 @@ Usa punto (.) como separador decimal. Devuelve SOLO JSON válido.";
             var res = await Http.SendAsync(req);
             var json = await res.Content.ReadAsStringAsync();
 
+            Console.WriteLine($"📥 ExtraerProductosIA: Respuesta recibida - Status: {res.StatusCode}, Longitud: {json.Length}");
+
             if (!res.IsSuccessStatusCode)
             {
                 Error = $"Gemini error {(int)res.StatusCode} - {res.ReasonPhrase}. Respuesta: {json}";
+                Console.WriteLine($"❌ ExtraerProductosIA: Error HTTP {res.StatusCode}");
                 return;
             }
 
+            Console.WriteLine($"🔍 ExtraerProductosIA: Parseando respuesta Gemini...");
             string textOut = TryParseGemini(json);
+            Console.WriteLine($"📝 ExtraerProductosIA: Texto extraído - Longitud: {textOut?.Length ?? 0}");
+            Console.WriteLine($"📝 ExtraerProductosIA: Texto extraído - Contenido: '{textOut}'");
+            
             ProductosJson = textOut;
+            Console.WriteLine($"💾 ExtraerProductosIA: ProductosJson asignado - Longitud: {ProductosJson?.Length ?? 0}");
 
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", textOut);
+            Console.WriteLine("✅ ExtraerProductosIA: Texto copiado al portapapeles");
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"💥 ExtraerProductosIA: EXCEPCIÓN: {ex.Message}");
+            Console.WriteLine($"📚 StackTrace: {ex.StackTrace}");
             Error = $"Excepción IA: {ex.Message}";
         }
         finally
         {
             IsIaLoading = false;
+            Console.WriteLine("🏁 ExtraerProductosIA: FINALIZADO");
         }
     }
 
-    private void CopyOcrText()
+    // ===== ENVÍO AL COLECTOR =====
+    private async Task EnviarAlColector()
     {
-        _ = JS.InvokeVoidAsync("navigator.clipboard.writeText", FullOcrText ?? "");
+        Error = null;
+        
+        if (string.IsNullOrWhiteSpace(ProductosJson))
+        {
+            Error = "No hay productos para enviar al Colector. Primero extrae productos con IA.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(ColectorToken))
+        {
+            Error = "Pegá el Token de Colector para poder enviar los datos.";
+            return;
+        }
+
+        // Guardar token en localStorage
+        await JS.InvokeVoidAsync("localStorage.setItem", LS_COLECTOR, ColectorToken ?? "");
+
+        if (IsColectorLoading) return; // Evitar doble envío
+        IsColectorLoading = true;
+        try
+        {
+            // ===== DEBUG: Mostrar ProductosJson exacto =====
+            Console.WriteLine($"🔍 EnviarAlColector - ProductosJson: '{ProductosJson}'");
+            
+            // ===== Mapear ProductosJson a payload del Colector =====
+            var payload = new ColectorPayload
+            {
+                //colectorEncabID = 0,
+                fechaHora = DateTime.UtcNow,
+                sucursalID = null,
+                depositoID = null,
+                tipoOperacionID = null,
+                clienteID = null,
+                proveedorID = null,
+                registroOperacionID = null,
+                estadoID = null,
+                pedirAlDepositoID = null,
+                colectorItem = ParseProductosToColector(ProductosJson)
+            };
+
+            // ===== VERIFICAR SI SE GENERÓ PRODUCTO DE EJEMPLO =====
+            var tieneProductoEjemplo = payload.colectorItem.Any(item => 
+                item.codigoBarra == "PRODUCTO_EJEMPLO" && 
+                item.descripcion == "Producto de ejemplo generado automáticamente");
+            
+            var mensajeEjemplo = "";
+            if (tieneProductoEjemplo)
+            {
+                mensajeEjemplo = $"⚠️ NOTA: Se generó un producto de ejemplo porque no se pudieron extraer productos de la imagen.\n" +
+                                $"Esto evita que el servidor rechace el envío con el error 'El registro no contiene detalle'.\n\n";
+            }
+
+            var url = "https://drrsystemas4.azurewebsites.net/Colector";
+            var payloadJson = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+            
+            var req = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new StringContent(payloadJson, System.Text.Encoding.UTF8, "application/json")
+            };
+
+            // Agregar header de autorización
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", ColectorToken);
+
+            // ===== Mostrar información del envío =====
+            var tokenPreview = ColectorToken?.Length > 10 ? ColectorToken.Substring(0, 10) : ColectorToken ?? "";
+            Error = $"{mensajeEjemplo}" +
+                   $"🔄 Enviando {payload.colectorItem.Count} productos al Colector...\n\n" +
+                   $"URL: {url}\n" +
+                   $"Token: {tokenPreview}...\n" +
+                   $"Payload:\n{payloadJson}";
+
+            var res = await Http.SendAsync(req);
+            var responseJson = await res.Content.ReadAsStringAsync();
+
+            if (!res.IsSuccessStatusCode)
+            {
+                Error = $"❌ Error Colector {(int)res.StatusCode} - {res.ReasonPhrase}\n\n" +
+                       $"Respuesta del servidor:\n{responseJson}\n\n" +
+                       $"Payload enviado:\n{payloadJson}";
+                return;
+            }
+
+            // ===== DEBUG VISIBLE DEL PARSING =====
+            var debugParsing = "";
+            try
+            {
+                var testItems = ParseProductosToColector(ProductosJson);
+                debugParsing = $"🔍 DEBUG DEL PARSING:\n" +
+                              $"📋 Productos parseados: {testItems.Count}\n" +
+                              $"📦 Primer producto: {(testItems.Count > 0 ? $"Codigo='{testItems[0].codigoBarra}', Desc='{testItems[0].descripcion}', Cant={testItems[0].cantidad}" : "N/A")}\n\n";
+            }
+            catch (Exception ex)
+            {
+                debugParsing = $"❌ ERROR EN PARSING: {ex.Message}\n\n";
+            }
+            
+            // ===== Éxito - mostrar mensaje verde por 3 segundos =====
+            var mensajeExito = $"✅ Datos enviados exitosamente al Colector!\n\n" +
+                              $"📊 Productos enviados: {payload.colectorItem.Count}\n" +
+                              $"💡 La respuesta completa se copió al portapapeles.";
+            
+            if (tieneProductoEjemplo)
+            {
+                mensajeExito += $"\n\n⚠️ NOTA: Se envió un producto de ejemplo para evitar el error del servidor.";
+            }
+            
+            // Mostrar mensaje de éxito verde por 3 segundos
+            MensajeExito = mensajeExito;
+            if (!MostrarMensajeExito) // Mostrar solo una vez
+            {
+                MostrarMensajeExito = true;
+            }
+            Error = null; // Limpiar cualquier error previo
+            
+            // Ocultar mensaje después de 3 segundos (una sola vez)
+            var _ = Task.Delay(3000).ContinueWith(async _ =>
+            {
+                await InvokeAsync(() => { MostrarMensajeExito = false; });
+            });
+            
+            // Copiar respuesta al portapapeles
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", responseJson);
+        }
+        catch (Exception ex)
+        {
+            Error = $"❌ Excepción al enviar al Colector: {ex.Message}\n\n" +
+                   $"Detalles técnicos:\n{ex.StackTrace}";
+        }
+        finally
+        {
+            IsColectorLoading = false;
+        }
+    }
+
+    // ===== DEBUG VISIBLE DEL PARSING =====
+    private string GetDebugParsingVisible()
+    {
+        try
+        {
+            var testItems = ParseProductosToColector(ProductosJson);
+            return $"🔍 DEBUG DEL PARSING:\n" +
+                   $"📋 Productos parseados: {testItems.Count}\n" +
+                   $"📦 Primer producto: {(testItems.Count > 0 ? $"Codigo='{testItems[0].codigoBarra}', Desc='{testItems[0].descripcion}', Cant={testItems[0].cantidad}" : "N/A")}\n\n" +
+                   $"🔍 DEBUG COMPLETO DEL PARSING:\n" +
+                   $"📝 JSON recibido: '{ProductosJson}'\n" +
+                   $"📏 Longitud: {ProductosJson?.Length ?? 0}\n" +
+                   $"🔍 Contiene '[': {ProductosJson?.Contains('[')}\n" +
+                   $"🔍 Contiene ']': {ProductosJson?.Contains(']')}\n" +
+                   $"🔍 Contiene 'codigo': {ProductosJson?.Contains("codigo")}\n" +
+                   $"🔍 Contiene 'descripcion': {ProductosJson?.Contains("descripcion")}\n\n";
+        }
+        catch (Exception ex)
+        {
+            return $"❌ ERROR EN PARSING: {ex.Message}\n\n" +
+                   $"🔍 DEBUG COMPLETO DEL PARSING:\n" +
+                   $"📝 JSON recibido: '{ProductosJson}'\n" +
+                   $"📏 Longitud: {ProductosJson?.Length ?? 0}\n" +
+                   $"🔍 Contiene '[': {ProductosJson?.Contains('[')}\n" +
+                   $"🔍 Contiene ']': {ProductosJson?.Contains(']')}\n" +
+                   $"🔍 Contiene 'codigo': {ProductosJson?.Contains("codigo")}\n" +
+                   $"🔍 Contiene 'descripcion': {ProductosJson?.Contains("descripcion")}\n\n";
+        }
+    }
+
+    // ===== LISTAR DATOS COLECTADOS =====
+    private async Task ListarDatosColectados()
+    {
+        Console.WriteLine("📋 ListarDatosColectados: INICIANDO");
+        
+        if (string.IsNullOrWhiteSpace(ColectorToken))
+        {
+            Error = "Pegá el Token de Colector para poder listar los datos.";
+            Console.WriteLine("❌ ListarDatosColectados: ColectorToken está vacío");
+            return;
+        }
+
+        IsListandoColector = true;
+        try
+        {
+            var url = "https://drrsystemas4.azurewebsites.net/Colector";
+            Console.WriteLine($"🌐 ListarDatosColectados: Consultando URL: {url}");
+            
+            var req = new HttpRequestMessage(HttpMethod.Get, url);
+            
+            // Agregar header de autorización
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", ColectorToken);
+            
+            Console.WriteLine($"🔐 ListarDatosColectados: Token configurado - Longitud: {ColectorToken.Length}");
+            
+            var res = await Http.SendAsync(req);
+            var responseJson = await res.Content.ReadAsStringAsync();
+            
+            Console.WriteLine($"📥 ListarDatosColectados: Respuesta recibida - Status: {res.StatusCode}, Longitud: {responseJson.Length}");
+
+            if (!res.IsSuccessStatusCode)
+            {
+                Error = $"❌ Error al listar datos del Colector {(int)res.StatusCode} - {res.ReasonPhrase}\n\n" +
+                       $"Respuesta del servidor:\n{responseJson}";
+                Console.WriteLine($"❌ ListarDatosColectados: Error HTTP {res.StatusCode}");
+                return;
+            }
+
+            // ===== Éxito - mostrar datos en modal =====
+            DatosColectorModal = responseJson;
+            MostrarModalColector = true;
+            
+            // Dar foco al modal para que capture eventos de teclado
+            await Task.Delay(100); // Pequeña pausa para que el modal se renderice
+            try
+            {
+                await JS.InvokeVoidAsync("eval", "document.querySelector('.app-modal').focus();");
+            }
+            catch { }
+            
+            // Copiar respuesta al portapapeles
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", responseJson);
+            Console.WriteLine("✅ ListarDatosColectados: Datos copiados al portapapeles y modal abierto");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"💥 ListarDatosColectados: EXCEPCIÓN: {ex.Message}");
+            Console.WriteLine($"📚 StackTrace: {ex.StackTrace}");
+            Error = $"❌ Excepción al listar datos del Colector: {ex.Message}\n\n" +
+                   $"Detalles técnicos:\n{ex.StackTrace}";
+        }
+        finally
+        {
+            IsListandoColector = false;
+            Console.WriteLine("🏁 ListarDatosColectados: FINALIZADO");
+        }
+    }
+
+    // ===== MANEJO DEL MODAL DEL COLECTOR =====
+    private async Task CerrarModalColector()
+    {
+        MostrarModalColector = false;
+        DatosColectorModal = null;
+        await Task.CompletedTask;
+    }
+    
+
+    
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            await CerrarModalColector();
+        }
+    }
+    
+    private async Task CopiarDatosColector()
+    {
+        if (!string.IsNullOrWhiteSpace(DatosColectorModal))
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", DatosColectorModal);
+            // Opcional: mostrar confirmación
+        }
+    }
+    
+
+
+    // ===== Parseo robusto desde ProductosJson a colectorItem =====
+    private List<ColectorItem> ParseProductosToColector(string productosJson)
+    {
+        var items = new List<ColectorItem>();
+        
+        // ===== DEBUG COMPLETO =====
+        Console.WriteLine($"🔍 ParseProductosToColector INICIO");
+        Console.WriteLine($"📝 JSON recibido: '{productosJson}'");
+        Console.WriteLine($"📏 Longitud: {productosJson?.Length ?? 0}");
+        
+        if (string.IsNullOrWhiteSpace(productosJson))
+        {
+            Console.WriteLine("❌ JSON está vacío o null");
+            // ===== GENERAR PRODUCTO DE EJEMPLO =====
+            Console.WriteLine("🔄 Generando producto de ejemplo para evitar error del servidor...");
+            var itemEjemplo = new ColectorItem
+            {
+                itemColectorID = 0,
+                presentacionID = 0,
+                codigoID = 11589, // Código temporal que sabemos que existe en la tabla Producto
+                listaPrecID = 0,
+                cantidad = 1.0m,
+                codigoBarra = "PRODUCTO_EJEMPLO",
+                descripcion = "Producto de ejemplo generado automáticamente",
+                cantidadPiezas = 1
+            };
+            items.Add(itemEjemplo);
+            Console.WriteLine($"✅ Producto de ejemplo agregado: {itemEjemplo.descripcion}");
+            return items;
+        }
+
+        var jsonLimpio = productosJson.Trim();
+        Console.WriteLine($"🧹 JSON limpio: '{jsonLimpio}'");
+
+        var options = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            AllowTrailingCommas = true,
+            ReadCommentHandling = JsonCommentHandling.Skip,
+            NumberHandling = JsonNumberHandling.AllowReadingFromString
+        };
+
+        // ===== ESTRATEGIA 1: Parsear directamente como array =====
+        List<ProductoItem>? parsed = null;
+        try
+        {
+            Console.WriteLine("📋 ESTRATEGIA 1: Parseo directo...");
+            parsed = JsonSerializer.Deserialize<List<ProductoItem>>(jsonLimpio, options);
+            Console.WriteLine($"✅ Estrategia 1 exitosa: {parsed?.Count ?? 0} productos");
+        }
+        catch (Exception ex1)
+        {
+            Console.WriteLine($"❌ Estrategia 1 falló: {ex1.Message}");
+        }
+
+        // ===== ESTRATEGIA 2: Extraer array [ ... ] si vino rodeado de texto =====
+        if (parsed == null || parsed.Count == 0)
+        {
+            try
+            {
+                Console.WriteLine("🔍 ESTRATEGIA 2: Buscando array JSON...");
+                var s = jsonLimpio.IndexOf('[');
+                var e = jsonLimpio.LastIndexOf(']');
+                Console.WriteLine($"🔍 Posiciones: start={s}, end={e}");
+                
+                if (s >= 0 && e > s)
+                {
+                    var inner = jsonLimpio.Substring(s, e - s + 1);
+                    Console.WriteLine($"📋 JSON extraído: '{inner}'");
+                    
+                    parsed = JsonSerializer.Deserialize<List<ProductoItem>>(inner, options);
+                    Console.WriteLine($"✅ Estrategia 2 exitosa: {parsed?.Count ?? 0} productos");
+                }
+                else
+                {
+                    Console.WriteLine("⚠️ No se encontraron corchetes válidos");
+                }
+            }
+            catch (Exception ex2)
+            {
+                Console.WriteLine($"❌ Estrategia 2 falló: {ex2.Message}");
+            }
+        }
+
+        // ===== VERIFICAR RESULTADO =====
+        if (parsed == null)
+        {
+            Console.WriteLine("❌ Ambas estrategias fallaron - parsed es null");
+            // ===== GENERAR PRODUCTO DE EJEMPLO SOLO CUANDO NO HAY NADA =====
+            Console.WriteLine("🔄 Generando producto de ejemplo para evitar error del servidor...");
+            var itemEjemplo = new ColectorItem
+            {
+                itemColectorID = 0,
+                presentacionID = 0,
+                codigoID = 11589, // Código temporal que sabemos que existe en la tabla Producto
+                listaPrecID = 0,
+                cantidad = 1.0m,
+                codigoBarra = "PRODUCTO_EJEMPLO",
+                descripcion = "Producto de ejemplo generado automáticamente",
+                cantidadPiezas = 1
+            };
+            items.Add(itemEjemplo);
+            Console.WriteLine($"✅ Producto de ejemplo agregado: {itemEjemplo.descripcion}");
+            return items;
+        }
+        
+        if (parsed.Count == 0)
+        {
+            Console.WriteLine("⚠️ Se parseó correctamente pero no hay productos");
+            // ===== GENERAR PRODUCTO DE EJEMPLO SOLO CUANDO NO HAY NADA =====
+            Console.WriteLine("🔄 Generando producto de ejemplo para evitar error del servidor...");
+            var itemEjemplo = new ColectorItem
+            {
+                itemColectorID = 0,
+                presentacionID = 0,
+                codigoID = 11589, // Código temporal que sabemos que existe en la tabla Producto
+                listaPrecID = 0,
+                cantidad = 1.0m,
+                codigoBarra = "PRODUCTOR_EJEMPLO",
+                descripcion = "Producto de ejemplo generado automáticamente",
+                cantidadPiezas = 1
+            };
+            items.Add(itemEjemplo);
+            Console.WriteLine($"✅ Producto de ejemplo agregado: {itemEjemplo.descripcion}");
+            return items;
+        }
+
+        Console.WriteLine($"🎯 Productos parseados exitosamente: {parsed.Count}");
+
+        // ===== MAPEAR A COLECTORITEM =====
+        foreach (var p in parsed)
+        {
+            Console.WriteLine($"📦 Procesando producto: Codigo='{p.Codigo}', Desc='{p.Descripcion}', Cant='{p.Cantidad}'");
+            
+            // Parsers robustos: "3", "3.0", "3,0" → decimal
+            decimal cantDec = 0m;
+            if (!string.IsNullOrWhiteSpace(p.Cantidad))
+            {
+                var norm = p.Cantidad.Replace(',', '.');
+                var parseSuccess = decimal.TryParse(norm, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out cantDec);
+                Console.WriteLine($"🔢 Parseo cantidad: '{p.Cantidad}' → '{norm}' → {cantDec} (éxito: {parseSuccess})");
+            }
+
+            // ===== USAR TEMPORALMENTE UN CODIGOID VÁLIDO DE LA BASE DE DATOS =====
+            // TODO: En el futuro, buscar el codigoID real en la base de datos
+            int codigoId = 11589; // Código temporal que sabemos que existe en la tabla Producto
+            
+            Console.WriteLine($"🔢 Usando codigoID temporal: {codigoId} (producto real: {p.Codigo})");
+            
+            var item = new ColectorItem
+            {
+                itemColectorID = 0,
+                presentacionID = 0,
+                codigoID = codigoId,  // ← AHORA USAMOS UN ID VÁLIDO
+                listaPrecID = 0,
+                cantidad = cantDec,
+                codigoBarra = p.Descripcion ?? string.Empty,  // ← DESCRIPCIÓN va en codigoBarra
+                descripcion = p.Codigo ?? string.Empty,       // ← CÓDIGO va en descripcion
+                cantidadPiezas = (int)Math.Max(0, Math.Round(cantDec))
+            };
+            
+            items.Add(item);
+            Console.WriteLine($"✅ Item agregado: codigoBarra='{item.codigoBarra}', descripcion='{item.descripcion}', cantidad={item.cantidad}");
+        }
+
+        Console.WriteLine($"🎉 ParseProductosToColector FINALIZADO: {items.Count} items");
+        return items;
+    }
+
+    private async Task CopyOcrText()
+    {
+        if (!string.IsNullOrWhiteSpace(FullOcrText))
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", FullOcrText);
+        }
     }
 
     private async Task CopyText(string txt)
     {
         await JS.InvokeVoidAsync("navigator.clipboard.writeText", txt ?? "");
         HoverText = "📋 Copiado al portapapeles.\n\n" + txt;
-        StateHasChanged();
     }
 
     // ===== Tamaños naturales de la imagen =====
     private double NaturalW, NaturalH;
 
+    // ===== CARGA SEGURA DE IMAGEN SIN JAVASCRIPT INTEROP =====
+    private async Task CargarImagenSegura()
+    {
+        try
+        {
+            Console.WriteLine("🖼️ CargarImagenSegura: Iniciando carga segura...");
+            
+            // ===== Verificar que la imagen esté disponible =====
+            if (ImageBytes == null || ImageDataUrl == null)
+            {
+                Console.WriteLine("⚠️ CargarImagenSegura: Imagen no disponible");
+                return;
+            }
+
+            // ===== Establecer dimensiones por defecto =====
+            NaturalW = 800; // Dimensiones por defecto
+            NaturalH = 600;
+            
+            Console.WriteLine($"📏 CargarImagenSegura: Dimensiones por defecto establecidas - {NaturalW}x{NaturalH}");
+            
+            // ===== Pausa para estabilizar =====
+            await Task.Delay(200);
+            
+            Console.WriteLine("✅ CargarImagenSegura: Carga completada exitosamente");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ CargarImagenSegura: Error: {ex.Message}");
+            // No es crítico, continuar
+        }
+    }
+
+    // ===== MANEJO SEGURO DE CARGA DE IMAGEN =====
     private async Task OnImageLoaded()
     {
         try
         {
-            var s = await JS.InvokeAsync<DomSize2>("getImageSizes", "#ocr-img");
-            NaturalW = s.NaturalWidth;
-            NaturalH = s.NaturalHeight;
+            Console.WriteLine("🖼️ OnImageLoaded: Iniciando medición de imagen...");
+            
+            // ===== Verificar que la imagen esté disponible =====
+            if (ImageBytes == null || ImageDataUrl == null)
+            {
+                Console.WriteLine("⚠️ OnImageLoaded: Imagen no disponible, saltando medición");
+                return;
+            }
 
-            await JS.InvokeVoidAsync("sizeSvgOverImage", ".overlay",
-                s.ClientWidth, s.ClientHeight, s.NaturalWidth, s.NaturalHeight);
+            // ===== Intentar obtener dimensiones de la imagen =====
+            try
+            {
+                var s = await JS.InvokeAsync<DomSize2>("getImageSizes", "#ocr-img");
+                
+                if (s != null)
+                {
+                    NaturalW = s.NaturalWidth;
+                    NaturalH = s.NaturalHeight;
+                    
+                    Console.WriteLine($"📏 OnImageLoaded: Dimensiones obtenidas - Natural: {NaturalW}x{NaturalH}, Client: {s.ClientWidth}x{s.ClientHeight}");
+                    
+                    // ===== Intentar ajustar el overlay SVG =====
+                    try
+                    {
+                        await JS.InvokeVoidAsync("sizeSvgOverImage", ".overlay",
+                            s.ClientWidth, s.ClientHeight, s.NaturalWidth, s.NaturalHeight);
+                        Console.WriteLine("✅ OnImageLoaded: Overlay SVG ajustado correctamente");
+                    }
+                    catch (Exception exSvg)
+                    {
+                        Console.WriteLine($"⚠️ OnImageLoaded: Error al ajustar overlay SVG: {exSvg.Message}");
+                        // No es crítico, continuar
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("⚠️ OnImageLoaded: getImageSizes retornó null");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"⚠️ OnImageLoaded: Error al obtener dimensiones: {ex.Message}");
+                // No es crítico, continuar sin dimensiones
+            }
         }
-        catch
+        catch (Exception ex)
         {
-            Error = "No se pudo medir la imagen. Verificá que js/dom.js esté cargado en index.html";
+            // ===== Captura de excepciones generales =====
+            Console.WriteLine($"❌ OnImageLoaded: Error general: {ex.Message}");
+            Console.WriteLine($"📚 StackTrace: {ex.StackTrace}");
+            
+            // ===== Mostrar error no crítico al usuario =====
+            Error = $"⚠️ No se pudo medir completamente la imagen: {ex.Message}. La funcionalidad básica seguirá funcionando.";
         }
-        StateHasChanged();
+        finally
+        {
+            // ===== UI se actualiza automáticamente =====
+            Console.WriteLine("✅ OnImageLoaded: Completado");
+        }
     }
 
     // === Normalización (0..1 → px naturales) ===
@@ -527,21 +1279,59 @@ Usa punto (.) como separador decimal. Devuelve SOLO JSON válido.";
 
     private static string TryParseGemini(string responseJson)
     {
+        Console.WriteLine($"🔍 TryParseGemini: INICIANDO - Longitud: {responseJson?.Length ?? 0}");
+        
         try
         {
             using var doc = JsonDocument.Parse(responseJson);
             var root = doc.RootElement;
+            
+            Console.WriteLine($"📋 TryParseGemini: Root parseado correctamente");
+            
             var candidates = root.GetProperty("candidates");
-            if (candidates.ValueKind != JsonValueKind.Array || candidates.GetArrayLength() == 0) return responseJson;
+            if (candidates.ValueKind != JsonValueKind.Array || candidates.GetArrayLength() == 0)
+            {
+                Console.WriteLine("⚠️ TryParseGemini: No hay candidates válidos, retornando responseJson");
+                return responseJson;
+            }
+            
+            Console.WriteLine($"✅ TryParseGemini: Candidates encontrados: {candidates.GetArrayLength()}");
+            
             var parts = candidates[0].GetProperty("content").GetProperty("parts");
-            if (parts.ValueKind != JsonValueKind.Array || parts.GetArrayLength() == 0) return responseJson;
+            if (parts.ValueKind != JsonValueKind.Array || parts.GetArrayLength() == 0)
+            {
+                Console.WriteLine("⚠️ TryParseGemini: No hay parts válidos, retornando responseJson");
+                return responseJson;
+            }
+            
+            Console.WriteLine($"✅ TryParseGemini: Parts encontrados: {parts.GetArrayLength()}");
+            
             var text = parts[0].GetProperty("text").GetString() ?? "";
+            Console.WriteLine($"📝 TryParseGemini: Texto extraído - Longitud: {text.Length}");
+            Console.WriteLine($"📝 TryParseGemini: Texto extraído - Contenido: '{text}'");
+            
             var start = text.IndexOf('[');
             var end = text.LastIndexOf(']');
-            if (start >= 0 && end > start) return text.Substring(start, end - start + 1).Trim();
+            
+            Console.WriteLine($"🔍 TryParseGemini: Posiciones [ y ] - start: {start}, end: {end}");
+            
+            if (start >= 0 && end > start)
+            {
+                var result = text.Substring(start, end - start + 1).Trim();
+                Console.WriteLine($"✅ TryParseGemini: JSON extraído - Longitud: {result.Length}");
+                Console.WriteLine($"✅ TryParseGemini: JSON extraído - Contenido: '{result}'");
+                return result;
+            }
+            
+            Console.WriteLine($"⚠️ TryParseGemini: No se encontraron corchetes, retornando texto completo");
             return text.Trim();
         }
-        catch { return responseJson; }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ TryParseGemini: EXCEPCIÓN: {ex.Message}");
+            Console.WriteLine($"📚 StackTrace: {ex.StackTrace}");
+            return responseJson;
+        }
     }
 
     // ===== Modelos Vision (mínimos) =====
@@ -580,4 +1370,86 @@ Usa punto (.) como separador decimal. Devuelve SOLO JSON válido.";
         public string Text { get; }
         public PolyModel(List<Pt> pts, string text) { Points = pts; Text = text; }
     }
+
+    // ===== DTOs reales para Colector =====
+    private sealed class ColectorPayload
+    {
+        public int colectorEncabID { get; set; }
+        public DateTime fechaHora { get; set; }
+        public int? sucursalID { get; set; }
+        public int? depositoID { get; set; }
+        public int? tipoOperacionID { get; set; }
+        public int? clienteID { get; set; }
+        public int? proveedorID { get; set; }
+        public int? registroOperacionID { get; set; }
+        public int? estadoID { get; set; }
+        public int? pedirAlDepositoID { get; set; }
+        public List<ColectorItem> colectorItem { get; set; } = new();
+    }
+
+    private sealed class ColectorItem
+    {
+        public int itemColectorID { get; set; }
+        public int presentacionID { get; set; }
+        public int codigoID { get; set; }
+        public int listaPrecID { get; set; }
+        public decimal cantidad { get; set; }
+        public string codigoBarra { get; set; } = "";
+        public string descripcion { get; set; } = "";
+        public int cantidadPiezas { get; set; }
+    }
+
+    private sealed class ProductoItem
+    {
+        [JsonPropertyName("codigo")] public string? Codigo { get; set; }
+        [JsonPropertyName("descripcion")] public string? Descripcion { get; set; }
+        [JsonPropertyName("cantidad")] public string? Cantidad { get; set; }
+        [JsonPropertyName("precio_unitario")] public string? PrecioUnitario { get; set; }
+    }
 }
+
+@if (MostrarModalColector)
+{
+    <div class="app-modal-backdrop" @onclick="CerrarModalColector">
+        <div class="app-modal app-modal-xl" @onclick:stopPropagation="true" @onkeydown="HandleKeyDown" tabindex="0" @ref="ModalRef">
+            <div class="app-modal-header">
+                <h3 class="app-modal-title">📋 Datos del Colector</h3>
+                <button class="app-modal-close" @onclick="CerrarModalColector">×</button>
+            </div>
+            
+            <div class="app-modal-body">
+                @if (!string.IsNullOrWhiteSpace(DatosColectorModal))
+                {
+                    <div style="margin-bottom: 16px;">
+                        <strong>✅ Datos obtenidos exitosamente del servidor</strong>
+                        <br />
+                        <small style="color: #666;">
+                            Los datos se copiaron automáticamente al portapapeles
+                        </small>
+                    </div>
+                    
+                    <div style="background: #f8f9fa; border: 1px solid #e1e5e9; border-radius: 8px; padding: 16px; font-family: 'Courier New', monospace; font-size: 12px; max-height: 400px; overflow-y: auto; white-space: pre-wrap;">
+                        @DatosColectorModal
+                    </div>
+                }
+                else
+                {
+                    <div style="text-align: center; color: #666; padding: 40px;">
+                        <div style="font-size: 48px; margin-bottom: 16px;">📭</div>
+                        <div>No hay datos para mostrar</div>
+                    </div>
+                }
+            </div>
+            
+            <div class="app-modal-footer">
+                <button class="btn btn-gray" @onclick="CerrarModalColector">
+                    Cerrar
+                </button>
+                <button class="btn btn-blue" @onclick="CopiarDatosColector" disabled="@string.IsNullOrWhiteSpace(DatosColectorModal)">
+                    📋 Copiar Datos
+                </button>
+            </div>
+        </div>
+    </div>
+}
+

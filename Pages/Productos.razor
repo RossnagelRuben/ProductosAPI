@@ -8,6 +8,7 @@
 @using Microsoft.JSInterop
 @using Microsoft.AspNetCore.Components.Web
 @using System.Linq
+@using System.Net.Http.Headers
 @inject IJSRuntime JS
 
 @inject HttpClient Http
@@ -135,8 +136,17 @@
     <ChildContent>
         <div class="details-grid">
             <div class="details-image">
-                <img src="https://ardiaprod.vtexassets.com/arquivos/ids/321558/Yerba-Mate-Amanda-Suave-500-Gr-_1.jpg" alt="Imagen del producto" />
+                @if (!string.IsNullOrWhiteSpace(imagenProducto))
+                {
+                    <img src="@imagenProducto" alt="Imagen del producto" />
+                }
+                else
+                {
+                    <img src="https://ardiaprod.vtexassets.com/arquivos/ids/321558/Yerba-Mate-Amanda-Suave-500-Gr-_1.jpg" alt="Imagen del producto" />
+                }
             </div>
+            
+            @* Mostrar datos locales del producto *@
             <div class="details-desc">@selectedProduct?.descripcionLarga</div>
             <div><strong>Código:</strong> @selectedProduct?.codigo</div>
             <div><strong>Presentación:</strong> @selectedProduct?.Presentacion</div>
@@ -151,6 +161,61 @@
     
     <FooterContent>
         <button type="button" class="btn" @onclick="() => EditarProducto(selectedProduct)">Modificar</button>
+    </FooterContent>
+</AppModal>
+
+@* Modal de producto de centralizadora *@
+<AppModal IsOpen="showCentralizadoraModal" 
+          Title="Producto de Centralizadora" 
+          OnClose="CerrarModalCentralizadora"
+          Size="AppModal.ModalSize.Large">
+    <ChildContent>
+        @if (productoCentralizadora != null)
+        {
+            <div class="details-grid">
+                <div class="details-image">
+                    @if (!string.IsNullOrWhiteSpace(imagenProducto))
+                    {
+                        <img src="@imagenProducto" alt="Imagen del producto" />
+                    }
+                    else
+                    {
+                        <img src="https://ardiaprod.vtexassets.com/arquivos/ids/321558/Yerba-Mate-Amanda-Suave-500-Gr-_1.jpg" alt="Imagen del producto" />
+                    }
+                </div>
+                
+                <div class="details-desc">@productoCentralizadora.Descripcion</div>
+                <div><strong>Código de barra:</strong> @(string.IsNullOrWhiteSpace(productoCentralizadora.CodigoBarra) ? "-" : productoCentralizadora.CodigoBarra)</div>
+                <div><strong>Marca:</strong> @(string.IsNullOrWhiteSpace(productoCentralizadora.Marca) ? "-" : productoCentralizadora.Marca)</div>
+                <div><strong>Fabricante:</strong> @(string.IsNullOrWhiteSpace(productoCentralizadora.Fabricante) ? "-" : productoCentralizadora.Fabricante)</div>
+                <div><strong>Categoría:</strong> @(string.IsNullOrWhiteSpace(productoCentralizadora.Categoria) ? "-" : productoCentralizadora.Categoria)</div>
+                <div><strong>Subcategoría:</strong> @(string.IsNullOrWhiteSpace(productoCentralizadora.Subcategoria) ? "-" : productoCentralizadora.Subcategoria)</div>
+                <div><strong>Código interno:</strong> @(string.IsNullOrWhiteSpace(productoCentralizadora.CodigoInterno) ? "-" : productoCentralizadora.CodigoInterno)</div>
+                <div><strong>Unidad de medida:</strong> @(string.IsNullOrWhiteSpace(productoCentralizadora.UnidadMedida) ? "-" : productoCentralizadora.UnidadMedida)</div>
+                <div><strong>Precio:</strong> @(productoCentralizadora.Precio?.ToString("0.##") ?? "-")</div>
+                <div><strong>Stock:</strong> @(productoCentralizadora.Stock?.ToString() ?? "-")</div>
+                <div><strong>Fecha actualización:</strong> @(productoCentralizadora.FechaActualizacion?.ToString("yyyy-MM-dd") ?? "-")</div>
+                
+                <div class="centralizadora-badge">
+                    <span class="badge">Datos de Centralizadora</span>
+                </div>
+                
+                <div class="centralizadora-info">
+                    <p><strong>Nota:</strong> Este producto no se encuentra en tu catálogo local. Los datos provienen de la centralizadora de productos.</p>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="details-grid">
+                <p>Cargando datos del producto...</p>
+            </div>
+        }
+    </ChildContent>
+    
+    <FooterContent>
+        <button type="button" class="btn" @onclick="CerrarModalCentralizadora">Cerrar</button>
+        <button type="button" class="btn primary" @onclick="AgregarProductoLocal">Agregar al Catálogo Local</button>
     </FooterContent>
 </AppModal>
 
@@ -171,7 +236,11 @@
 
         <div class="field barcode-field">
             <label for="codigoBarra">Código de Barra (codigoBarra)</label>
-            <InputText id="codigoBarra" @bind-Value="codigoBarra" autofocus />
+            <InputText id="codigoBarra" 
+                       @bind-Value="codigoBarra" 
+                       @onkeyup="OnCodigoBarraKeyUp"
+                       autofocus />
+            <small class="hint">Presiona Enter para buscar automáticamente</small>
         </div>
 
         <div class="field">
@@ -222,6 +291,7 @@
     <div class="actions">
         <button type="button" class="btn primary" @onclick="Buscar">Buscar</button>
         <button type="button" class="btn ghost" @onclick="Limpiar">Limpiar</button>
+        <button type="button" class="btn" @onclick="TestModalCentralizadora">Test Modal Centralizadora</button>
 
         @* Exportaciones movidas a la barra de herramientas de la grilla *@
     </div>
@@ -237,7 +307,32 @@ else if (!string.IsNullOrWhiteSpace(error))
 }
 else if (items.Count == 0)
 {
-    <p>No se encontraron productos.</p>
+    <div class="no-results">
+        <p>No se encontraron productos localmente.</p>
+        @if (buscandoEnCentralizadora)
+        {
+            <div class="searching-centralizadora">
+                Buscando en centralizadora...
+            </div>
+        }
+        else if (productoCentralizadora != null)
+        {
+            <div class="centralizadora-result">
+                <p><strong>Producto encontrado en centralizadora</strong></p>
+                <p>Se ha abierto un modal con los detalles del producto.</p>
+                <div class="centralizadora-badge">
+                    <span class="badge">Modal Abierto</span>
+                </div>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(codigoBarra) && !buscandoEnCentralizadora)
+        {
+            <div class="no-centralizadora-result">
+                <p><strong>Producto no encontrado</strong></p>
+                <p>El código de barras "@codigoBarra" no se encontró ni en el catálogo local ni en la centralizadora.</p>
+            </div>
+        }
+    </div>
 }
 else
 {
@@ -300,6 +395,7 @@ else
     const string ApiUrl = "https://drrsystemas4.azurewebsites.net/Producto/GetProducto";
     const string FamiliasApiUrl = "https://drrsystemas4.azurewebsites.net/Producto/Familia";
     const string MarcasApiUrl = "https://drrsystemas4.azurewebsites.net/Producto/Marca";
+    const string CentralizadoraApiUrl = "https://drrsystemas4.azurewebsites.net/Centralizadora/Producto";
     const string DEFAULT_TOKEN = "pega aca el token";
 
     // =======================
@@ -395,6 +491,12 @@ else
     string? error;
     string? statusOk;
     List<string> logs = new();
+    
+    // Variables para centralizadora y imagen
+    ProductoCentralizadora? productoCentralizadora = null;
+    string? imagenProducto = null;
+    bool buscandoEnCentralizadora = false;
+    bool showCentralizadoraModal = false;
     void Log(string message)
     {
         var line = $"[{DateTime.Now:HH:mm:ss}] {message}";
@@ -453,11 +555,267 @@ else
 
     void ToggleToken() => showToken = !showToken;
 
+    /// <summary>
+    /// Maneja el evento keyup en el input de código de barras.
+    /// Si se presiona Enter, ejecuta la búsqueda automáticamente.
+    /// </summary>
+    async Task OnCodigoBarraKeyUp(KeyboardEventArgs e)
+    {
+        Log($"Tecla presionada: {e.Key} (Código: {e.Code})");
+        
+        if (e.Key == "Enter")
+        {
+            Log("Enter detectado - iniciando búsqueda");
+            
+            // Solo buscar si hay un código de barras válido
+            if (!string.IsNullOrWhiteSpace(codigoBarra))
+            {
+                // Verificar que el token esté válido antes de buscar
+                if (!tokenOk)
+                {
+                    Log("Token inválido - no se puede realizar la búsqueda");
+                    error = "Token inválido. Por favor, verifica tu token antes de buscar.";
+                    showLogs = true; // Abrir logs automáticamente para mostrar el error
+                    return;
+                }
+                
+                Log($"Enter presionado en código de barras '{codigoBarra}' - ejecutando búsqueda automática");
+                
+                // Para búsquedas por código de barras, limpiar otros filtros para hacer la búsqueda más específica
+                var codigoBarraTemp = codigoBarra.Trim();
+                
+                // Limpiar otros filtros temporalmente
+                var descripcionTemp = descripcionLarga;
+                var familiaTemp = familiaID;
+                var marcaTemp = marcaID;
+                var sucursalTemp = sucursalID;
+                var fechaDesdeTemp = fechaModifDesde;
+                var fechaHastaTemp = fechaModifHasta;
+                
+                // Mantener solo el código de barras
+                descripcionLarga = null;
+                familiaID = 0;
+                marcaID = 0;
+                sucursalID = null;
+                fechaModifDesde = null;
+                fechaModifHasta = null;
+                
+                // Ejecutar búsqueda local
+                await Buscar();
+                
+                // Restaurar otros filtros
+                descripcionLarga = descripcionTemp;
+                familiaID = familiaTemp;
+                marcaID = marcaTemp;
+                sucursalID = sucursalTemp;
+                fechaModifDesde = fechaDesdeTemp;
+                fechaModifHasta = fechaHastaTemp;
+                
+                // Si no se encontraron productos localmente, buscar en centralizadora
+                if (items.Count == 0)
+                {
+                    Log($"No se encontraron productos localmente, buscando en centralizadora...");
+                    await BuscarEnCentralizadora(codigoBarraTemp);
+                    
+                    // Si se encontró en centralizadora, abrir el modal automáticamente
+                    if (productoCentralizadora != null)
+                    {
+                        Log($"Antes de abrir modal - productoCentralizadora: {productoCentralizadora.Descripcion}");
+                        Log($"Antes de abrir modal - showCentralizadoraModal será: true");
+                        showCentralizadoraModal = true;
+                        Log("Producto encontrado en centralizadora - abriendo modal automáticamente");
+                        await InvokeAsync(StateHasChanged); // Forzar actualización de la UI de forma asíncrona
+                        Log("StateHasChanged ejecutado");
+                    }
+                    else
+                    {
+                        Log("Producto no encontrado ni localmente ni en centralizadora");
+                    }
+                }
+                else
+                {
+                    Log($"Búsqueda por código de barras exitosa: {items.Count} producto(s) encontrado(s) localmente");
+                    // Limpiar datos de centralizadora si se encontró localmente
+                    productoCentralizadora = null;
+                    imagenProducto = null;
+                    showCentralizadoraModal = false;
+                }
+                
+                // Limpiar el campo para facilitar la siguiente búsqueda
+                codigoBarra = null;
+            }
+            else
+            {
+                Log("Enter presionado pero el campo código de barras está vacío");
+            }
+        }
+    }
+
     async Task Buscar()
     {
         pageNumber = Math.Max(1, pageNumber);
         pageSize = Math.Clamp(pageSize, 1, 500);
         await ConsultarAsync();
+    }
+
+    /// <summary>
+    /// Busca la imagen de un producto por código de barras
+    /// </summary>
+    async Task BuscarImagenProducto(string codigoBarra)
+    {
+        try
+        {
+            Log($"Buscando imagen para código de barras: {codigoBarra}");
+            
+            // Crear request con el token
+            var request = new HttpRequestMessage(HttpMethod.Get, $"{CentralizadoraApiUrl}?codigoBarra={Uri.EscapeDataString(codigoBarra)}");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+            
+            // Realizar la petición
+            var response = await Http.SendAsync(request);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var jsonString = await response.Content.ReadAsStringAsync();
+                
+                // Deserializar la respuesta
+                var options = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                };
+                
+                var productoCentral = JsonSerializer.Deserialize<ProductoCentralizadora>(jsonString, options);
+                
+                if (productoCentral != null)
+                {
+                    // Obtener la imagen del producto (priorizar imagenWeb sobre imagen)
+                    imagenProducto = !string.IsNullOrWhiteSpace(productoCentral.ImagenWeb) 
+                        ? productoCentral.ImagenWeb 
+                        : productoCentral.Imagen;
+                    
+                    if (!string.IsNullOrWhiteSpace(imagenProducto))
+                    {
+                        Log($"Imagen del producto obtenida: {imagenProducto}");
+                    }
+                    else
+                    {
+                        Log("No se encontró imagen para el producto en centralizadora");
+                        // Usar imagen genérica
+                        imagenProducto = "https://ardiaprod.vtexassets.com/arquivos/ids/321558/Yerba-Mate-Amanda-Suave-500-Gr-_1.jpg";
+                    }
+                }
+                else
+                {
+                    Log("No se pudo deserializar la respuesta de la centralizadora");
+                    imagenProducto = "https://ardiaprod.vtexassets.com/arquivos/ids/321558/Yerba-Mate-Amanda-Suave-500-Gr-_1.jpg";
+                }
+            }
+            else
+            {
+                Log($"Error en centralizadora: {response.StatusCode} - {response.ReasonPhrase}");
+                imagenProducto = "https://ardiaprod.vtexassets.com/arquivos/ids/321558/Yerba-Mate-Amanda-Suave-500-Gr-_1.jpg";
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"Excepción al buscar imagen: {ex.Message}");
+            imagenProducto = "https://ardiaprod.vtexassets.com/arquivos/ids/321558/Yerba-Mate-Amanda-Suave-500-Gr-_1.jpg";
+        }
+    }
+
+    /// <summary>
+    /// Busca un producto en la centralizadora por código de barras
+    /// </summary>
+    async Task BuscarEnCentralizadora(string codigoBarra)
+    {
+        try
+        {
+            buscandoEnCentralizadora = true;
+            productoCentralizadora = null; // Limpiar resultado anterior
+            imagenProducto = null;
+            
+            Log($"Iniciando búsqueda en centralizadora para código: {codigoBarra}");
+            
+            // Crear request con el token
+            var request = new HttpRequestMessage(HttpMethod.Get, $"{CentralizadoraApiUrl}?codigoBarra={Uri.EscapeDataString(codigoBarra)}");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+            
+            // Realizar la petición
+            var response = await Http.SendAsync(request);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var jsonString = await response.Content.ReadAsStringAsync();
+                Log($"Respuesta de centralizadora recibida: {jsonString.Length} caracteres");
+                
+                // Verificar si la respuesta no está vacía
+                if (string.IsNullOrWhiteSpace(jsonString))
+                {
+                    Log("Respuesta de centralizadora vacía");
+                    return;
+                }
+                
+                // Deserializar la respuesta
+                var options = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                };
+                
+                productoCentralizadora = JsonSerializer.Deserialize<ProductoCentralizadora>(jsonString, options);
+                
+                if (productoCentralizadora != null && !string.IsNullOrWhiteSpace(productoCentralizadora.CodigoBarra))
+                {
+                    Log($"Producto encontrado en centralizadora: {productoCentralizadora.Descripcion}");
+                    Log($"Código de barras: {productoCentralizadora.CodigoBarra}");
+                    Log($"Marca: {productoCentralizadora.Marca}");
+                    Log($"Precio: {productoCentralizadora.Precio}");
+                    
+                    // Obtener la imagen del producto (priorizar imagenWeb sobre imagen)
+                    imagenProducto = !string.IsNullOrWhiteSpace(productoCentralizadora.ImagenWeb) 
+                        ? productoCentralizadora.ImagenWeb 
+                        : productoCentralizadora.Imagen;
+                    
+                    if (!string.IsNullOrWhiteSpace(imagenProducto))
+                    {
+                        Log($"Imagen del producto obtenida: {imagenProducto}");
+                    }
+                    else
+                    {
+                        Log("No se encontró imagen para el producto en centralizadora");
+                        // Usar imagen genérica
+                        imagenProducto = "https://ardiaprod.vtexassets.com/arquivos/ids/321558/Yerba-Mate-Amanda-Suave-500-Gr-_1.jpg";
+                    }
+                }
+                else
+                {
+                    Log("No se pudo deserializar la respuesta de la centralizadora o el producto no tiene código de barras");
+                    productoCentralizadora = null;
+                    imagenProducto = "https://ardiaprod.vtexassets.com/arquivos/ids/321558/Yerba-Mate-Amanda-Suave-500-Gr-_1.jpg";
+                }
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                Log($"Producto no encontrado en centralizadora (404)");
+                productoCentralizadora = null;
+            }
+            else
+            {
+                Log($"Error en centralizadora: {response.StatusCode} - {response.ReasonPhrase}");
+                productoCentralizadora = null;
+                imagenProducto = "https://ardiaprod.vtexassets.com/arquivos/ids/321558/Yerba-Mate-Amanda-Suave-500-Gr-_1.jpg";
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"Excepción al buscar en centralizadora: {ex.Message}");
+            productoCentralizadora = null;
+            imagenProducto = "https://ardiaprod.vtexassets.com/arquivos/ids/321558/Yerba-Mate-Amanda-Suave-500-Gr-_1.jpg";
+        }
+        finally
+        {
+            buscandoEnCentralizadora = false;
+            StateHasChanged();
+        }
     }
 
     async Task Limpiar()
@@ -566,17 +924,71 @@ else
     // Acciones de fila: Detalles y Editar
     bool showDetailsModal = false;
     Product? selectedProduct;
-    void VerDetalles(Product p)
+    async Task VerDetalles(Product p)
     {
         selectedProduct = p;
         showDetailsModal = true;
         Log($"Ver detalles de producto {p.ProductoID} ({p.codigo})");
+        
+        // Si hay un código de barras, intentar obtener la imagen del producto
+        if (!string.IsNullOrWhiteSpace(p.codigoBarra))
+        {
+            Log($"Buscando imagen para código de barras: {p.codigoBarra}");
+            await BuscarImagenProducto(p.codigoBarra);
+        }
+        else
+        {
+            // Usar imagen genérica si no hay código de barras
+            imagenProducto = "https://ardiaprod.vtexassets.com/arquivos/ids/321558/Yerba-Mate-Amanda-Suave-500-Gr-_1.jpg";
+        }
     }
 
     void CerrarDetalles()
     {
         showDetailsModal = false;
         selectedProduct = null;
+        // Limpiar datos de centralizadora al cerrar el modal
+        productoCentralizadora = null;
+        imagenProducto = null;
+    }
+
+    void CerrarModalCentralizadora()
+    {
+        showCentralizadoraModal = false;
+        productoCentralizadora = null;
+        imagenProducto = null;
+        Log("Modal de centralizadora cerrado");
+    }
+
+    void TestModalCentralizadora()
+    {
+        Log("Probando modal de centralizadora...");
+        productoCentralizadora = new ProductoCentralizadora
+        {
+            CodigoBarra = "1234567890123",
+            Descripcion = "Producto de prueba",
+            Marca = "Marca Test",
+            Fabricante = "Fabricante Test",
+            Precio = 99.99m,
+            Stock = 50,
+            Categoria = "Categoría Test",
+            Subcategoria = "Subcategoría Test",
+            CodigoInterno = "INT001",
+            UnidadMedida = "Unidad",
+            FechaActualizacion = DateTime.Now
+        };
+        imagenProducto = "https://ardiaprod.vtexassets.com/arquivos/ids/321558/Yerba-Mate-Amanda-Suave-500-Gr-_1.jpg";
+        showCentralizadoraModal = true;
+        Log("Modal de prueba abierto");
+        StateHasChanged();
+    }
+
+    void AgregarProductoLocal()
+    {
+        Log($"Función para agregar producto de centralizadora al catálogo local: {productoCentralizadora?.Descripcion}");
+        // Aquí se implementaría la lógica para agregar el producto al catálogo local
+        // Por ahora solo mostramos un mensaje
+        Log("Función de agregar producto local - pendiente de implementación");
     }
 
     void EditarProducto(Product p)
@@ -906,6 +1318,51 @@ else
         public DateTime? fechaActualizacion { get; set; }
     }
 
+    /// <summary>
+    /// Modelo para la respuesta de la centralizadora
+    /// </summary>
+    public class ProductoCentralizadora
+    {
+        [JsonPropertyName("codigoBarra")]
+        public string? CodigoBarra { get; set; }
+        
+        [JsonPropertyName("descripcion")]
+        public string? Descripcion { get; set; }
+        
+        [JsonPropertyName("marca")]
+        public string? Marca { get; set; }
+        
+        [JsonPropertyName("fabricante")]
+        public string? Fabricante { get; set; }
+        
+        [JsonPropertyName("imagen")]
+        public string? Imagen { get; set; }
+        
+        [JsonPropertyName("imagenWeb")]
+        public string? ImagenWeb { get; set; }
+        
+        [JsonPropertyName("precio")]
+        public decimal? Precio { get; set; }
+        
+        [JsonPropertyName("stock")]
+        public decimal? Stock { get; set; }
+        
+        [JsonPropertyName("categoria")]
+        public string? Categoria { get; set; }
+        
+        [JsonPropertyName("subcategoria")]
+        public string? Subcategoria { get; set; }
+        
+        [JsonPropertyName("codigoInterno")]
+        public string? CodigoInterno { get; set; }
+        
+        [JsonPropertyName("unidadMedida")]
+        public string? UnidadMedida { get; set; }
+        
+        [JsonPropertyName("fechaActualizacion")]
+        public DateTime? FechaActualizacion { get; set; }
+    }
+
     public class FamiliaApi
     {
         [JsonPropertyName("familiaID")] public int FamiliaID { get; set; }
@@ -1221,6 +1678,148 @@ else
         gap: 8px;
     }
     .actions-bottom .spacer { width: 18px; display: inline-block; }
+    
+    /* Estilos para el campo de código de barras */
+    .barcode-field {
+        border: 2px solid #007bff;
+        border-radius: 8px;
+        padding: 12px;
+        background: linear-gradient(135deg, #f8f9ff 0%, #ffffff 100%);
+        box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
+    }
+    
+    .barcode-field label {
+        color: #007bff;
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+    
+    .barcode-field input {
+        border: 2px solid #007bff;
+        border-radius: 6px;
+        padding: 10px 12px;
+        font-size: 16px;
+        font-weight: 500;
+        background: white;
+        transition: all 0.3s ease;
+    }
+    
+    .barcode-field input:focus {
+        outline: none;
+        border-color: #0056b3;
+        box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+        transform: translateY(-1px);
+    }
+    
+    .barcode-field .hint {
+        color: #6c757d;
+        font-size: 0.85rem;
+        margin-top: 6px;
+        font-style: italic;
+    }
+    
+    /* Estilos para el badge de centralizadora */
+    .centralizadora-badge {
+        margin-top: 16px;
+        text-align: center;
+    }
+    
+    .badge {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+        display: inline-block;
+    }
+    
+    /* Indicador de búsqueda en centralizadora */
+    .searching-centralizadora {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: #007bff;
+        font-size: 0.9rem;
+        font-style: italic;
+    }
+    
+    .searching-centralizadora::before {
+        content: "⟳";
+        animation: spin 1s linear infinite;
+    }
+    
+    @@keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+    
+    /* Estilos para resultados de centralizadora */
+    .no-results {
+        text-align: center;
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border: 1px solid #e9ecef;
+    }
+    
+    .centralizadora-result {
+        margin-top: 16px;
+        padding: 16px;
+        background: linear-gradient(135deg, #e8f5e8, #f0fff0);
+        border: 1px solid #28a745;
+        border-radius: 8px;
+        text-align: left;
+    }
+    
+    .centralizadora-info {
+        margin: 12px 0;
+        padding: 12px;
+        background: white;
+        border-radius: 6px;
+        border-left: 4px solid #28a745;
+    }
+    
+    .centralizadora-info p {
+        margin: 4px 0;
+        font-size: 0.95rem;
+    }
+    
+    /* Estilos específicos para el modal de centralizadora */
+    .centralizadora-info {
+        margin: 16px 0;
+        padding: 16px;
+        background: linear-gradient(135deg, #fff3cd, #ffeaa7);
+        border: 1px solid #ffc107;
+        border-radius: 8px;
+        border-left: 4px solid #ffc107;
+    }
+    
+    .centralizadora-info p {
+        margin: 8px 0;
+        color: #856404;
+        font-size: 0.9rem;
+        line-height: 1.4;
+    }
+    
+    /* Estilos para cuando no se encuentra el producto */
+    .no-centralizadora-result {
+        margin-top: 16px;
+        padding: 16px;
+        background: linear-gradient(135deg, #f8d7da, #f5c6cb);
+        border: 1px solid #dc3545;
+        border-radius: 8px;
+        text-align: left;
+    }
+    
+    .no-centralizadora-result p {
+        margin: 8px 0;
+        color: #721c24;
+        font-size: 0.95rem;
+    }
 </style>
 
 

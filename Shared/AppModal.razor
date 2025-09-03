@@ -1,10 +1,11 @@
 @using Microsoft.JSInterop
+@using Microsoft.AspNetCore.Components.Web
 @inject IJSRuntime JS
 
 @if (IsOpen)
 {
     <div class="app-modal-backdrop" @onclick="OnBackdropClick" @onkeydown="OnKeyDown">
-        <div class="app-modal @SizeClass" @ref="modalElement">
+        <div class="app-modal @SizeClass" @ref="modalElement" @onclick:stopPropagation="true">
             <div class="app-modal-header">
                 @if (!string.IsNullOrEmpty(Title))
                 {
@@ -100,4 +101,6 @@
             await Close();
         }
     }
+    
+
 }

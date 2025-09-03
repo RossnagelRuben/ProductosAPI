@@ -1,7 +1,4 @@
 <!DOCTYPE html>
-<script src="js/dom.js"></script>
-
-
 <html lang="en">
 
 <head>
@@ -34,8 +31,15 @@
         <a class="dismiss">🗙</a>
     </div>
     <script src="_framework/blazor.webassembly.js"></script>
+    <script src="js/dom.js"></script>
     <script src="js/modalHelper.js"></script>
-    <script>navigator.serviceWorker.register('service-worker.js');</script>
+    <script src="js/car3d_loader.js"></script>
+    <script>
+        // Registrar SW solo fuera de localhost para evitar ruido en desarrollo
+        if (!location.hostname.includes('localhost')) {
+            navigator.serviceWorker.register('service-worker.js');
+        }
+    </script>
 </body>
 
 </html>
