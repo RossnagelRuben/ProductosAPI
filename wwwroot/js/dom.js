@@ -44,9 +44,15 @@ window.sizeSvgOverImage = (svgSelector, cssW, cssH, viewW, viewH) => {
         }
         
         // Validar que los valores sean positivos
-        if (cssW <= 0 || cssH <= 0 || viewW <= 0 || viewH <= 0) {
-            console.warn(`sizeSvgOverImage: Valores deben ser positivos: cssW=${cssW}, cssH=${cssH}, viewW=${viewW}, viewH=${viewH}`);
+        if (cssW <= 0 || cssH <= 0) {
+            console.warn(`sizeSvgOverImage: css size inválido: cssW=${cssW}, cssH=${cssH}`);
             return;
+        }
+        // Evitar viewBox 0 0 0 0 que rompe el overlay: usa css como fallback
+        if (viewW <= 0 || viewH <= 0) {
+            console.warn(`sizeSvgOverImage: viewBox inválido (${viewW}x${viewH}), usando fallback a cssW/cssH`);
+            viewW = Math.max(1, Math.floor(cssW));
+            viewH = Math.max(1, Math.floor(cssH));
         }
         
         svg.style.width = cssW + "px";
