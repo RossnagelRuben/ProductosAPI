@@ -72,6 +72,11 @@
 
         <div class="side">
             <div class="section">
+                <div class="section-title">Proveedor</div>
+                <textarea readonly rows="3">@(string.IsNullOrWhiteSpace(ProveedorExtraido) ? "Esperando extracción..." : ProveedorExtraido)</textarea>
+            </div>
+
+            <div class="section">
                 <div class="section-title">Texto OCR</div>
                 <textarea readonly rows="12">@FullOcrText</textarea>
             </div>
@@ -81,10 +86,10 @@
                 <textarea readonly rows="12">@ProductosJson</textarea>
                 <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 12px; max-width: 100%;">
                     <button class="btn btn-green" 
-                            @onclick="EnviarAlColector" 
+                            @onclick="AbrirModalTipoOperacion" 
                             disabled="@(!CanSendToColector)"
                             style="width: 100%;">
-                        @(IsColectorLoading ? "Enviando..." : "ENVIAR AL COLECTOR")
+                        ENVIAR AL COLECTOR
                     </button>
                     <button class="btn btn-orange" 
                             @onclick="ListarDatosColectados" 
@@ -357,6 +362,22 @@
     private bool MostrarModalColector { get; set; } = false;
     private string? DatosColectorModal { get; set; }
     
+    // ===== Estado del Modal de Tipo de Operación =====
+    private bool MostrarModalTipoOperacion { get; set; } = false;
+    private int TipoOperacionSeleccionado { get; set; } = 4; // Valor por defecto: pago
+    private int TipoOperacionTemporal { get; set; } = 4; // Variable temporal para capturar la selección
+    
+    // ===== Opciones de Tipo de Operación =====
+    private readonly List<TipoOperacion> TiposOperacion = new()
+    {
+        new TipoOperacion { Id = 4, Nombre = "Pago" },
+        new TipoOperacion { Id = 10, Nombre = "Inventario" },
+        new TipoOperacion { Id = 20, Nombre = "Despacho" },
+        new TipoOperacion { Id = 21, Nombre = "Recepción" },
+        new TipoOperacion { Id = 150, Nombre = "Etiquetas" },
+        new TipoOperacion { Id = 23, Nombre = "Pedido Compra / Reposición" }
+    };
+    
     // ===== Estado del mensaje de éxito =====
     private bool MostrarMensajeExito { get; set; } = false;
     private string MensajeExito { get; set; } = "";
@@ -378,6 +399,7 @@
     // ===== Resultados =====
     private string FullOcrText = "";
     private string ProductosJson = "";
+    private string ProveedorExtraido = "";
 
     // ===== LocalStorage keys =====
     private const string LS_TOKEN = "img_token";
@@ -403,6 +425,7 @@
             Error = null;
             FullOcrText = "";
             ProductosJson = "";
+            ProveedorExtraido = "";
             Polygons.Clear();
             ImageBytes = null;
             ImageDataUrl = null;
@@ -498,6 +521,7 @@
             ImageMimeType = null;
             FullOcrText = "";
             ProductosJson = "";
+            ProveedorExtraido = "";
             Polygons.Clear();
         }
     }
@@ -629,6 +653,7 @@
         
         Error = null;
         ProductosJson = "";
+        ProveedorExtraido = "";
 
         if (ImageBytes is null)
         {
@@ -655,14 +680,33 @@
         
         try
         {
-            var prompt = @"Analiza la imagen de esta factura y devuelve únicamente
-un arreglo JSON de objetos con:
-- codigo
-- descripcion
-- cantidad
-- precio_unitario
-Sólo ítems de productos/servicios (sin subtotales, impuestos ni totales).
-Usa punto (.) como separador decimal. Devuelve SOLO JSON válido.";
+            var prompt = @"Analiza esta factura y extrae:
+
+1. PROVEEDOR: Busca el primer CUIT/CUIL y la primera razón social que aparezcan (generalmente en la parte superior de la factura)
+
+2. PRODUCTOS: Lista todos los ítems de productos/servicios (sin subtotales, impuestos ni totales)
+
+Devuelve ÚNICAMENTE un JSON válido con esta estructura exacta:
+{
+  ""proveedor"": {
+    ""cuit_cuil"": ""20-12345678-9"",
+    ""razon_social"": ""Nombre del Proveedor S.A.""
+  },
+  ""productos"": [
+    {
+      ""codigo"": ""COD001"",
+      ""descripcion"": ""Producto 1"",
+      ""cantidad"": ""2"",
+      ""precio_unitario"": ""100.50""
+    }
+  ]
+}
+
+IMPORTANTE: 
+- Usa punto (.) como separador decimal
+- Devuelve SOLO el JSON, sin texto adicional
+- Si no encuentras CUIT/CUIL, usa ""No encontrado""
+- Si no encuentras razón social, usa ""No encontrado""";
 
             var model = "gemini-1.5-flash-latest";
             var url = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GoogleApiKey}";
@@ -693,9 +737,12 @@ Usa punto (.) como separador decimal. Devuelve SOLO JSON válido.";
                 return;
             }
 
-            string textOut = TryParseGemini(json);
-            ProductosJson = textOut;
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", textOut);
+            var (productosJson, proveedorJson) = TryParseGeminiWithProveedor(json);
+            Console.WriteLine($"🔍 Debug - ProductosJson: {productosJson}");
+            Console.WriteLine($"🔍 Debug - ProveedorJson: {proveedorJson}");
+            ProductosJson = productosJson;
+            ProveedorExtraido = proveedorJson;
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", productosJson);
         }
         catch (Exception ex)
         {
@@ -731,14 +778,46 @@ Usa punto (.) como separador decimal. Devuelve SOLO JSON válido.";
         
         try
         {
-            var payload = new ColectorPayload
-            {
-                fechaHora = DateTime.UtcNow,
-                colectorItem = ParseProductosToColector(ProductosJson)
-            };
+            // Crear el JSON manualmente para asegurar el formato correcto
+            var fechaHoraFormateada = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss");
+            var productos = ParseProductosToColector(ProductosJson);
+            
+            // USAR LA VARIABLE TEMPORAL DIRECTAMENTE
+            var tipoOperacionFinal = TipoOperacionTemporal;
+            
+            Console.WriteLine($"🔍 VALORES ANTES DE CREAR JSON:");
+            Console.WriteLine($"🔍 TipoOperacionSeleccionado: {TipoOperacionSeleccionado}");
+            Console.WriteLine($"🔍 TipoOperacionTemporal: {TipoOperacionTemporal}");
+            Console.WriteLine($"🔍 tipoOperacionFinal (USADO): {tipoOperacionFinal}");
+            Console.WriteLine($"🔍 FechaHora formateada: {fechaHoraFormateada}");
+            Console.WriteLine($"🔍 Cantidad de productos: {productos.Count}");
+            
+            // Crear JSON manualmente con formato exacto
+            var payloadJson = $@"{{
+  ""colectorEncabID"": 0,
+  ""fechaHora"": ""{fechaHoraFormateada}"",
+  ""sucursalID"": null,
+  ""depositoID"": null,
+  ""tipoOperacionID"": {tipoOperacionFinal},
+  ""clienteID"": null,
+  ""proveedorID"": null,
+  ""registroOperacionID"": null,
+  ""estadoID"": null,
+  ""pedirAlDepositoID"": null,
+  ""colectorItem"": {JsonSerializer.Serialize(productos, new JsonSerializerOptions { WriteIndented = true })}
+}}";
 
             var url = "https://drrsystemas4.azurewebsites.net/Colector";
-            var payloadJson = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+            
+            Console.WriteLine($"🔍 JSON FINAL QUE SE ENVÍA:");
+            Console.WriteLine($"🔍 TipoOperacionID en JSON: {tipoOperacionFinal}");
+            Console.WriteLine($"🔍 FechaHora en JSON: {fechaHoraFormateada}");
+            Console.WriteLine($"🔍 JSON COMPLETO:");
+            Console.WriteLine(payloadJson);
+            
+            // Copiar el JSON al portapapeles para análisis
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", payloadJson);
+            Console.WriteLine($"🔍 JSON copiado al portapapeles para análisis");
             
             var req = new HttpRequestMessage(HttpMethod.Post, url)
             {
@@ -758,20 +837,26 @@ Usa punto (.) como separador decimal. Devuelve SOLO JSON válido.";
                 return;
             }
 
+            // Cerrar la modal de tipo de operación después del envío exitoso
+            MostrarModalTipoOperacion = false;
+            
             var mensajeExito = $"✅ Datos enviados exitosamente al Colector!\n\n" +
-                              $"📊 Productos enviados: {payload.colectorItem.Count}\n" +
-                              $"💡 La respuesta completa se copió al portapapeles.";
+                              $"📊 Productos enviados: {productos.Count}\n" +
+                              $"⚙️ Tipo de operación: {ObtenerNombreTipoOperacion(tipoOperacionFinal)} (ID: {tipoOperacionFinal})\n" +
+                              $"📅 Fecha y hora: {fechaHoraFormateada}\n" +
+                              $"📋 JSON ENVIADO copiado al portapapeles para análisis";
             
             MensajeExito = mensajeExito;
             MostrarMensajeExito = true;
             Error = null;
             
-            var _ = Task.Delay(3000).ContinueWith(async _ =>
+            var _ = Task.Delay(5000).ContinueWith(async _ =>
             {
                 await InvokeAsync(() => { MostrarMensajeExito = false; });
             });
             
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", responseJson);
+            // NO copiar la respuesta, ya se copió el JSON enviado arriba
+            // await JS.InvokeVoidAsync("navigator.clipboard.writeText", responseJson);
         }
         catch (Exception ex)
         {
@@ -830,6 +915,63 @@ Usa punto (.) como separador decimal. Devuelve SOLO JSON válido.";
         MostrarModalColector = false;
         DatosColectorModal = null;
         await Task.CompletedTask;
+    }
+    
+    // ===== MANEJO DEL MODAL DE TIPO DE OPERACIÓN =====
+    private async Task AbrirModalTipoOperacion()
+    {
+        TipoOperacionTemporal = TipoOperacionSeleccionado; // Inicializar con el valor actual
+        MostrarModalTipoOperacion = true;
+        Console.WriteLine($"🔍 ABRIR MODAL - TipoOperacionTemporal inicializado: {TipoOperacionTemporal}");
+        await Task.CompletedTask;
+    }
+    
+    private async Task CerrarModalTipoOperacion()
+    {
+        MostrarModalTipoOperacion = false;
+        await Task.CompletedTask;
+    }
+    
+    private async Task SeleccionarTipoOperacion(int tipoId, string tipoNombre)
+    {
+        Console.WriteLine($"🔍 SELECCIONAR TIPO OPERACIÓN:");
+        Console.WriteLine($"🔍 TipoId recibido: {tipoId}");
+        Console.WriteLine($"🔍 TipoNombre recibido: {tipoNombre}");
+        Console.WriteLine($"🔍 TipoOperacionTemporal ANTES del cambio: {TipoOperacionTemporal}");
+        
+        TipoOperacionTemporal = tipoId;
+        
+        Console.WriteLine($"🔍 TipoOperacionTemporal DESPUÉS del cambio: {TipoOperacionTemporal}");
+        
+        // Forzar actualización del estado
+        await InvokeAsync(StateHasChanged);
+        
+        Console.WriteLine($"🔍 Estado actualizado. TipoOperacionTemporal final: {TipoOperacionTemporal}");
+    }
+
+    private async Task ConfirmarTipoOperacion()
+    {
+        Console.WriteLine($"🔍 CONFIRMAR TIPO OPERACIÓN:");
+        Console.WriteLine($"🔍 TipoOperacionTemporal: {TipoOperacionTemporal}");
+        Console.WriteLine($"🔍 TipoOperacionSeleccionado ANTES del cambio: {TipoOperacionSeleccionado}");
+        
+        // Asignar el valor temporal al valor final
+        TipoOperacionSeleccionado = TipoOperacionTemporal;
+        
+        Console.WriteLine($"🔍 TipoOperacionSeleccionado DESPUÉS del cambio: {TipoOperacionSeleccionado}");
+        Console.WriteLine($"🔍 VALOR FINAL QUE SE USARÁ: {TipoOperacionSeleccionado}");
+        
+        // Forzar actualización del estado
+        await InvokeAsync(StateHasChanged);
+        
+        // No cerrar la modal aquí, se cerrará después del envío exitoso
+        await EnviarAlColector();
+    }
+    
+    private string ObtenerNombreTipoOperacion(int tipoId)
+    {
+        var tipo = TiposOperacion.FirstOrDefault(t => t.Id == tipoId);
+        return tipo?.Nombre ?? $"ID: {tipoId}";
     }
     
     private async Task HandleKeyDown(KeyboardEventArgs e)
@@ -961,6 +1103,7 @@ Usa punto (.) como separador decimal. Devuelve SOLO JSON válido.";
         HoverText = "📋 Copiado al portapapeles.\n\n" + txt;
     }
 
+
     private async Task OnImageLoaded()
     {
         try
@@ -1012,40 +1155,142 @@ Usa punto (.) como separador decimal. Devuelve SOLO JSON válido.";
         public double NaturalHeight { get; set; }
     }
 
-    private static string TryParseGemini(string responseJson)
+    private static (string productosJson, string proveedorJson) TryParseGeminiWithProveedor(string responseJson)
     {
         try
         {
+            Console.WriteLine($"🔍 TryParseGeminiWithProveedor - ResponseJson: {responseJson}");
             using var doc = JsonDocument.Parse(responseJson);
             var root = doc.RootElement;
             
             var candidates = root.GetProperty("candidates");
             if (candidates.ValueKind != JsonValueKind.Array || candidates.GetArrayLength() == 0)
             {
-                return responseJson;
+                return (responseJson, "");
             }
             
             var parts = candidates[0].GetProperty("content").GetProperty("parts");
             if (parts.ValueKind != JsonValueKind.Array || parts.GetArrayLength() == 0)
             {
-                return responseJson;
+                return (responseJson, "");
             }
             
             var text = parts[0].GetProperty("text").GetString() ?? "";
+            Console.WriteLine($"🔍 Text from Gemini: {text}");
+            
+            // Intentar parsear como JSON completo con proveedor y productos
+            try
+            {
+                using var responseDoc = JsonDocument.Parse(text);
+                var responseRoot = responseDoc.RootElement;
+                Console.WriteLine($"🔍 ResponseRoot keys: {string.Join(", ", responseRoot.EnumerateObject().Select(p => p.Name))}");
+                
+                if (responseRoot.TryGetProperty("proveedor", out var proveedorElement) && 
+                    responseRoot.TryGetProperty("productos", out var productosElement))
+                {
+                    Console.WriteLine($"🔍 Found proveedor and productos properties");
+                    var proveedorJson = JsonSerializer.Serialize(proveedorElement, new JsonSerializerOptions { WriteIndented = true });
+                    var productosJson = JsonSerializer.Serialize(productosElement, new JsonSerializerOptions { WriteIndented = true });
+                    Console.WriteLine($"🔍 ProveedorJson: {proveedorJson}");
+                    Console.WriteLine($"🔍 ProductosJson: {productosJson}");
+                    return (productosJson, proveedorJson);
+                }
+                else
+                {
+                    Console.WriteLine($"🔍 No se encontraron las propiedades 'proveedor' y 'productos'");
+                    // Intentar extraer proveedor de forma manual del texto
+                    var proveedorManual = ExtraerProveedorManual(text);
+                    if (!string.IsNullOrWhiteSpace(proveedorManual))
+                    {
+                        Console.WriteLine($"🔍 Proveedor extraído manualmente: {proveedorManual}");
+                        return (text.Trim(), proveedorManual);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"🔍 Error parsing JSON: {ex.Message}");
+                // Intentar extraer proveedor de forma manual del texto
+                var proveedorManual = ExtraerProveedorManual(text);
+                if (!string.IsNullOrWhiteSpace(proveedorManual))
+                {
+                    Console.WriteLine($"🔍 Proveedor extraído manualmente (catch): {proveedorManual}");
+                    return (text.Trim(), proveedorManual);
+                }
+            }
+            
+            // Fallback: buscar solo productos como antes
             var start = text.IndexOf('[');
             var end = text.LastIndexOf(']');
             
             if (start >= 0 && end > start)
             {
                 var result = text.Substring(start, end - start + 1).Trim();
-                return result;
+                Console.WriteLine($"🔍 Fallback - Solo productos encontrados: {result}");
+                return (result, "");
             }
             
-            return text.Trim();
+            Console.WriteLine($"🔍 Fallback - Texto completo: {text.Trim()}");
+            return (text.Trim(), "");
         }
         catch
         {
-            return responseJson;
+            return (responseJson, "");
+        }
+    }
+
+    private static string TryParseGemini(string responseJson)
+    {
+        var (productosJson, _) = TryParseGeminiWithProveedor(responseJson);
+        return productosJson;
+    }
+
+    private static string ExtraerProveedorManual(string text)
+    {
+        try
+        {
+            // Buscar patrones de CUIT/CUIL en el texto
+            var cuitPattern = @"\b\d{2}-\d{8}-\d{1}\b";
+            var cuilPattern = @"\b\d{2}-\d{7}-\d{1}\b";
+            var cuitMatch = System.Text.RegularExpressions.Regex.Match(text, cuitPattern);
+            var cuilMatch = System.Text.RegularExpressions.Regex.Match(text, cuilPattern);
+            
+            var cuitCuil = cuitMatch.Success ? cuitMatch.Value : (cuilMatch.Success ? cuilMatch.Value : "No encontrado");
+            
+            // Buscar posibles nombres de empresas (líneas que contengan palabras como S.A., S.R.L., etc.)
+            var empresaPattern = @"[A-ZÁÉÍÓÚÑ][A-Za-záéíóúñ\s\.&,]+(?:S\.A\.|S\.R\.L\.|S\.A\.S\.|S\.H\.|S\.C\.A\.|LTD\.|INC\.|CORP\.)";
+            var empresaMatch = System.Text.RegularExpressions.Regex.Match(text, empresaPattern);
+            var razonSocial = empresaMatch.Success ? empresaMatch.Value.Trim() : "No encontrado";
+            
+            // Si no encontramos empresa con patrón, buscar líneas que parezcan nombres de empresa
+            if (razonSocial == "No encontrado")
+            {
+                var lineas = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var linea in lineas)
+                {
+                    var lineaTrim = linea.Trim();
+                    if (lineaTrim.Length > 5 && lineaTrim.Length < 100 && 
+                        char.IsUpper(lineaTrim[0]) && 
+                        !lineaTrim.Contains('[') && !lineaTrim.Contains(']') &&
+                        !lineaTrim.Contains('{') && !lineaTrim.Contains('}'))
+                    {
+                        razonSocial = lineaTrim;
+                        break;
+                    }
+                }
+            }
+            
+            var proveedor = new
+            {
+                cuit_cuil = cuitCuil,
+                razon_social = razonSocial
+            };
+            
+            return JsonSerializer.Serialize(proveedor, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch
+        {
+            return "";
         }
     }
 
@@ -1089,16 +1334,37 @@ Usa punto (.) como separador decimal. Devuelve SOLO JSON válido.";
     // ===== DTOs reales para Colector =====
     private sealed class ColectorPayload
     {
+        [JsonPropertyName("colectorEncabID")]
         public int colectorEncabID { get; set; }
+        
+        [JsonPropertyName("fechaHora")]
         public DateTime fechaHora { get; set; }
+        
+        [JsonPropertyName("sucursalID")]
         public int? sucursalID { get; set; }
+        
+        [JsonPropertyName("depositoID")]
         public int? depositoID { get; set; }
+        
+        [JsonPropertyName("tipoOperacionID")]
         public int? tipoOperacionID { get; set; }
+        
+        [JsonPropertyName("clienteID")]
         public int? clienteID { get; set; }
+        
+        [JsonPropertyName("proveedorID")]
         public int? proveedorID { get; set; }
+        
+        [JsonPropertyName("registroOperacionID")]
         public int? registroOperacionID { get; set; }
+        
+        [JsonPropertyName("estadoID")]
         public int? estadoID { get; set; }
+        
+        [JsonPropertyName("pedirAlDepositoID")]
         public int? pedirAlDepositoID { get; set; }
+        
+        [JsonPropertyName("colectorItem")]
         public List<ColectorItem> colectorItem { get; set; } = new();
     }
 
@@ -1121,6 +1387,72 @@ Usa punto (.) como separador decimal. Devuelve SOLO JSON válido.";
         [JsonPropertyName("cantidad")] public string? Cantidad { get; set; }
         [JsonPropertyName("precio_unitario")] public string? PrecioUnitario { get; set; }
     }
+
+    private sealed class TipoOperacion
+    {
+        public int Id { get; set; }
+        public string Nombre { get; set; } = "";
+    }
+
+    private sealed class DateTimeConverter : JsonConverter<DateTime>
+    {
+        public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            return DateTime.Parse(reader.GetString()!);
+        }
+
+        public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options)
+        {
+            writer.WriteStringValue(value.ToString("yyyy-MM-ddTHH:mm:ss"));
+        }
+    }
+}
+
+@if (MostrarModalTipoOperacion)
+{
+    <div class="app-modal-backdrop" @onclick="CerrarModalTipoOperacion">
+        <div class="app-modal" @onclick:stopPropagation="true" @onkeydown="HandleKeyDown" tabindex="0">
+            <div class="app-modal-header">
+                <h3 class="app-modal-title">⚙️ Seleccionar Tipo de Operación</h3>
+                <button class="app-modal-close" @onclick="CerrarModalTipoOperacion">×</button>
+            </div>
+            
+            <div class="app-modal-body">
+                <div style="margin-bottom: 20px;">
+                    <p style="margin-bottom: 16px; color: #666;">
+                        Selecciona el tipo de operación para enviar los datos al Colector:
+                    </p>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        @foreach (var tipo in TiposOperacion)
+                        {
+                            <label style="display: flex; align-items: center; padding: 12px; border: 2px solid #e1e5e9; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; @(TipoOperacionTemporal == tipo.Id ? "background-color: #e3f2fd; border-color: #2196f3;" : "")" 
+                                   @onclick="@(async () => await SeleccionarTipoOperacion(tipo.Id, tipo.Nombre))">
+                                <input type="radio" 
+                                       name="tipoOperacion" 
+                                       value="@tipo.Id" 
+                                       checked="@(TipoOperacionTemporal == tipo.Id)"
+                                       style="margin-right: 12px; transform: scale(1.2);" />
+                                <div>
+                                    <div style="font-weight: 600; color: #333;">@tipo.Nombre</div>
+                                    <div style="font-size: 12px; color: #666;">ID: @tipo.Id</div>
+                                </div>
+                            </label>
+                        }
+                    </div>
+                </div>
+            </div>
+            
+            <div class="app-modal-footer">
+                <button class="btn btn-gray" @onclick="CerrarModalTipoOperacion" disabled="@IsColectorLoading">
+                    Cancelar
+                </button>
+                <button class="btn btn-green" @onclick="ConfirmarTipoOperacion" disabled="@IsColectorLoading">
+                    @(IsColectorLoading ? "⏳ Enviando..." : "✅ Enviar al Colector")
+                </button>
+            </div>
+        </div>
+    </div>
 }
 
 @if (MostrarModalColector)
