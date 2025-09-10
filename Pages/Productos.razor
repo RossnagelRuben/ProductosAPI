@@ -9,6 +9,7 @@
 @using Microsoft.AspNetCore.Components.Web
 @using System.Linq
 @using System.Net.Http.Headers
+@using System.Threading
 @inject IJSRuntime JS
 
 @inject HttpClient Http
@@ -29,18 +30,19 @@
         *@
         @if (showToken)
         {
-            <InputText id="tokenInput"
-                       @bind-Value="Token"
-                       @bind-Value:event="oninput"
-                       style="min-width:320px"
-                       aria-label="Token de autenticación" />
+            <input id="tokenInput"
+                   type="text"
+                   value="@Token"
+                   @oninput="OnTokenInput"
+                   style="min-width:320px"
+                   aria-label="Token de autenticación" />
         }
         else
         {
             <input id="tokenInput"
                    type="password"
-                   @bind="Token"
-                   @bind:event="oninput"
+                   value="@Token"
+                   @oninput="OnTokenInput"
                    style="min-width:320px"
                    aria-label="Token de autenticación" />
         }
@@ -388,6 +390,8 @@ else
     </div>
 }
 
+@implements IDisposable
+
 @code {
     // =======================
     // CONFIG: endpoints/token
@@ -407,9 +411,10 @@ else
     // Antes: string token = DEFAULT_TOKEN;
     // Ahora: propiedad con setter que dispara recarga de familias
     private string _token = DEFAULT_TOKEN;
+    private CancellationTokenSource? _tokenChangeCancellation;
 
     /// <summary>
-    /// Token actual. Cada vez que cambia su valor, recarga las familias.
+    /// Token actual. Cada vez que cambia su valor, recarga las familias con debounce.
     /// Nota: como el setter no puede ser async, disparamos una tarea "fire-and-forget".
     /// </summary>
     string Token
@@ -420,52 +425,111 @@ else
             if (_token == value) return;
             _token = value;
 
-            // Si querés evitar múltiples llamados mientras el usuario tipea,
-            // podés agregar un debounce. Por simplicidad, recargamos directo.
-            _ = OnTokenChangedAsync();
+            // Cancelar operación anterior si existe
+            _tokenChangeCancellation?.Cancel();
+            _tokenChangeCancellation = new CancellationTokenSource();
+
+            // Debounce: esperar 1 segundo antes de validar el token
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(1000, _tokenChangeCancellation.Token);
+                    if (!_tokenChangeCancellation.Token.IsCancellationRequested)
+                    {
+                        await OnTokenChangedAsync();
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Operación cancelada, no hacer nada
+                }
+                catch (Exception ex)
+                {
+                    // Log del error pero no cerrar la aplicación
+                    Log($"Error en validación de token: {ex.Message}");
+                }
+            });
         }
     }
 
     private async Task OnTokenChangedAsync()
     {
-        // Limpiamos errores previos relacionados a familias
-        error = null;
-        statusOk = null;
-        tokenChecked = false;
-        tokenOk = false;
-        tokenStatus = null;
-        lastLoadFamiliasOk = false;
-        lastLoadMarcasOk = false;
-        Log("Token actualizado. Recargando catálogos (familias y marcas)...");
-
-        // Si el token está vacío, podés decidir limpiar la lista:
-        // familiasConTodo = new() { new Familia { FamiliaID = 0, Descripcion = "TODO" } };
-
-        // Reintenta cargar las familias con el nuevo token
-        await CargarFamiliasAsync();
-        await CargarMarcasAsync();
-
-        // Si querés refrescar resultados también:
-        // await ConsultarAsync();
-
-        tokenChecked = true;
-        tokenOk = lastLoadFamiliasOk && lastLoadMarcasOk;
-        tokenStatus = tokenOk ? "Token OK. Catálogos cargados." : "Token inválido o sin permisos. Revísalo.";
-        Log(tokenOk ? "Token verificado: OK" : "Token inválido: error al cargar catálogos");
-        if (tokenOk)
+        try
         {
-            try { await JS.InvokeVoidAsync("blazorFocusById", "codigoBarra"); } catch { }
-            // Ocultar automáticamente la tarjeta de autenticación a los 5 segundos
-            _ = Task.Run(async () =>
-            {
-                await Task.Delay(5000);
-                showAuthCard = false;
-                await InvokeAsync(StateHasChanged);
-            });
-        }
+            // Limpiamos errores previos relacionados a familias
+            error = null;
+            statusOk = null;
+            tokenChecked = false;
+            tokenOk = false;
+            tokenStatus = null;
+            lastLoadFamiliasOk = false;
+            lastLoadMarcasOk = false;
+            Log("Token actualizado. Recargando catálogos (familias y marcas)...");
 
-        // Forzamos render si hace falta
-        StateHasChanged();
+            // Si el token está vacío o es muy corto, no validar
+            if (string.IsNullOrWhiteSpace(_token) || _token.Length < 10)
+            {
+                tokenChecked = true;
+                tokenOk = false;
+                tokenStatus = "Token muy corto o vacío";
+                Log("Token muy corto, no se valida");
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            // Reintenta cargar las familias con el nuevo token
+            await CargarFamiliasAsync();
+            await CargarMarcasAsync();
+
+            // Si querés refrescar resultados también:
+            // await ConsultarAsync();
+
+            tokenChecked = true;
+            tokenOk = lastLoadFamiliasOk && lastLoadMarcasOk;
+            tokenStatus = tokenOk ? "Token OK. Catálogos cargados." : "Token inválido o sin permisos. Revísalo.";
+            Log(tokenOk ? "Token verificado: OK" : "Token inválido: error al cargar catálogos");
+            
+            if (tokenOk)
+            {
+                try { await JS.InvokeVoidAsync("blazorFocusById", "codigoBarra"); } catch { }
+                // Ocultar automáticamente la tarjeta de autenticación a los 5 segundos
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(5000);
+                        showAuthCard = false;
+                        await InvokeAsync(StateHasChanged);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"Error al ocultar tarjeta de autenticación: {ex.Message}");
+                    }
+                });
+            }
+
+            // Forzamos render si hace falta
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            // Manejo de errores para evitar que la aplicación se cierre
+            Log($"Error en OnTokenChangedAsync: {ex.Message}");
+            tokenChecked = true;
+            tokenOk = false;
+            tokenStatus = "Error validando token";
+            error = $"Error validando token: {ex.Message}";
+            
+            try
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+            catch (Exception stateEx)
+            {
+                Log($"Error al actualizar estado: {stateEx.Message}");
+            }
+        }
     }
 
 
@@ -553,7 +617,18 @@ else
         }
     }
 
+    public void Dispose()
+    {
+        _tokenChangeCancellation?.Cancel();
+        _tokenChangeCancellation?.Dispose();
+    }
+
     void ToggleToken() => showToken = !showToken;
+
+    void OnTokenInput(ChangeEventArgs e)
+    {
+        Token = e.Value?.ToString() ?? string.Empty;
+    }
 
     /// <summary>
     /// Maneja el evento keyup en el input de código de barras.
