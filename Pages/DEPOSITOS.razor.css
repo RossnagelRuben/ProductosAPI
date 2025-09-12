@@ -1407,3 +1407,342 @@
 .filters-content::-webkit-scrollbar-thumb:hover {
     background: #a8a8a8;
 }
+
+/* Modal styles for familias */
+.modal-input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+    font-size: 1rem;
+}
+
+.modal-input:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.modal-list {
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    background: white;
+}
+
+.modal-item {
+    transition: background-color 0.2s ease;
+}
+
+.modal-item:hover {
+    background-color: #f8f9fa;
+}
+
+.modal-item:active {
+    background-color: #e9ecef;
+}
+
+/* Hierarchical indentation for familias */
+.modal-item[style*="margin-left: 0px"] {
+    border-left: 3px solid #007bff;
+}
+
+.modal-item[style*="margin-left: 20px"] {
+    border-left: 3px solid #28a745;
+}
+
+.modal-item[style*="margin-left: 40px"] {
+    border-left: 3px solid #ffc107;
+}
+
+.modal-item[style*="margin-left: 60px"] {
+    border-left: 3px solid #dc3545;
+}
+
+.modal-item[style*="margin-left: 80px"] {
+    border-left: 3px solid #6f42c1;
+}
+
+/* Estilos para ubicación colapsada */
+.selected-location.collapsed {
+    padding: 0.75rem !important;
+    margin: 0.5rem 1rem !important;
+}
+
+.selected-location.collapsed .location-path {
+    display: none !important;
+}
+
+/* Divisor interno mejorado */
+.inner-resize {
+    position: relative;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+.inner-resize:hover {
+    background: linear-gradient(90deg, #007bff, #0056b3, #007bff) !important;
+    height: 10px !important;
+    transform: scaleY(1.2);
+}
+
+.inner-resize:active {
+    background: linear-gradient(90deg, #0056b3, #004085, #0056b3) !important;
+}
+
+/* Mejoras para móviles */
+@media (max-width: 768px) {
+    .inner-resize {
+        height: 12px !important;
+        margin: 8px 0 !important;
+        background: linear-gradient(90deg, #007bff, #0056b3, #007bff) !important;
+    }
+    
+    .inner-resize:hover {
+        height: 14px !important;
+    }
+    
+    .selected-location {
+        margin: 0.5rem !important;
+        padding: 0.75rem !important;
+    }
+    
+    .selected-location.collapsed {
+        margin: 0.25rem !important;
+        padding: 0.5rem !important;
+    }
+    
+    .data-grid-section {
+        margin: 0 0.5rem 0.5rem 0.5rem !important;
+    }
+    
+    .grid-content {
+        min-height: 300px !important;
+    }
+}
+
+/* Botones de control siempre visibles */
+.control-buttons {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #f8f9fa !important;
+    border-bottom: 1px solid #dee2e6 !important;
+}
+
+.control-buttons .btn {
+    font-size: 0.875rem;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.control-buttons .btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.control-buttons .badge {
+    font-size: 0.8rem;
+    padding: 0.5rem 0.75rem;
+}
+
+/* Botón de ubicaciones */
+.control-buttons .btn-info {
+    background: linear-gradient(135deg, #17a2b8, #138496);
+    border-color: #17a2b8;
+    color: white;
+}
+
+.control-buttons .btn-info:hover {
+    background: linear-gradient(135deg, #138496, #117a8b);
+    border-color: #117a8b;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(23, 162, 184, 0.3);
+}
+
+/* Botón de productos */
+.control-buttons .btn-warning {
+    background: linear-gradient(135deg, #ffc107, #e0a800);
+    border-color: #ffc107;
+    color: #212529;
+}
+
+.control-buttons .btn-warning:hover {
+    background: linear-gradient(135deg, #e0a800, #d39e00);
+    border-color: #d39e00;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(255, 193, 7, 0.3);
+    color: #212529;
+}
+
+/* Vista colapsada compacta */
+.selected-location.collapsed {
+    padding: 0.75rem !important;
+    margin: 0.5rem !important;
+    min-height: auto !important;
+}
+
+.selected-location.collapsed .btn {
+    font-size: 0.7rem !important;
+    padding: 0.2rem 0.4rem !important;
+}
+
+/* Indicador de filtro activo */
+.filter-indicator {
+    background: #d1ecf1 !important;
+    color: #0c5460 !important;
+    padding: 0.25rem 0.5rem !important;
+    border-radius: 4px !important;
+    font-size: 0.8rem !important;
+    border: 1px solid #bee5eb !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    white-space: nowrap !important;
+}
+
+.filter-indicator i {
+    font-size: 0.7rem !important;
+}
+
+.filter-indicator .btn {
+    padding: 0.125rem 0.25rem !important;
+    font-size: 0.7rem !important;
+    line-height: 1 !important;
+    border-radius: 3px !important;
+    min-width: auto !important;
+}
+
+.filter-indicator .btn:hover {
+    background-color: #dc3545 !important;
+    border-color: #dc3545 !important;
+    color: white !important;
+}
+
+/* Controles de paginación */
+.pagination-controls {
+    background: #f8f9fa !important;
+    border-bottom: 1px solid #dee2e6 !important;
+    font-size: 0.875rem !important;
+}
+
+.pagination-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.pagination-buttons .btn {
+    padding: 0.25rem 0.5rem !important;
+    font-size: 0.75rem !important;
+}
+
+.pagination-buttons .btn:disabled {
+    opacity: 0.5 !important;
+    cursor: not-allowed !important;
+}
+
+/* Filtros simples */
+.filters-section {
+    background: #f8f9fa !important;
+    border-bottom: 1px solid #dee2e6 !important;
+    border-radius: 0 0 8px 8px !important;
+}
+
+.filters-section .form-label {
+    font-weight: 600 !important;
+    color: #495057 !important;
+    margin-bottom: 0.5rem !important;
+}
+
+
+
+/* Checkbox en barra de control */
+.control-buttons .form-check {
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.25rem !important;
+}
+
+.control-buttons .form-check-input {
+    margin: 0 !important;
+    transform: scale(0.9) !important;
+}
+
+.control-buttons .form-check-label {
+    font-size: 0.8rem !important;
+    margin: 0 !important;
+    white-space: nowrap !important;
+    color: #495057 !important;
+}
+
+/* Mejoras para móviles */
+@media (max-width: 768px) {
+    .control-buttons {
+        padding: 0.75rem !important;
+        flex-direction: column !important;
+        gap: 0.75rem !important;
+        align-items: stretch !important;
+    }
+    
+    .control-buttons .btn {
+        width: 100% !important;
+        padding: 0.75rem !important;
+        font-size: 0.9rem !important;
+    }
+    
+    .control-buttons .ms-auto {
+        margin-left: 0 !important;
+        text-align: center !important;
+    }
+    
+    .control-buttons .form-check {
+        justify-content: center !important;
+    }
+    
+    .filter-indicator {
+        justify-content: center !important;
+        text-align: center !important;
+        flex-wrap: wrap !important;
+        gap: 0.25rem !important;
+    }
+    
+    .filter-indicator .btn {
+        font-size: 0.6rem !important;
+        padding: 0.1rem 0.2rem !important;
+    }
+    
+    .selected-location {
+        margin: 0.5rem !important;
+        padding: 0.75rem !important;
+    }
+    
+    .selected-location.collapsed {
+        margin: 0.25rem !important;
+        padding: 0.5rem !important;
+    }
+    
+    .data-grid-section {
+        margin: 0 0.5rem 0.5rem 0.5rem !important;
+    }
+    
+    .grid-content {
+        min-height: 300px !important;
+    }
+    
+    .pagination-controls {
+        flex-direction: column !important;
+        gap: 0.5rem !important;
+        text-align: center !important;
+    }
+    
+    .pagination-buttons {
+        justify-content: center !important;
+    }
+    
+}

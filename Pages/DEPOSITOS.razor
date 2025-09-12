@@ -1078,12 +1078,68 @@
 
             <!-- Right Panel - Filters -->
             <div class="right-panel @(rightPanelHidden ? "panel-hidden" : "") mobile-hidden">
-            <div class="panel-header">
-                <h4 class="filters-title">
-                    <i class="oi oi-clipboard"></i>
-                    Productos de la ubicación
-                </h4>
-                <div class="d-flex" style="gap: .5rem; align-items: center;">
+
+            @if (selectedNode != null)
+            {
+                <div class="selected-location @(ubicacionCollapsed ? "collapsed" : "")" style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%) !important; border: 2px solid #007bff !important; border-radius: 12px !important; padding: 1rem !important; margin: 1rem !important; box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15) !important; transition: all 0.3s ease !important;">
+                    @if (ubicacionCollapsed)
+                    {
+                        <!-- Vista colapsada: una sola línea horizontal -->
+                        <div style="display: flex !important; align-items: center !important; justify-content: space-between !important; gap: 1rem !important;">
+                            <div style="display: flex !important; align-items: center !important; gap: 0.5rem !important; flex: 1 !important; min-width: 0 !important;">
+                                <i class="oi oi-location" style="color: #007bff !important; font-size: 1rem !important; flex-shrink: 0 !important;"></i>
+                                <span style="color: #0056b3 !important; font-weight: 600 !important; font-size: 0.9rem !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important;">
+                                    @GetLocationPath(selectedNode)
+                                </span>
+                            </div>
+                            <button @onclick="ToggleUbicacionCollapse" 
+                                    class="btn btn-sm btn-outline-primary"
+                                    style="font-size: 0.75rem !important; padding: 0.25rem 0.5rem !important; flex-shrink: 0 !important;">
+                                <i class="oi oi-chevron-down"></i>
+                                Expandir
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <!-- Vista expandida: diseño original -->
+                        <div style="display: flex !important; align-items: center !important; justify-content: space-between !important; margin-bottom: 0.5rem !important;">
+                            <div style="display: flex !important; align-items: center !important; gap: 0.5rem !important;">
+                                <i class="oi oi-location" style="color: #007bff !important; font-size: 1.2rem !important;"></i>
+                                <strong style="color: #0056b3 !important; font-size: 1.1rem !important;">Ubicación seleccionada:</strong>
+                            </div>
+                            <button @onclick="ToggleUbicacionCollapse" 
+                                    class="btn btn-sm btn-outline-primary"
+                                    style="font-size: 0.8rem !important; padding: 0.25rem 0.5rem !important;">
+                                <i class="oi oi-chevron-up"></i>
+                                Colapsar
+                            </button>
+                        </div>
+                        <div class="location-path" style="background: white !important; padding: 0.75rem !important; border-radius: 8px !important; border: 1px solid #90caf9 !important; font-weight: 600 !important; color: #0056b3 !important; font-size: 1rem !important; line-height: 1.4 !important;">
+                            @GetLocationPath(selectedNode)
+                        </div>
+                        <!-- Debug info -->
+                        <div style="font-size: 0.8rem; color: #666; margin-top: 0.5rem;">
+                            Debug: @selectedNode.Item.Descripcion (Nivel: @selectedNode.Level) | ID: @selectedNode.Item.ProductoUbicacionID | Orden: @selectedNode.Item.Orden
+                        </div>
+                        <div style="font-size: 0.7rem; color: #999; margin-top: 0.25rem;">
+                            selectedNode != null: @(selectedNode != null) | selectedNode.Item != null: @(selectedNode?.Item != null)
+                        </div>
+                        <div style="font-size: 0.7rem; color: #ff0000; margin-top: 0.25rem; font-weight: bold;">
+                            RENDERIZANDO: @selectedNode.Item.Descripcion (Level: @selectedNode.Level)
+                        </div>
+                    }
+                </div>
+                
+                <!-- Productos: filtros + divisor + grilla -->
+                <!-- Botones de control siempre visibles -->
+                <div class="control-buttons" style="display: flex; gap: 0.5rem; padding: 1rem; background: #f8f9fa; border-bottom: 1px solid #dee2e6; flex-wrap: wrap; align-items: center;">
+                    <button class="btn btn-sm btn-info" @onclick="ToggleLocationsPanel">
+                        <i class="oi oi-location"></i> @(leftPanelHidden ? "Mostrar ubicaciones" : "Ocultar ubicaciones")
+                    </button>
+                    <button class="btn btn-sm btn-warning" @onclick="ToggleProductsPanel">
+                        <i class="oi oi-table"></i> @(rightPanelHidden ? "Mostrar productos" : "Ocultar productos")
+                    </button>
                     <button class="btn btn-sm btn-success" disabled="@isTogglingInventory" @onclick="ToggleInventario">
                         @if (isTogglingInventory)
                         {
@@ -1091,61 +1147,76 @@
                         }
                         <i class="oi oi-check"></i> @(inventarioEditable ? "Finalizar inventario" : "Realizar inventario")
                     </button>
-                    <button @onclick="ToggleFilters" 
-                            class="btn btn-sm btn-outline-secondary toggle-filters">
+                    <button @onclick="ToggleFilters" class="btn btn-sm btn-outline-secondary">
                         <i class="oi @(filtersExpanded ? "oi-chevron-up" : "oi-chevron-down")"></i>
                         @(filtersExpanded ? "Contraer filtros" : "Expandir filtros")
                     </button>
+                    
+                    <!-- Indicador de filtro activo con controles -->
+                    @if (!string.IsNullOrWhiteSpace(filtroRubro))
+                    {
+                        <div class="filter-indicator" style="background: #d1ecf1; color: #0c5460; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; border: 1px solid #bee5eb; display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="oi oi-filter"></i>
+                            <strong>@filtroRubro</strong>
+                            @if (incluirSubRubros)
+                            {
+                                <span class="text-muted">+ sub-rubros</span>
+                            }
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => { filtroRubro = string.Empty; _cachedCodigosRubro.Clear(); }" style="padding: 0.125rem 0.25rem; font-size: 0.7rem;">
+                                <i class="oi oi-x"></i>
+                            </button>
+                        </div>
+                        
+                        <!-- Checkbox incluir sub-rubros (solo visible cuando hay rubro seleccionado) -->
+                        <div class="form-check" style="margin: 0; display: flex; align-items: center; gap: 0.25rem;">
+                            <input class="form-check-input" type="checkbox" @bind="incluirSubRubros" id="incluirSubRubros" style="margin: 0;" />
+                            <label class="form-check-label" for="incluirSubRubros" style="font-size: 0.8rem; margin: 0; white-space: nowrap;">
+                                Incluir sub-rubros
+                            </label>
+                        </div>
+                    }
+                    
+                    <div class="ms-auto">
+                        <span class="badge bg-primary">Registros: @selectedProductsCount</span>
+                    </div>
                 </div>
-            </div>
 
-            @if (selectedNode != null)
-            {
-                <div class="selected-location" style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%) !important; border: 2px solid #007bff !important; border-radius: 12px !important; padding: 1rem !important; margin: 1rem !important; box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15) !important;">
-                    <div style="display: flex !important; align-items: center !important; gap: 0.5rem !important; margin-bottom: 0.5rem !important;">
-                        <i class="oi oi-location" style="color: #007bff !important; font-size: 1.2rem !important;"></i>
-                        <strong style="color: #0056b3 !important; font-size: 1.1rem !important;">Ubicación seleccionada:</strong>
-                    </div>
-                    <div class="location-path" style="background: white !important; padding: 0.75rem !important; border-radius: 8px !important; border: 1px solid #90caf9 !important; font-weight: 600 !important; color: #0056b3 !important; font-size: 1rem !important; line-height: 1.4 !important;">
-                        @GetLocationPath(selectedNode)
-                    </div>
-                    <!-- Debug info -->
-                    <div style="font-size: 0.8rem; color: #666; margin-top: 0.5rem;">
-                        Debug: @selectedNode.Item.Descripcion (Nivel: @selectedNode.Level) | ID: @selectedNode.Item.ProductoUbicacionID | Orden: @selectedNode.Item.Orden
-                    </div>
-                    <div style="font-size: 0.7rem; color: #999; margin-top: 0.25rem;">
-                        selectedNode != null: @(selectedNode != null) | selectedNode.Item != null: @(selectedNode?.Item != null)
-                    </div>
-                    <div style="font-size: 0.7rem; color: #ff0000; margin-top: 0.25rem; font-weight: bold;">
-                        RENDERIZANDO: @selectedNode.Item.Descripcion (Level: @selectedNode.Level)
-                    </div>
-                </div>
-                
-                <!-- Productos: filtros + divisor + grilla -->
-                <div class="data-grid-section" style="margin: 0 1rem 1rem 1rem; display: flex; flex-direction: column; height: calc(100% - 24px);">
-                    <!-- Filtros internos (ocultos por defecto) -->
-                    <div class="filters-content @(filtersExpanded ? "" : "collapsed")" style="height: @(filtersExpanded ? $"{filtrosAltura}px" : "0"); overflow: hidden;">
-                        <div class="filters-row">
-                            <div class="filter-group">
-                                <label>Descripción</label>
+                <!-- Filtros internos -->
+                @if (filtersExpanded)
+                {
+                    <div class="filters-section" style="margin: 0 1rem; padding: 1rem; background: #f8f9fa; border-bottom: 1px solid #dee2e6;">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label class="form-label">Descripción</label>
                                 <div class="input-group">
-                                    <input class="form-control" placeholder="Filtrar por descripción..." @bind="filtroTexto" @bind:event="oninput" />
-                                    <button class="btn btn-outline-secondary" @onclick="() => { filtroTexto = string.Empty; }"><i class="oi oi-x"></i></button>
+                                    <input class="form-control" placeholder="Filtrar por descripción..." @oninput="OnFiltroTextoInput" />
+                                    <button class="btn btn-outline-secondary" @onclick="() => { filtroTexto = string.Empty; }">
+                                        <i class="oi oi-x"></i>
+                                    </button>
                                 </div>
                             </div>
-                            <div class="filter-group">
-                                <label>Rubro / Familia</label>
+                            <div class="col-md-6">
+                                <label class="form-label">Rubro / Familia</label>
                                 <div class="input-group">
                                     <input class="form-control" placeholder="Seleccione rubro/familia" value="@filtroRubro" disabled />
-                                    <button class="btn btn-outline-primary" @onclick="() => showRubroModal = true"><i class="oi oi-magnifying-glass"></i> Rubros/Familias</button>
-                                    <button class="btn btn-outline-secondary" @onclick="() => { filtroRubro = string.Empty; }"><i class="oi oi-x"></i></button>
+                                    <button class="btn btn-outline-primary" @onclick="AbrirModalFamilias" disabled="@isModalLoading">
+                                        @if (isModalLoading)
+                                        {
+                                            <span class="spinner-border spinner-border-sm me-1"></span>
+                                        }
+                                        <i class="oi oi-magnifying-glass"></i>
+                                    </button>
+                                    <button class="btn btn-outline-secondary" @onclick="() => { filtroRubro = string.Empty; _cachedCodigosRubro.Clear(); }">
+                                        <i class="oi oi-x"></i>
+                                    </button>
                                 </div>
                             </div>
                         </div>
                     </div>
+                }
 
-                    <!-- Divisor interno vertical para ajustar altura filtros/grilla -->
-                    <div class="resize-handle" style="height: 6px; cursor: row-resize; width: 100%; background: #dee2e6; margin: 4px 0;" @onmousedown="StartInnerResize" @onmouseup="StopInnerResize" @ref="innerResizeHandle"></div>
+                <div class="data-grid-section" style="margin: 0 1rem 1rem 1rem; display: flex; flex-direction: column; height: @(filtersExpanded ? "calc(100% - 200px)" : "calc(100% - 80px)");">
+
 
                     <!-- Grilla -->
                     <div class="grid-content" style="flex: 1; overflow: auto;">
@@ -1158,6 +1229,41 @@
                         }
                         else
                         {
+                            <!-- Controles de paginación para grandes cantidades -->
+                            @if (selectedProductsCount > 100)
+                            {
+                                <div class="pagination-controls" style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; background: #f8f9fa; border-bottom: 1px solid #dee2e6;">
+                                    <div>
+                                        <button class="btn btn-sm btn-outline-primary" @onclick="ToggleVirtualization">
+                                            <i class="oi @(_useVirtualization ? "oi-eye" : "oi-eye-slash")"></i>
+                                            @(_useVirtualization ? "Ver todos" : "Paginación")
+                                        </button>
+                                        <span class="ms-2 text-muted">
+                                            @if (_useVirtualization)
+                                            {
+                                                <text>Página @(_currentPage + 1) de @_totalPages (@selectedProductsCount registros)</text>
+                                            }
+                                            else
+                                            {
+                                                <text>@selectedProductsCount registros</text>
+                                            }
+                                        </span>
+                                    </div>
+                                    @if (_useVirtualization)
+                                    {
+                                        <div class="pagination-buttons">
+                                            <button class="btn btn-sm btn-outline-secondary" @onclick="PreviousPage" disabled="@(_currentPage == 0)">
+                                                <i class="oi oi-chevron-left"></i>
+                                            </button>
+                                            <span class="mx-2">@(_currentPage + 1) / @_totalPages</span>
+                                            <button class="btn btn-sm btn-outline-secondary" @onclick="NextPage" disabled="@(_currentPage >= _totalPages - 1)">
+                                                <i class="oi oi-chevron-right"></i>
+                                            </button>
+                                        </div>
+                                    }
+                                </div>
+                            }
+
                             <div class="grid-header">
                                 <div class="grid-columns">
                                     <div class="grid-column" data-label="Rub/Cód">Rub/Cód</div>
@@ -1176,7 +1282,8 @@
                             }
                             else
                             {
-                                @foreach (var p in productosFiltrados)
+                                var productosToShow = _useVirtualization && selectedProductsCount > 100 ? GetPaginatedProducts() : productosFiltrados;
+                                @foreach (var p in productosToShow)
                                 {
                                     <div class="grid-columns grid-row" style="border-bottom: 1px solid #eee;">
                                         <div class="grid-column" data-label="Rub/Cód">@p.Producto.RubroCodigo</div>
@@ -1253,10 +1360,23 @@
 <AppModal IsOpen="showRubroModal" Title="Buscar Rubro / Familia" OnClose="() => showRubroModal = false">
     <ChildContent>
         <input class="modal-input" placeholder="Filtrar rubro/familia..." @bind="filtroRubroBuscar" @bind:event="oninput" />
-        <div class="modal-list">
-            @foreach (var r in GetRubrosFiltrados())
+        <div class="modal-list" style="max-height: 400px; overflow-y: auto;">
+            @if (isModalLoading)
             {
-                <div class="modal-item" @onclick="() => SeleccionarRubro(r)">@r</div>
+                <div class="text-center p-3">
+                    <span class="spinner-border spinner-border-sm me-2"></span>
+                    Cargando familias...
+                </div>
+            }
+            else
+            {
+                @foreach (var familia in GetFamiliasFiltradas())
+                {
+                    <div class="modal-item" @onclick="async () => await SeleccionarFamilia(familia)" 
+                         style="padding: 0.75rem; border-bottom: 1px solid #eee; cursor: pointer; transition: background-color 0.2s;">
+                        <div style="font-weight: 600; color: #333;">@familia.Descripcion</div>
+                    </div>
+                }
             }
         </div>
     </ChildContent>
@@ -1286,12 +1406,30 @@
     private bool isTogglingInventory = false;
     private string filtroTexto = string.Empty; // descripción
     private string filtroRubro = string.Empty; // rubro/familia seleccionado
-    private string filtroRubroBuscar = string.Empty; // texto de búsqueda dentro del modal
+    private string _filtroRubroBuscar = string.Empty;
+    private string filtroRubroBuscar 
+    { 
+        get => _filtroRubroBuscar; 
+        set 
+        { 
+            _filtroRubroBuscar = value; 
+            FiltrarFamilias();
+        } 
+    }
     private bool showRubroModal = false;
     private List<FamiliaItem> familias = new();
-    private ElementReference innerResizeHandle;
+    private List<FamiliaItem> familiasFiltradas = new();
     private double filtrosAltura = 180;
-    private bool isInnerResizing = false;
+    private bool incluirSubRubros = false;
+    private bool isModalLoading = false;
+    private Timer? modalSearchTimer;
+    private bool ubicacionCollapsed = false;
+    
+    // Variables para renderizado virtual
+    private int _itemsPerPage = 50;
+    private int _currentPage = 0;
+    private int _totalPages = 0;
+    private bool _useVirtualization = false;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -1306,15 +1444,14 @@
             await JSRuntime.InvokeVoidAsync("initResize");
             // Establecer la referencia del componente para JavaScript
             await JSRuntime.InvokeVoidAsync("setBlazorComponent", DotNetObjectReference.Create(this));
-            // Pre-cargar familias para el modal
-            try
+            // No pre-cargar familias - se cargarán solo cuando se abra el modal
+            
+            // Colapsar ubicación automáticamente en móviles
+            var isMobile = await JSRuntime.InvokeAsync<bool>("isMobileDevice");
+            if (isMobile)
             {
-                if (!string.IsNullOrWhiteSpace(token))
-                {
-                    familias = await ProductoService.GetFamiliasAsync(token);
-                }
+                ubicacionCollapsed = true;
             }
-            catch {}
         }
     }
 
@@ -1364,6 +1501,10 @@
 
         try
         {
+            // Colapsar panel de productos al cargar ubicaciones
+            rightPanelHidden = true;
+            await JSRuntime.InvokeVoidAsync("toggleProductsPanel", rightPanelHidden);
+
             // Guardar el token en localStorage
             await SaveTokenToStorage();
             
@@ -1422,10 +1563,47 @@
         }, null, 250, Timeout.Infinite);
     }
 
+    private void OnFiltroTextoInput(ChangeEventArgs e)
+    {
+        filtroTexto = e.Value?.ToString() ?? string.Empty;
+        
+        // Colapsar filtros automáticamente si hay texto
+        if (!string.IsNullOrWhiteSpace(filtroTexto))
+        {
+            filtersExpanded = false;
+        }
+        
+        // Debounce para filtro de productos
+        searchTimer?.Dispose();
+        searchTimer = new Timer(async _ =>
+        {
+            await InvokeAsync(() =>
+            {
+                // Limpiar cache de códigos de rubro si cambió el filtro
+                _cachedCodigosRubro.Clear();
+                StateHasChanged();
+            });
+        }, null, 300, Timeout.Infinite);
+    }
+
 
     private void ToggleFilters()
     {
         filtersExpanded = !filtersExpanded;
+        // Actualizar UI inmediatamente sin procesamiento pesado
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ToggleLocationsPanel()
+    {
+        leftPanelHidden = !leftPanelHidden;
+        await JSRuntime.InvokeVoidAsync("toggleLocationsPanel", leftPanelHidden);
+    }
+
+    private async Task ToggleProductsPanel()
+    {
+        rightPanelHidden = !rightPanelHidden;
+        await JSRuntime.InvokeVoidAsync("toggleProductsPanel", rightPanelHidden);
     }
 
     [JSInvokable]
@@ -1693,6 +1871,14 @@
     {
         try
         {
+            // Colapsar panel de ubicaciones al seleccionar una ubicación
+            leftPanelHidden = true;
+            await JSRuntime.InvokeVoidAsync("toggleLocationsPanel", leftPanelHidden);
+            
+            // Mostrar panel de productos
+            rightPanelHidden = false;
+            await JSRuntime.InvokeVoidAsync("toggleProductsPanel", rightPanelHidden);
+
             isLoading = true;
             productosSeleccionados.Clear();
             selectedProductsCount = 0;
@@ -1808,51 +1994,293 @@
 
     private IEnumerable<ProductoStock> FilterProductos()
     {
+        if (productosSeleccionados == null || !productosSeleccionados.Any())
+        {
+            return Enumerable.Empty<ProductoStock>();
+        }
+
         var data = productosSeleccionados.AsEnumerable();
+        
+        // Filtro por descripción (optimizado)
         if (!string.IsNullOrWhiteSpace(filtroTexto))
         {
             var t = filtroTexto.Trim().ToLowerInvariant();
-            data = data.Where(p => (p.Producto.DescripcionLarga ?? string.Empty).ToLowerInvariant().Contains(t));
+            data = data.Where(p => 
+            {
+                var descripcion = p.Producto?.DescripcionLarga;
+                return descripcion != null && descripcion.ToLowerInvariant().Contains(t);
+            });
         }
+        
+        // Filtro por rubro/familia (altamente optimizado)
         if (!string.IsNullOrWhiteSpace(filtroRubro))
         {
-            var r = filtroRubro.Trim().ToLowerInvariant();
-            data = data.Where(p => (p.Producto.RubroCodigo ?? string.Empty).ToLowerInvariant().Contains(r));
+            var codigosRubro = GetCodigosRubroParaFiltrar();
+            if (codigosRubro.Any())
+            {
+                // Convertir a HashSet para búsquedas O(1)
+                var codigosSet = new HashSet<string>(codigosRubro.Select(c => c.ToLowerInvariant()), StringComparer.OrdinalIgnoreCase);
+                
+                data = data.Where(p => 
+                {
+                    var producto = p.Producto;
+                    if (producto == null) return false;
+                    
+                    var rubroProducto = producto.RubroCodigo?.ToLowerInvariant() ?? string.Empty;
+                    var descripcionProducto = producto.DescripcionLarga?.ToLowerInvariant() ?? string.Empty;
+                    
+                    // Búsqueda optimizada usando HashSet
+                    return codigosSet.Any(codigo => 
+                        rubroProducto.Contains(codigo) || descripcionProducto.Contains(codigo));
+                });
+            }
         }
+        
         return data;
     }
 
-    private void StartInnerResize(MouseEventArgs e)
-    {
-        isInnerResizing = true;
-        _ = JSRuntime.InvokeVoidAsync("innerResizeBegin");
-    }
-    private void StopInnerResize()
-    {
-        isInnerResizing = false;
-        _ = JSRuntime.InvokeVoidAsync("innerResizeEnd");
-    }
 
-    // Modal Rubro/Familia - basado en valores únicos de productos cargados
-    private IEnumerable<string> GetRubrosFiltrados()
+    // Modal Rubro/Familia - optimizado para rendimiento
+    private IEnumerable<FamiliaItem> GetFamiliasFiltradas()
     {
-        // Si hay familias desde API, usar esas descripciones; sino, derivar de RubroCodigo de productos
-        IEnumerable<string> baseList = familias != null && familias.Count > 0
-            ? familias.Select(f => f.Descripcion)
-            : productosSeleccionados
+        // Si no hay familias cargadas, usar rubros de productos (más rápido)
+        if (familias == null || familias.Count == 0)
+        {
+            var rubrosUnicos = productosSeleccionados
                 .Select(p => p.Producto.RubroCodigo ?? string.Empty)
                 .Where(s => !string.IsNullOrWhiteSpace(s))
-                .Distinct();
-        baseList = baseList.OrderBy(s => s);
-        if (string.IsNullOrWhiteSpace(filtroRubroBuscar)) return baseList;
-        var t = filtroRubroBuscar.Trim().ToLowerInvariant();
-        return baseList.Where(s => s.ToLowerInvariant().Contains(t));
+                .Distinct()
+                .Select(r => new FamiliaItem { Descripcion = r, Orden = "0000000000" })
+                .OrderBy(f => f.Descripcion);
+            return rubrosUnicos;
+        }
+
+        // Usar la lista ya filtrada (más rápido que filtrar cada vez)
+        if (string.IsNullOrWhiteSpace(filtroRubroBuscar))
+        {
+            return familiasFiltradas;
+        }
+
+        // Búsqueda rápida solo si hay texto
+        var busqueda = filtroRubroBuscar.Trim().ToLowerInvariant();
+        return familiasFiltradas.Where(f => f.Descripcion.ToLowerInvariant().Contains(busqueda));
     }
 
-    private void SeleccionarRubro(string rubro)
+    private async Task SeleccionarFamilia(FamiliaItem familia)
     {
-        filtroRubro = rubro;
+        filtroRubro = familia.Descripcion;
         showRubroModal = false;
+        
+        // Colapsar filtros automáticamente al seleccionar una familia
+        filtersExpanded = false;
+        
+        // Limpiar cache de códigos de rubro
+        _cachedCodigosRubro.Clear();
+        
+        // Actualizar UI inmediatamente sin debug pesado
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // Obtener todas las familias hijas de una familia padre
+    private List<FamiliaItem> GetFamiliasHijas(FamiliaItem familiaPadre)
+    {
+        if (familias == null || familias.Count == 0) return new List<FamiliaItem>();
+
+        var familiasHijas = new List<FamiliaItem>();
+        var ordenPadre = familiaPadre.Orden;
+
+        foreach (var familia in familias)
+        {
+            // Si la familia actual es hija de la familia padre (su orden empieza con el orden del padre)
+            if (familia.Orden.StartsWith(ordenPadre + ".") || 
+                (familia.Orden != ordenPadre && familia.Orden.Length > ordenPadre.Length && 
+                 familia.Orden.Substring(0, ordenPadre.Length) == ordenPadre))
+            {
+                familiasHijas.Add(familia);
+            }
+        }
+
+        return familiasHijas;
+    }
+
+    // Obtener códigos de rubro para filtrar (incluyendo sub-rubros si está habilitado)
+    // Cache para códigos de rubro para evitar recálculos
+    private string _lastFiltroRubro = string.Empty;
+    private bool _lastIncluirSubRubros = false;
+    private List<string> _cachedCodigosRubro = new();
+
+    private List<string> GetCodigosRubroParaFiltrar()
+    {
+        if (string.IsNullOrWhiteSpace(filtroRubro)) 
+        {
+            _cachedCodigosRubro = new List<string>();
+            return _cachedCodigosRubro;
+        }
+
+        // Usar cache si no han cambiado los parámetros
+        if (_lastFiltroRubro == filtroRubro && _lastIncluirSubRubros == incluirSubRubros && _cachedCodigosRubro.Any())
+        {
+            return _cachedCodigosRubro;
+        }
+
+        var codigos = new List<string>();
+        
+        // Buscar la familia seleccionada (optimizado con HashSet si hay muchas familias)
+        var familiaSeleccionada = familias?.FirstOrDefault(f => f.Descripcion.Equals(filtroRubro, StringComparison.OrdinalIgnoreCase));
+        
+        if (familiaSeleccionada != null)
+        {
+            // Agregar la descripción de la familia
+            codigos.Add(familiaSeleccionada.Descripcion);
+            
+            if (incluirSubRubros)
+            {
+                // Agregar todas las familias hijas (optimizado)
+                var familiasHijas = GetFamiliasHijas(familiaSeleccionada);
+                codigos.AddRange(familiasHijas.Select(f => f.Descripcion));
+            }
+        }
+        else
+        {
+            // Fallback: usar el texto tal como está
+            codigos.Add(filtroRubro);
+        }
+        
+        // Actualizar cache
+        _lastFiltroRubro = filtroRubro;
+        _lastIncluirSubRubros = incluirSubRubros;
+        _cachedCodigosRubro = codigos;
+        
+        return codigos;
+    }
+
+    // Métodos para renderizado virtual
+    private IEnumerable<ProductoStock> GetPaginatedProducts()
+    {
+        var filtered = FilterProductos();
+        var totalItems = filtered.Count();
+        _totalPages = (int)Math.Ceiling((double)totalItems / _itemsPerPage);
+        
+        if (_totalPages == 0) return Enumerable.Empty<ProductoStock>();
+        
+        // Asegurar que la página actual sea válida
+        if (_currentPage >= _totalPages) _currentPage = _totalPages - 1;
+        if (_currentPage < 0) _currentPage = 0;
+        
+        return filtered.Skip(_currentPage * _itemsPerPage).Take(_itemsPerPage);
+    }
+
+    private void NextPage()
+    {
+        if (_currentPage < _totalPages - 1)
+        {
+            _currentPage++;
+            StateHasChanged();
+        }
+    }
+
+    private void PreviousPage()
+    {
+        if (_currentPage > 0)
+        {
+            _currentPage--;
+            StateHasChanged();
+        }
+    }
+
+    private void GoToPage(int page)
+    {
+        if (page >= 0 && page < _totalPages)
+        {
+            _currentPage = page;
+            StateHasChanged();
+        }
+    }
+
+    private void ToggleVirtualization()
+    {
+        _useVirtualization = !_useVirtualization;
+        _currentPage = 0; // Reset a la primera página
+        StateHasChanged();
+    }
+
+    // Calcular el nivel de jerarquía basado en el campo orden
+    private int GetNivelFamilia(string orden)
+    {
+        if (string.IsNullOrWhiteSpace(orden)) return 0;
+        
+        // Contar los puntos en el orden para determinar el nivel
+        return orden.Count(c => c == '.');
+    }
+
+    // Abrir modal de familias de forma optimizada
+    private async Task AbrirModalFamilias()
+    {
+        if (isModalLoading) return;
+        
+        isModalLoading = true;
+        showRubroModal = true;
+        filtroRubroBuscar = string.Empty;
+        
+        try
+        {
+            // Cargar familias solo si no están cargadas
+            if (familias == null || familias.Count == 0)
+            {
+                if (!string.IsNullOrWhiteSpace(token))
+                {
+                    familias = await ProductoService.GetFamiliasAsync(token);
+                }
+            }
+            
+            // Inicializar lista filtrada
+            familiasFiltradas = familias?.ToList() ?? new List<FamiliaItem>();
+        }
+        catch (Exception ex)
+        {
+            // En caso de error, usar rubros de productos
+            familiasFiltradas = productosSeleccionados
+                .Select(p => p.Producto.RubroCodigo ?? string.Empty)
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct()
+                .Select(r => new FamiliaItem { Descripcion = r, Orden = "0000000000" })
+                .ToList();
+        }
+        finally
+        {
+            isModalLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+
+    private void FiltrarFamilias()
+    {
+        // Debounce search para evitar búsquedas excesivas
+        modalSearchTimer?.Dispose();
+        modalSearchTimer = new Timer(async _ =>
+        {
+            await InvokeAsync(() =>
+            {
+                if (!string.IsNullOrWhiteSpace(filtroRubroBuscar))
+                {
+                    var busqueda = filtroRubroBuscar.Trim().ToLowerInvariant();
+                    familiasFiltradas = familias?.Where(f => f.Descripcion.ToLowerInvariant().Contains(busqueda)).ToList() ?? new List<FamiliaItem>();
+                }
+                else
+                {
+                    familiasFiltradas = familias?.ToList() ?? new List<FamiliaItem>();
+                }
+                StateHasChanged();
+            });
+        }, null, 300, Timeout.Infinite);
+    }
+
+    // Toggle para colapsar/expandir la ubicación seleccionada
+    private void ToggleUbicacionCollapse()
+    {
+        ubicacionCollapsed = !ubicacionCollapsed;
+        StateHasChanged();
     }
 }
 
@@ -2214,8 +2642,6 @@
     document.addEventListener('DOMContentLoaded', function() {
         window.forceMobileStyles();
         window.initResize();
-        // Inicializa el resize interno de filtros/grilla
-        window.initInnerVerticalResize();
     });
 
     // Ejecutar al redimensionar la ventana
@@ -2223,35 +2649,9 @@
         window.forceMobileStyles();
     });
 
-    // Resize vertical interno entre filtros y grilla de productos
-    window.initInnerVerticalResize = function() {
-        const handle = document.querySelector('.data-grid-section .resize-handle');
-        const filters = document.querySelector('.data-grid-section .filters-content');
-        if (!handle || !filters) return;
-
-        let resizing = false;
-        let startY = 0;
-        let startHeight = 0;
-
-        handle.addEventListener('mousedown', function(e) {
-            resizing = true;
-            startY = e.clientY;
-            startHeight = filters.getBoundingClientRect().height;
-            document.body.style.cursor = 'row-resize';
-            document.body.style.userSelect = 'none';
-        });
-        document.addEventListener('mousemove', function(e) {
-            if (!resizing) return;
-            const dy = e.clientY - startY;
-            let newH = Math.max(80, startHeight + dy); // mínimo 80px
-            filters.style.height = newH + 'px';
-        });
-        document.addEventListener('mouseup', function() {
-            if (!resizing) return;
-            resizing = false;
-            document.body.style.cursor = '';
-            document.body.style.userSelect = '';
-        });
+    // Detectar si es dispositivo móvil
+    window.isMobileDevice = function() {
+        return window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     }
 
     window.innerResizeBegin = function(){};

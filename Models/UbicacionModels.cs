@@ -79,8 +79,14 @@ public class ProductoStock
 
 public class FamiliaItem
 {
+    [JsonPropertyName("familiaID")]
     public int FamiliaID { get; set; }
+    
+    [JsonPropertyName("descripcion")]
     public string Descripcion { get; set; } = string.Empty;
+    
+    [JsonPropertyName("orden")]
+    public string Orden { get; set; } = string.Empty;
 }
 
 public class TreeNode
