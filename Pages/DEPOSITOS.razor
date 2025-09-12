@@ -1,0 +1,2259 @@
+﻿@page "/DEPOSITOS"
+@using BlazorApp_ProductosAPI.Models
+@using BlazorApp_ProductosAPI.Services
+@inject UbicacionService UbicacionService
+@inject TreeBuilderService TreeBuilderService
+@inject IJSRuntime JSRuntime
+@inject ProductoService ProductoService
+
+<style>
+    /* Estilos inline para asegurar que se apliquen */
+    .depositos-container {
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .depositos-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 1.5rem;
+        background: white;
+        border-bottom: 1px solid #dee2e6;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+    }
+
+    .depositos-content {
+        flex: 1;
+        display: flex;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .left-panel {
+        width: 35%;
+        min-width: 280px;
+        max-width: 70%;
+        display: flex;
+        flex-direction: column;
+        background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+        border-right: 1px solid #dee2e6;
+        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
+        resize: horizontal;
+        overflow: auto;
+        transition: all 0.3s ease;
+    }
+
+    /* Cuando el panel derecho está oculto, el izquierdo ocupa todo el espacio */
+    .right-panel.panel-hidden ~ .left-panel,
+    .right-panel[style*="display: none"] ~ .left-panel {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 100% !important;
+        flex: 1 !important;
+    }
+
+    .resize-handle {
+        width: 4px;
+        background: #dee2e6;
+        cursor: col-resize;
+        flex-shrink: 0;
+        transition: background-color 0.2s ease;
+        position: relative;
+    }
+
+    .resize-handle:hover {
+        background: #007bff;
+        width: 6px;
+    }
+
+    .resize-handle::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 2px;
+        height: 20px;
+        background: #6c757d;
+        border-radius: 1px;
+    }
+
+    .resize-handle:hover::before {
+        background: white;
+    }
+
+    .tree-node {
+        display: block;
+        cursor: pointer;
+        border-radius: 8px;
+        margin-bottom: 4px;
+        transition: all 0.2s ease-in-out;
+        outline: none;
+        position: relative;
+        border: 1px solid transparent;
+        background: white;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .tree-node:hover {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-color: #dee2e6;
+        transform: translateX(2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .tree-node.selected {
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        border-color: #007bff;
+        border-left: 4px solid #007bff;
+        box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
+        transform: translateX(2px);
+    }
+
+    .node-content {
+        display: flex;
+        align-items: center;
+        padding: 12px 16px;
+        gap: 12px;
+        min-height: 48px;
+    }
+
+    .expand-btn {
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        border: 1px solid #dee2e6;
+        padding: 6px;
+        cursor: pointer;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+        color: #6c757d;
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .expand-btn:hover {
+        background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+        color: #343a40;
+        transform: scale(1.05);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+
+    .expand-btn.expanded {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        border-color: #007bff;
+    }
+
+    .expand-btn.expanded i {
+        transform: rotate(90deg);
+        transition: transform 0.2s ease;
+    }
+
+    .node-badge {
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 4px 8px;
+        border-radius: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        min-width: 70px;
+        text-align: center;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        color: white;
+    }
+
+    .badge-empresa {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        border: 1px solid #0056b3;
+    }
+
+    .badge-deposito {
+        background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+        border: 1px solid #1e7e34;
+    }
+
+    .badge-zona {
+        background: linear-gradient(135deg, #6f42c1 0%, #5a32a3 100%);
+        border: 1px solid #5a32a3;
+    }
+
+    .badge-subzona {
+        background: linear-gradient(135deg, #fd7e14 0%, #e55a00 100%);
+        border: 1px solid #e55a00;
+    }
+
+    .badge-otros {
+        background: linear-gradient(135deg, #6c757d 0%, #545b62 100%);
+        border: 1px solid #545b62;
+    }
+
+    .node-text {
+        flex: 1;
+        font-weight: 600;
+        font-size: 0.95rem;
+        line-height: 1.4;
+        padding: 4px 0;
+        border-radius: 6px;
+        padding: 8px 12px;
+        margin-left: 8px;
+        transition: all 0.2s ease;
+    }
+
+    /* Colores por nivel para el texto */
+    .tree-node[data-level="0"] .node-text {
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        color: #0056b3;
+        border: 1px solid #90caf9;
+    }
+
+    .tree-node[data-level="1"] .node-text {
+        background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);
+        color: #1e7e34;
+        border: 1px solid #a5d6a7;
+    }
+
+    .tree-node[data-level="2"] .node-text {
+        background: linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%);
+        color: #5a32a3;
+        border: 1px solid #ce93d8;
+    }
+
+    .tree-node[data-level="3"] .node-text {
+        background: linear-gradient(135deg, #fff3e0 0%, #ffcc80 100%);
+        color: #e55a00;
+        border: 1px solid #ffb74d;
+    }
+
+    .tree-node[data-level="4"] .node-text {
+        background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%);
+        color: #545b62;
+        border: 1px solid #bdbdbd;
+    }
+
+    .node-children {
+        margin-left: 24px;
+        position: relative;
+        padding-left: 16px;
+    }
+
+    .node-children::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: linear-gradient(to bottom, #dee2e6, transparent);
+    }
+
+    .right-panel {
+        width: 65%;
+        display: flex;
+        flex-direction: column;
+        background: white;
+    }
+
+    .filters-content {
+        padding: 1rem;
+        max-height: 50vh;
+        overflow-y: auto;
+        transition: all 0.3s ease;
+    }
+
+    .filters-content.collapsed {
+        max-height: 0;
+        padding: 0 1rem;
+        overflow: hidden;
+    }
+
+    /* Responsive Design - Mobile First Approach */
+    @@media (max-width: 1200px) {
+        .depositos-header {
+            flex-direction: column;
+            gap: 1rem;
+            padding: 1rem;
+        }
+        
+        .header-right {
+            width: 100%;
+            justify-content: space-between;
+        }
+        
+        .token-section {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .token-input {
+            width: 200px;
+            min-width: 150px;
+        }
+    }
+
+    @@media (max-width: 992px) {
+        .left-panel {
+            width: 40%;
+            min-width: 280px;
+        }
+        
+        .right-panel {
+            width: 60%;
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .depositos-container {
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .depositos-header {
+            padding: 1rem;
+            flex-direction: row;
+            gap: 1rem;
+            position: sticky;
+            top: 0;
+            z-index: 1001;
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+            border-radius: 0 0 16px 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            margin-bottom: 8px;
+            align-items: center;
+        }
+
+        .page-title {
+            font-size: 1.25rem;
+            text-align: center;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .token-section {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .token-input {
+            width: 250px;
+            min-width: 200px;
+            font-size: 16px; /* Prevents zoom on iOS */
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+            padding: 0.75rem 1rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .token-input:focus {
+            border-color: #007bff;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+            transform: translateY(-1px);
+        }
+
+        .load-btn {
+            padding: 0.75rem 1.5rem;
+            font-size: 0.95rem;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            border: none;
+            box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+            transition: all 0.3s ease;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .load-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 123, 255, 0.4);
+        }
+
+        .panel-toggle {
+            position: static;
+            padding: 0.5rem 1rem;
+            font-size: 0.9rem;
+            white-space: nowrap;
+            border-radius: 8px;
+        }
+
+        .depositos-content {
+            flex-direction: column;
+            height: calc(100vh - 120px);
+            overflow: hidden;
+        }
+
+        .left-panel {
+            width: 100% !important;
+            height: calc(100vh - 100px) !important;
+            min-height: calc(100vh - 100px) !important;
+            max-height: calc(100vh - 100px) !important;
+            resize: none;
+            border-right: none;
+            border-bottom: none;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            border-radius: 12px;
+            margin: 8px;
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        }
+
+        .right-panel {
+            display: none !important;
+            width: 0 !important;
+            height: 0 !important;
+            overflow: hidden !important;
+        }
+
+        .resize-handle {
+            display: none;
+        }
+
+        .panel-header {
+            padding: 1.5rem;
+            margin: 0;
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+            border-radius: 12px 12px 0 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .search-input-group {
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .search-input {
+            font-size: 16px; /* Prevents zoom on iOS */
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+            padding: 0.75rem 1rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .search-input:focus {
+            border-color: #007bff;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+            transform: translateY(-1px);
+        }
+
+        .tree-controls {
+            flex-direction: column;
+            gap: 0.75rem;
+            align-items: stretch;
+        }
+
+        .tree-controls .btn {
+            width: 100%;
+            padding: 1rem;
+            font-size: 0.95rem;
+            margin-bottom: 0.5rem;
+            border-radius: 10px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .tree-controls .btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .node-content {
+            padding: 10px 12px;
+            min-height: 44px; /* Touch-friendly minimum */
+        }
+
+        .expand-btn {
+            width: 32px;
+            height: 32px;
+            min-width: 32px;
+            min-height: 32px;
+        }
+
+        .node-text {
+            font-size: 0.9rem;
+            line-height: 1.3;
+        }
+
+        .filters-content {
+            max-height: none;
+            padding: 0.75rem;
+        }
+
+        .filter-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .input-group {
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .input-group .form-control,
+        .input-group .form-select {
+            width: 100%;
+            font-size: 16px; /* Prevents zoom on iOS */
+            padding: 0.75rem;
+        }
+
+        .input-group-text {
+            justify-content: center;
+            padding: 0.75rem;
+        }
+
+        .filter-checkboxes {
+            gap: 0.75rem;
+        }
+
+        .form-check {
+            padding: 0.5rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+
+        .form-check-input {
+            width: 20px;
+            height: 20px;
+        }
+
+        .form-check-label {
+            font-size: 0.95rem;
+            line-height: 1.4;
+        }
+
+        .grid-columns {
+            grid-template-columns: 1fr;
+            gap: 0;
+        }
+
+        .grid-column {
+            padding: 0.75rem;
+            font-size: 0.9rem;
+            border-bottom: 1px solid #dee2e6;
+            text-align: left;
+        }
+
+        .grid-column:before {
+            content: attr(data-label) ": ";
+            font-weight: 600;
+            color: #6c757d;
+        }
+
+        .empty-grid {
+            height: 150px;
+            padding: 1rem;
+        }
+
+        .empty-grid i {
+            font-size: 2rem;
+        }
+
+        .empty-grid p {
+            font-size: 0.9rem;
+            text-align: center;
+        }
+    }
+
+    @@media (max-width: 576px) {
+        .depositos-header {
+            padding: 0.5rem;
+        }
+
+        .page-title {
+            font-size: 1.1rem;
+        }
+
+        .left-panel {
+            height: 40vh;
+            min-height: 250px;
+        }
+
+        .right-panel {
+            height: 60vh;
+            min-height: 300px;
+        }
+
+        .panel-header {
+            padding: 0.75rem;
+            margin: 2px;
+        }
+
+        .node-content {
+            padding: 8px 10px;
+            gap: 8px;
+        }
+
+        .node-text {
+            font-size: 0.85rem;
+        }
+
+        .node-badge {
+            font-size: 0.65rem;
+            padding: 3px 6px;
+            min-width: 60px;
+        }
+
+        .filters-title {
+            font-size: 1.1rem;
+        }
+
+        .filter-group label {
+            font-size: 0.9rem;
+        }
+
+        .grid-column {
+            padding: 0.5rem;
+            font-size: 0.85rem;
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .depositos-header {
+            flex-direction: column !important;
+            gap: 0.75rem !important;
+            padding: 0.75rem !important;
+        }
+        
+        .page-title {
+            text-align: center !important;
+            width: 100% !important;
+        }
+        
+        .header-right {
+            width: 100% !important;
+            justify-content: center !important;
+            flex-direction: column !important;
+            gap: 0.75rem !important;
+        }
+        
+        .token-section {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 0.5rem !important;
+            width: 100% !important;
+        }
+        
+        .token-input {
+            width: 100% !important;
+            min-width: auto !important;
+        }
+        
+        .load-btn {
+            width: 100% !important;
+        }
+    }
+
+    @@media (max-width: 480px) {
+        .depositos-header {
+            flex-direction: column !important;
+            gap: 0.75rem !important;
+            padding: 0.75rem !important;
+        }
+
+        .header-right {
+            width: 100% !important;
+            justify-content: space-between !important;
+        }
+
+        .token-section {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 0.5rem !important;
+        }
+
+        .token-input {
+            width: 100% !important;
+            min-width: auto !important;
+        }
+
+        .load-btn {
+            width: 100% !important;
+        }
+
+        .left-panel {
+            height: 35vh;
+            min-height: 200px;
+        }
+
+        .right-panel {
+            height: 65vh;
+            min-height: 250px;
+        }
+
+        .node-content {
+            padding: 6px 8px;
+            min-height: 40px;
+        }
+
+        .expand-btn {
+            width: 28px;
+            height: 28px;
+            min-width: 28px;
+            min-height: 28px;
+        }
+
+        .node-text {
+            font-size: 0.8rem;
+        }
+
+        .node-badge {
+            font-size: 0.6rem;
+            padding: 2px 4px;
+            min-width: 50px;
+        }
+    }
+
+    /* Landscape orientation for mobile */
+    @@media (max-width: 768px) and (orientation: landscape) {
+        .left-panel {
+            height: 50vh;
+        }
+
+        .right-panel {
+            height: 50vh;
+        }
+    }
+
+    /* Touch-friendly improvements */
+    @@media (hover: none) and (pointer: coarse) {
+        .tree-node {
+            min-height: 44px;
+        }
+
+        .expand-btn {
+            min-width: 44px;
+            min-height: 44px;
+        }
+
+        .btn {
+            min-height: 44px;
+            padding: 0.75rem 1rem;
+        }
+
+        .form-control,
+        .form-select {
+            min-height: 44px;
+        }
+    }
+
+    /* Panel toggle buttons */
+    .panel-toggle {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 1001;
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        padding: 8px 12px;
+        cursor: pointer;
+        font-size: 0.8rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .panel-toggle:hover {
+        background: #f8f9fa;
+        border-color: #007bff;
+    }
+
+    .panel-hidden {
+        display: none !important;
+    }
+
+    /* Mobile-specific styles */
+    .title-text {
+        display: inline;
+    }
+
+    .token-label {
+        font-weight: 500;
+        margin: 0;
+        color: var(--dark-color);
+        display: block;
+    }
+
+    .btn-text {
+        display: inline;
+    }
+
+    .toggle-text {
+        display: inline;
+    }
+
+    /* Mobile optimizations */
+    @@media (max-width: 768px) {
+        .title-text {
+            display: none;
+        }
+
+        .page-title i {
+            font-size: 1.5rem;
+        }
+
+        .token-label {
+            font-size: 0.9rem;
+        }
+
+        .btn-text {
+            display: none;
+        }
+
+        .load-btn i {
+            font-size: 1.2rem;
+        }
+
+        .toggle-text {
+            display: none;
+        }
+
+        .panel-toggle {
+            padding: 8px;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            justify-content: center;
+        }
+
+        .panel-toggle i {
+            font-size: 1.1rem;
+        }
+    }
+
+    @@media (max-width: 480px) {
+        .page-title {
+            font-size: 1rem;
+        }
+
+        .panel-toggle {
+            width: 36px;
+            height: 36px;
+            padding: 6px;
+        }
+
+        .panel-toggle i {
+            font-size: 1rem;
+        }
+    }
+
+    /* Improved touch targets */
+    .tree-node {
+        -webkit-tap-highlight-color: transparent;
+        user-select: none;
+    }
+
+    .btn {
+        -webkit-tap-highlight-color: transparent;
+        user-select: none;
+    }
+
+    /* Better scrolling on mobile */
+    .tree-content,
+    .filters-content {
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+    }
+
+    /* Prevent horizontal scroll */
+    .depositos-container {
+        overflow-x: hidden;
+    }
+
+    /* Hide products panel on mobile */
+    @@media (max-width: 768px) {
+        .mobile-hidden {
+            display: none !important;
+        }
+    }
+
+    /* Ocultar completamente la barra divisoria cuando productos está oculto */
+    .resize-handle.hidden {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+
+    /* Ocultar handle cuando cualquier panel está oculto */
+    .left-panel.panel-hidden ~ .resize-handle,
+    .right-panel.panel-hidden ~ .resize-handle,
+    .left-panel[style*="display: none"] ~ .resize-handle,
+    .right-panel[style*="display: none"] ~ .resize-handle {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+
+    /* Mostrar handle solo cuando ambos paneles están visibles */
+    .left-panel:not(.panel-hidden):not([style*="display: none"]) ~ .resize-handle,
+    .right-panel:not(.panel-hidden):not([style*="display: none"]) ~ .resize-handle {
+        display: block !important;
+        width: 4px !important;
+        height: 100% !important;
+        overflow: visible !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+    }
+
+    /* Asegurar que los paneles ocupen 100% cuando el otro está oculto */
+    .left-panel.panel-hidden ~ .right-panel {
+        width: 100% !important;
+        flex: 1 !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    .right-panel.panel-hidden ~ .left-panel {
+        width: 100% !important;
+        flex: 1 !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    /* Mobile-specific grid improvements */
+    @@media (max-width: 768px) {
+        .grid-columns {
+            display: block;
+        }
+
+        .grid-column {
+            display: block;
+            width: 100%;
+            border-bottom: 1px solid #dee2e6;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+
+        .grid-column:before {
+            content: attr(data-label) ": ";
+            font-weight: 600;
+            color: #6c757d;
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+    }
+</style>
+
+<div class="depositos-container">
+    <!-- Header -->
+    <div class="depositos-header" style="background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important; border-radius: 0 0 16px 16px !important; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1) !important; margin-bottom: 8px !important; padding: 1rem !important; display: flex !important; align-items: center !important; justify-content: space-between !important; flex-wrap: wrap !important; gap: 1rem !important; position: sticky; top: 0; z-index: 1001;">
+        <!-- Título -->
+        <h2 class="page-title" style="margin: 0 !important; display: flex !important; align-items: center !important; gap: 0.5rem !important;">
+                <i class="oi oi-location"></i>
+            <span class="title-text">Stock por ubicación</span>
+            </h2>
+        
+        <!-- Controles del lado derecho -->
+        <div style="display: flex !important; align-items: center !important; gap: 1rem !important; flex-wrap: wrap !important;">
+            <!-- Token Section -->
+            <div style="display: flex !important; align-items: center !important; gap: 0.5rem !important;">
+                <label for="token-input" style="margin: 0 !important; font-weight: 500 !important; white-space: nowrap !important;">Token:</label>
+                <input type="password" 
+                       id="token-input"
+                       @bind="token" 
+                       @oninput="OnTokenInput"
+                       @onkeypress="OnTokenKeyPress"
+                       placeholder="Ingrese Bearer Token"
+                       style="width: 200px !important; border-radius: 10px !important; border: 2px solid #e9ecef !important; padding: 0.5rem 0.75rem !important; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important; transition: all 0.3s ease !important;" />
+            </div>
+            
+            <!-- Botón Cargar -->
+                <button @onclick="LoadUbicaciones" 
+                        disabled="@isLoading"
+                    style="background: linear-gradient(135deg, #007bff 0%, #0056b3 100%) !important; border: none !important; border-radius: 10px !important; box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3) !important; padding: 0.5rem 1rem !important; font-weight: 600 !important; transition: all 0.3s ease !important; color: white !important; white-space: nowrap !important;">
+                    @if (isLoading)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2"></span>
+                    }
+                    <i class="oi oi-reload"></i>
+                    Cargar ubicaciones
+                </button>
+            
+            <!-- Botón Ocultar Ubicaciones -->
+            <button @onclick="ToggleLeftPanel" 
+                    style="background: #28a745 !important; border: none !important; border-radius: 8px !important; padding: 0.5rem 1rem !important; color: white !important; font-weight: 500 !important; white-space: nowrap !important; transition: all 0.3s ease !important;">
+                <i class="oi @(leftPanelHidden ? "oi-eye" : "oi-eye-slash")"></i>
+                @(leftPanelHidden ? "Mostrar" : "Ocultar") Ubicaciones
+            </button>
+            
+            <!-- Botón Ocultar Productos -->
+            <button @onclick="ToggleRightPanel" 
+                    style="background: #6c757d !important; border: none !important; border-radius: 8px !important; padding: 0.5rem 1rem !important; color: white !important; font-weight: 500 !important; white-space: nowrap !important; transition: all 0.3s ease !important;">
+                <i class="oi @(rightPanelHidden ? "oi-eye" : "oi-eye-slash")"></i>
+                @(rightPanelHidden ? "Mostrar" : "Ocultar") Productos
+            </button>
+        </div>
+    </div>
+
+        <!-- Main Content -->
+        <div class="depositos-content">
+            <!-- Left Panel - Tree -->
+            <div class="left-panel @(leftPanelHidden ? "panel-hidden" : "")" style="width: 100% !important; height: calc(100vh - 100px) !important; min-height: calc(100vh - 100px) !important; max-height: calc(100vh - 100px) !important; background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important; border-radius: 12px !important; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important; margin: 8px !important;">
+            <div class="panel-header">
+                <div class="search-section">
+                    <label for="search-input">Buscar ubicación:</label>
+                    <div class="search-input-group">
+                        <input type="text" 
+                               id="search-input"
+                               @bind="searchTerm" 
+                               @oninput="OnSearchInput"
+                               placeholder="Filtrar por descripción..."
+                               class="form-control search-input"
+                               style="border-radius: 10px !important; border: 2px solid #e9ecef !important; padding: 0.75rem 1rem !important; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important; transition: all 0.3s ease !important;" />
+                    </div>
+                </div>
+            </div>
+            
+            <div class="tree-panel">
+                <div class="tree-container">
+                    <div class="tree-header">
+                        <div class="tree-controls">
+                            <button @onclick="ExpandAll" class="btn btn-sm btn-outline-primary" disabled="@isLoading" style="border-radius: 10px !important; padding: 1rem !important; font-weight: 600 !important; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important; transition: all 0.3s ease !important;">
+                                <i class="oi oi-expand-down"></i> Expandir Todo
+                            </button>
+                            <button @onclick="CollapseAll" class="btn btn-sm btn-outline-secondary" disabled="@isLoading" style="border-radius: 10px !important; padding: 1rem !important; font-weight: 600 !important; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important; transition: all 0.3s ease !important;">
+                                <i class="oi oi-collapse-up"></i> Colapsar Todo
+                            </button>
+                            <span class="node-count">Nodos: @VisibleNodeCount</span>
+                        </div>
+                    </div>
+                    
+                    <div class="tree-content">
+                        @if (isLoading)
+                        {
+                            <div class="loading-skeleton">
+                                <div class="skeleton-item"></div>
+                                <div class="skeleton-item"></div>
+                                <div class="skeleton-item"></div>
+                            </div>
+                        }
+                        else if (rootNodes?.Any() == true)
+                        {
+                            @foreach (var node in rootNodes.Where(n => n.IsVisible))
+                            {
+                                <TreeNodeComponent Node="node" OnNodeSelected="OnNodeSelected" />
+                            }
+                        }
+                        else
+                        {
+                            <div class="empty-state">
+                                <p>No hay ubicaciones cargadas</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+            </div>
+
+            <!-- Resize Handle -->
+            <div class="resize-handle" 
+                 @ref="resizeHandle"></div>
+
+            <!-- Right Panel - Filters -->
+            <div class="right-panel @(rightPanelHidden ? "panel-hidden" : "") mobile-hidden">
+            <div class="panel-header">
+                <h4 class="filters-title">
+                    <i class="oi oi-clipboard"></i>
+                    Productos de la ubicación
+                </h4>
+                <div class="d-flex" style="gap: .5rem; align-items: center;">
+                    <button class="btn btn-sm btn-success" disabled="@isTogglingInventory" @onclick="ToggleInventario">
+                        @if (isTogglingInventory)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                        }
+                        <i class="oi oi-check"></i> @(inventarioEditable ? "Finalizar inventario" : "Realizar inventario")
+                    </button>
+                    <button @onclick="ToggleFilters" 
+                            class="btn btn-sm btn-outline-secondary toggle-filters">
+                        <i class="oi @(filtersExpanded ? "oi-chevron-up" : "oi-chevron-down")"></i>
+                        @(filtersExpanded ? "Contraer filtros" : "Expandir filtros")
+                    </button>
+                </div>
+            </div>
+
+            @if (selectedNode != null)
+            {
+                <div class="selected-location" style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%) !important; border: 2px solid #007bff !important; border-radius: 12px !important; padding: 1rem !important; margin: 1rem !important; box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15) !important;">
+                    <div style="display: flex !important; align-items: center !important; gap: 0.5rem !important; margin-bottom: 0.5rem !important;">
+                        <i class="oi oi-location" style="color: #007bff !important; font-size: 1.2rem !important;"></i>
+                        <strong style="color: #0056b3 !important; font-size: 1.1rem !important;">Ubicación seleccionada:</strong>
+                    </div>
+                    <div class="location-path" style="background: white !important; padding: 0.75rem !important; border-radius: 8px !important; border: 1px solid #90caf9 !important; font-weight: 600 !important; color: #0056b3 !important; font-size: 1rem !important; line-height: 1.4 !important;">
+                        @GetLocationPath(selectedNode)
+                    </div>
+                    <!-- Debug info -->
+                    <div style="font-size: 0.8rem; color: #666; margin-top: 0.5rem;">
+                        Debug: @selectedNode.Item.Descripcion (Nivel: @selectedNode.Level) | ID: @selectedNode.Item.ProductoUbicacionID | Orden: @selectedNode.Item.Orden
+                    </div>
+                    <div style="font-size: 0.7rem; color: #999; margin-top: 0.25rem;">
+                        selectedNode != null: @(selectedNode != null) | selectedNode.Item != null: @(selectedNode?.Item != null)
+                    </div>
+                    <div style="font-size: 0.7rem; color: #ff0000; margin-top: 0.25rem; font-weight: bold;">
+                        RENDERIZANDO: @selectedNode.Item.Descripcion (Level: @selectedNode.Level)
+                    </div>
+                </div>
+                
+                <!-- Productos: filtros + divisor + grilla -->
+                <div class="data-grid-section" style="margin: 0 1rem 1rem 1rem; display: flex; flex-direction: column; height: calc(100% - 24px);">
+                    <!-- Filtros internos (ocultos por defecto) -->
+                    <div class="filters-content @(filtersExpanded ? "" : "collapsed")" style="height: @(filtersExpanded ? $"{filtrosAltura}px" : "0"); overflow: hidden;">
+                        <div class="filters-row">
+                            <div class="filter-group">
+                                <label>Descripción</label>
+                                <div class="input-group">
+                                    <input class="form-control" placeholder="Filtrar por descripción..." @bind="filtroTexto" @bind:event="oninput" />
+                                    <button class="btn btn-outline-secondary" @onclick="() => { filtroTexto = string.Empty; }"><i class="oi oi-x"></i></button>
+                                </div>
+                            </div>
+                            <div class="filter-group">
+                                <label>Rubro / Familia</label>
+                                <div class="input-group">
+                                    <input class="form-control" placeholder="Seleccione rubro/familia" value="@filtroRubro" disabled />
+                                    <button class="btn btn-outline-primary" @onclick="() => showRubroModal = true"><i class="oi oi-magnifying-glass"></i> Rubros/Familias</button>
+                                    <button class="btn btn-outline-secondary" @onclick="() => { filtroRubro = string.Empty; }"><i class="oi oi-x"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Divisor interno vertical para ajustar altura filtros/grilla -->
+                    <div class="resize-handle" style="height: 6px; cursor: row-resize; width: 100%; background: #dee2e6; margin: 4px 0;" @onmousedown="StartInnerResize" @onmouseup="StopInnerResize" @ref="innerResizeHandle"></div>
+
+                    <!-- Grilla -->
+                    <div class="grid-content" style="flex: 1; overflow: auto;">
+                        @if (selectedProductsCount == 0 && !isLoading)
+                        {
+                            <div class="empty-grid">
+                                <i class="oi oi-table"></i>
+                                <p>No hay productos para esta ubicación</p>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="grid-header">
+                                <div class="grid-columns">
+                                    <div class="grid-column" data-label="Rub/Cód">Rub/Cód</div>
+                                    <div class="grid-column" data-label="Producto">Producto</div>
+                                    <div class="grid-column" data-label="Stock Actual">Stock Actual</div>
+                                    <div class="grid-column" data-label="Mínimo">Mínimo</div>
+                                    <div class="grid-column" data-label="Sugerido">Sugerido</div>
+                                </div>
+                            </div>
+                            @if (isLoading)
+                            {
+                                <div class="grid-loading">
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                    Cargando productos...
+                                </div>
+                            }
+                            else
+                            {
+                                @foreach (var p in productosFiltrados)
+                                {
+                                    <div class="grid-columns grid-row" style="border-bottom: 1px solid #eee;">
+                                        <div class="grid-column" data-label="Rub/Cód">@p.Producto.RubroCodigo</div>
+                                        <div class="grid-column" data-label="Producto" style="text-align:left; font-weight:400;">@p.Producto.DescripcionLarga</div>
+                                        <div class="grid-column" data-label="Stock Actual">
+                                            @if (inventarioEditable)
+                                            {
+                                                <input class="form-control fast-number" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="@((p.CantidadInventario ?? p.StockActual ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture))" @oninput="(e) => OnCantidadInput(p, e)" />
+                                            }
+                                            else
+                                            {
+                                                <span class="numeric">@p.StockActual?.ToString("N3")</span>
+                                            }
+                                        </div>
+                                        <div class="grid-column numeric" data-label="Mínimo">@p.StockMinimo?.ToString("N3")</div>
+                                        <div class="grid-column numeric" data-label="Sugerido">@p.StockSugerido?.ToString("N3")</div>
+                                    </div>
+                                }
+                            }
+                        }
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="no-selection" style="background: #f8f9fa !important; border: 2px dashed #dee2e6 !important; border-radius: 12px !important; padding: 2rem !important; margin: 1rem !important; text-align: center !important;">
+                    <i class="oi oi-location" style="font-size: 2rem !important; color: #6c757d !important; margin-bottom: 1rem !important;"></i>
+                    <p style="color: #6c757d !important; font-size: 1rem !important; margin: 0 !important;">Seleccione una ubicación para ver los productos</p>
+                </div>
+            }
+
+            
+
+            <!-- Data Grid Placeholder -->
+@*             <div class="data-grid-section">
+                <div class="grid-header">
+                    <div class="grid-columns">
+                        <div class="grid-column" data-label="Rub/Cód">Rub/Cód</div>
+                        <div class="grid-column" data-label="Producto">Producto</div>
+                        <div class="grid-column" data-label="Stock Actual">Stock Actual</div>
+                        <div class="grid-column" data-label="Mínimo">Mínimo</div>
+                        <div class="grid-column" data-label="Sugerido">Sugerido</div>
+                    </div>
+                </div>
+                <div class="grid-content">
+                    <div class="empty-grid">
+                        <i class="oi oi-table"></i>
+                        <p>Seleccione una ubicación para ver los productos</p>
+                    </div>
+                </div>
+
+            </div> *@
+
+            <div class="grid-footer">
+                <span class="record-count">Registros: @selectedProductsCount</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Banner -->
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="error-banner">
+            <i class="oi oi-warning"></i>
+            <span>@errorMessage</span>
+            <button @onclick="() => errorMessage = string.Empty" class="btn-close">
+                <i class="oi oi-x"></i>
+            </button>
+        </div>
+    }
+</div>
+
+<!-- Modal: Rubro / Familia -->
+<AppModal IsOpen="showRubroModal" Title="Buscar Rubro / Familia" OnClose="() => showRubroModal = false">
+    <ChildContent>
+        <input class="modal-input" placeholder="Filtrar rubro/familia..." @bind="filtroRubroBuscar" @bind:event="oninput" />
+        <div class="modal-list">
+            @foreach (var r in GetRubrosFiltrados())
+            {
+                <div class="modal-item" @onclick="() => SeleccionarRubro(r)">@r</div>
+            }
+        </div>
+    </ChildContent>
+    <FooterContent>
+        <button class="btn" @onclick="() => showRubroModal = false">Cerrar</button>
+    </FooterContent>
+</AppModal>
+
+@code {
+    private string token = string.Empty;
+    private string searchTerm = string.Empty;
+    private bool isLoading = false;
+    private bool filtersExpanded = false;
+    private string errorMessage = string.Empty;
+    private List<TreeNode> rootNodes = new();
+    private TreeNode? selectedNode = null;
+    private Timer? searchTimer;
+    private bool rightPanelHidden = false;
+    private bool leftPanelHidden = false;
+    private bool isResizing = false;
+    private ElementReference resizeHandle;
+    private bool isProcessingSelection = false;
+    // Productos tipados, estado de filtros y edición de inventario
+    private List<ProductoStock> productosSeleccionados = new();
+    private int selectedProductsCount = 0;
+    private bool inventarioEditable = false;
+    private bool isTogglingInventory = false;
+    private string filtroTexto = string.Empty; // descripción
+    private string filtroRubro = string.Empty; // rubro/familia seleccionado
+    private string filtroRubroBuscar = string.Empty; // texto de búsqueda dentro del modal
+    private bool showRubroModal = false;
+    private List<FamiliaItem> familias = new();
+    private ElementReference innerResizeHandle;
+    private double filtrosAltura = 180;
+    private bool isInnerResizing = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("forceMobileStyles");
+            await LoadTokenFromStorage();
+            // Aplicar el estado inicial de ambos paneles
+            await JSRuntime.InvokeVoidAsync("toggleProductsPanel", rightPanelHidden);
+            await JSRuntime.InvokeVoidAsync("toggleLocationsPanel", leftPanelHidden);
+            // Inicializar el sistema de resize
+            await JSRuntime.InvokeVoidAsync("initResize");
+            // Establecer la referencia del componente para JavaScript
+            await JSRuntime.InvokeVoidAsync("setBlazorComponent", DotNetObjectReference.Create(this));
+            // Pre-cargar familias para el modal
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(token))
+                {
+                    familias = await ProductoService.GetFamiliasAsync(token);
+                }
+            }
+            catch {}
+        }
+    }
+
+    private async Task LoadTokenFromStorage()
+    {
+        try
+        {
+            var savedToken = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "depositos_token");
+            if (!string.IsNullOrEmpty(savedToken))
+            {
+                token = savedToken;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Error loading token
+        }
+    }
+
+    private async Task SaveTokenToStorage()
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(token))
+            {
+                await JSRuntime.InvokeVoidAsync("localStorage.setItem", "depositos_token", token);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Error saving token
+        }
+    }
+
+    private async Task LoadUbicaciones()
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            errorMessage = "Por favor ingrese un token válido";
+            return;
+        }
+
+        isLoading = true;
+        errorMessage = string.Empty;
+        selectedNode = null; // Resetear selección al cargar nuevas ubicaciones
+
+        try
+        {
+            // Guardar el token en localStorage
+            await SaveTokenToStorage();
+            
+            var response = await UbicacionService.GetUbicacionesAsync(token);
+            
+            if (response?.Data != null)
+            {
+                rootNodes = TreeBuilderService.BuildTree(response.Data);
+            }
+            else
+            {
+                errorMessage = "Error al cargar las ubicaciones. Verifique el token.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnTokenKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await LoadUbicaciones();
+        }
+    }
+
+    private async Task OnTokenInput(ChangeEventArgs e)
+    {
+        token = e.Value?.ToString() ?? string.Empty;
+        // Guardar automáticamente cuando el usuario escribe
+        if (!string.IsNullOrEmpty(token))
+        {
+            await SaveTokenToStorage();
+        }
+    }
+
+    private void OnSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? string.Empty;
+        
+        // Debounce search
+        searchTimer?.Dispose();
+        searchTimer = new Timer(async _ =>
+        {
+            await InvokeAsync(() =>
+            {
+                TreeBuilderService.ApplySearch(rootNodes, searchTerm);
+                StateHasChanged();
+            });
+        }, null, 250, Timeout.Infinite);
+    }
+
+
+    private void ToggleFilters()
+    {
+        filtersExpanded = !filtersExpanded;
+    }
+
+    [JSInvokable]
+    public async Task SelectNodeFromJS(int nodeId, string descripcion, int level, string orden)
+    {
+        // Validar parámetros
+        if (nodeId <= 0 || string.IsNullOrEmpty(descripcion))
+        {
+            return;
+        }
+        
+        // Buscar el nodo en el árbol
+        var node = FindNodeById(rootNodes, nodeId);
+        
+        if (node != null)
+        {
+            // Deseleccionar nodo anterior
+            if (selectedNode != null)
+            {
+                selectedNode.IsSelected = false;
+            }
+
+            // Seleccionar nuevo nodo
+            node.IsSelected = true;
+            selectedNode = node;
+            
+            // Forzar actualización del estado
+            StateHasChanged();
+            
+            // Asegurar que el panel de productos esté visible (especialmente en móviles)
+            await JSRuntime.InvokeVoidAsync("toggleProductsPanel", false);
+            rightPanelHidden = false;
+            
+            // Si se selecciona un depósito o cualquier sub-ubicación, ocultar el panel de ubicaciones
+            bool shouldHideLocations = node.Level > 0;
+            
+            if (shouldHideLocations && !leftPanelHidden)
+            {
+                await ToggleLeftPanel();
+            }
+
+            // Cargar productos de la ubicación seleccionada
+            await LoadProductsForNode(node);
+        }
+        else
+        {
+            // Intentar buscar por descripción como fallback
+            var nodeByDesc = FindNodeByDescription(rootNodes, descripcion);
+            if (nodeByDesc != null)
+            {
+                // Deseleccionar nodo anterior
+                if (selectedNode != null)
+                {
+                    selectedNode.IsSelected = false;
+                }
+
+                // Seleccionar nuevo nodo
+                nodeByDesc.IsSelected = true;
+                selectedNode = nodeByDesc;
+                
+                // Forzar actualización del estado
+                StateHasChanged();
+                
+                // Asegurar que el panel de productos esté visible (especialmente en móviles)
+                await JSRuntime.InvokeVoidAsync("toggleProductsPanel", false);
+                rightPanelHidden = false;
+                
+                // Si se selecciona un depósito o cualquier sub-ubicación, ocultar el panel de ubicaciones
+                bool shouldHideLocations = nodeByDesc.Level > 0;
+                
+                if (shouldHideLocations && !leftPanelHidden)
+                {
+                    await ToggleLeftPanel();
+                }
+
+                // Cargar productos de la ubicación seleccionada
+                await LoadProductsForNode(nodeByDesc);
+            }
+        }
+    }
+
+    private TreeNode FindNodeById(List<TreeNode> nodes, int nodeId)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Item.ProductoUbicacionID == nodeId)
+            {
+                return node;
+            }
+            
+            if (node.Children.Any())
+            {
+                var found = FindNodeById(node.Children, nodeId);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    private TreeNode FindNodeByDescription(List<TreeNode> nodes, string descripcion)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Item.Descripcion == descripcion)
+            {
+                return node;
+            }
+            
+            if (node.Children.Any())
+            {
+                var found = FindNodeByDescription(node.Children, descripcion);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    private async Task OnNodeSelected(TreeNode node)
+    {
+        if (node == null || node.Item == null)
+        {
+            return;
+        }
+        
+        // Evitar selecciones múltiples simultáneas
+        if (isProcessingSelection)
+        {
+            return;
+        }
+        
+        // Verificar si ya está seleccionado el mismo nodo
+        if (selectedNode != null && selectedNode.Item.ProductoUbicacionID == node.Item.ProductoUbicacionID)
+        {
+            return;
+        }
+        
+        isProcessingSelection = true;
+        
+        try
+        {
+            // Deseleccionar nodo anterior
+            if (selectedNode != null)
+            {
+                selectedNode.IsSelected = false;
+            }
+
+            // Seleccionar nuevo nodo
+            node.IsSelected = true;
+            selectedNode = node;
+            
+            // Forzar actualización del estado
+            StateHasChanged();
+            
+            // Asegurar que el panel de productos esté visible (especialmente en móviles)
+            await JSRuntime.InvokeVoidAsync("toggleProductsPanel", false);
+            rightPanelHidden = false;
+            
+            // Si se selecciona un depósito o cualquier sub-ubicación, ocultar el panel de ubicaciones
+            bool shouldHideLocations = node.Level > 0;
+            
+            if (shouldHideLocations && !leftPanelHidden)
+            {
+                await ToggleLeftPanel();
+            }
+
+            // Cargar productos de la ubicación seleccionada
+            await LoadProductsForNode(node);
+        }
+        finally
+        {
+            isProcessingSelection = false;
+        }
+    }
+
+
+    private string GetLocationPath(TreeNode node)
+    {
+        if (node == null) return string.Empty;
+        
+        var path = new List<string>();
+        var current = node;
+        
+        // Construir la ruta desde el nodo actual hasta la raíz
+        while (current != null)
+        {
+            if (!string.IsNullOrEmpty(current.Item.Descripcion))
+        {
+            path.Insert(0, current.Item.Descripcion);
+            }
+            current = current.Parent;
+        }
+        
+        return string.Join(" / ", path);
+    }
+
+    private int VisibleNodeCount => rootNodes?.Count(n => n.IsVisible) ?? 0;
+    private IEnumerable<ProductoStock> productosFiltrados => FilterProductos();
+
+    private void ExpandAll()
+    {
+        if (rootNodes != null)
+        {
+            SetExpandedState(rootNodes, true);
+        }
+    }
+
+    private void CollapseAll()
+    {
+        if (rootNodes != null)
+        {
+            SetExpandedState(rootNodes, false);
+        }
+    }
+
+    private void SetExpandedState(List<TreeNode> nodes, bool expanded)
+    {
+        foreach (var node in nodes)
+        {
+            node.IsExpanded = expanded;
+            if (node.Children.Any())
+            {
+                SetExpandedState(node.Children, expanded);
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        searchTimer?.Dispose();
+    }
+
+    private async Task ToggleRightPanel()
+    {
+        rightPanelHidden = !rightPanelHidden;
+        await JSRuntime.InvokeVoidAsync("toggleProductsPanel", rightPanelHidden);
+    }
+
+    private async Task ToggleLeftPanel()
+    {
+        leftPanelHidden = !leftPanelHidden;
+        await JSRuntime.InvokeVoidAsync("toggleLocationsPanel", leftPanelHidden);
+    }
+
+    private void StartResize(MouseEventArgs e)
+    {
+        isResizing = true;
+        StateHasChanged();
+    }
+
+    private void StopResize()
+    {
+        isResizing = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadProductsForNode(TreeNode node)
+    {
+        try
+        {
+            isLoading = true;
+            productosSeleccionados.Clear();
+            selectedProductsCount = 0;
+            await InvokeAsync(StateHasChanged);
+            await Task.Yield();
+            // 1 = incluir stock; usar Orden del nodo para incluir sub-ubicaciones
+            var resp = await UbicacionService.GetUbicacionesAsync(token, node.Item.Orden, 1);
+            if (resp?.Data != null)
+            {
+                var processed = 0;
+                foreach (var it in resp.Data)
+                {
+                    if (it.ItemsStock != null && it.ItemsStock.Count > 0)
+                    {
+                        foreach (var s in it.ItemsStock)
+                        {
+                            try
+                            {
+                                var ps = System.Text.Json.JsonSerializer.Deserialize<ProductoStock>(s.ToString() ?? string.Empty);
+                                if (ps != null)
+                                {
+                                    productosSeleccionados.Add(ps);
+                                }
+                                processed++;
+                                if (processed % 200 == 0)
+                                {
+                                    selectedProductsCount = productosSeleccionados.Count;
+                                    await InvokeAsync(StateHasChanged);
+                                    await Task.Yield();
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                selectedProductsCount = productosSeleccionados.Count;
+            }
+            else
+            {
+                errorMessage = "No se pudieron cargar los productos de la ubicación.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al cargar productos: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ToggleInventario()
+    {
+        if (isTogglingInventory) return;
+        isTogglingInventory = true;
+        await InvokeAsync(StateHasChanged);
+        // No Task.Yield si hay muchas filas; solo un frame es suficiente
+
+        try
+        {
+            if (!inventarioEditable)
+            {
+                // Evitar recorrer todas las filas si no hace falta: se copia on-demand al enfocar
+            }
+            inventarioEditable = !inventarioEditable;
+        }
+        finally
+        {
+            isTogglingInventory = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void OnCantidadInventarioChanged(ProductoStock producto, ChangeEventArgs e)
+    {
+        if (decimal.TryParse(e.Value?.ToString(), out var val))
+        {
+            producto.CantidadInventario = val;
+        }
+        else
+        {
+            producto.CantidadInventario = null;
+        }
+    }
+
+    private void OnCantidadInput(ProductoStock producto, ChangeEventArgs e)
+    {
+        // oninput: evitar parseos costosos; guardamos valor tal cual o parse rápido invariante
+        var s = e.Value?.ToString() ?? string.Empty;
+        if (decimal.TryParse(s, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var val))
+        {
+            producto.CantidadInventario = val;
+        }
+    }
+
+    [JSInvokable]
+    public void FocusInputInit(string currentValue, int codigoId)
+    {
+        // Este hook queda para futuras mejoras si queremos manipular foco vía JS
+    }
+
+    private void ClearProductFilters()
+    {
+        filtroTexto = string.Empty;
+    }
+
+    private void ApplyProductFilters()
+    {
+        StateHasChanged();
+    }
+
+    private IEnumerable<ProductoStock> FilterProductos()
+    {
+        var data = productosSeleccionados.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(filtroTexto))
+        {
+            var t = filtroTexto.Trim().ToLowerInvariant();
+            data = data.Where(p => (p.Producto.DescripcionLarga ?? string.Empty).ToLowerInvariant().Contains(t));
+        }
+        if (!string.IsNullOrWhiteSpace(filtroRubro))
+        {
+            var r = filtroRubro.Trim().ToLowerInvariant();
+            data = data.Where(p => (p.Producto.RubroCodigo ?? string.Empty).ToLowerInvariant().Contains(r));
+        }
+        return data;
+    }
+
+    private void StartInnerResize(MouseEventArgs e)
+    {
+        isInnerResizing = true;
+        _ = JSRuntime.InvokeVoidAsync("innerResizeBegin");
+    }
+    private void StopInnerResize()
+    {
+        isInnerResizing = false;
+        _ = JSRuntime.InvokeVoidAsync("innerResizeEnd");
+    }
+
+    // Modal Rubro/Familia - basado en valores únicos de productos cargados
+    private IEnumerable<string> GetRubrosFiltrados()
+    {
+        // Si hay familias desde API, usar esas descripciones; sino, derivar de RubroCodigo de productos
+        IEnumerable<string> baseList = familias != null && familias.Count > 0
+            ? familias.Select(f => f.Descripcion)
+            : productosSeleccionados
+                .Select(p => p.Producto.RubroCodigo ?? string.Empty)
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct();
+        baseList = baseList.OrderBy(s => s);
+        if (string.IsNullOrWhiteSpace(filtroRubroBuscar)) return baseList;
+        var t = filtroRubroBuscar.Trim().ToLowerInvariant();
+        return baseList.Where(s => s.ToLowerInvariant().Contains(t));
+    }
+
+    private void SeleccionarRubro(string rubro)
+    {
+        filtroRubro = rubro;
+        showRubroModal = false;
+    }
+}
+
+<script>
+    // Nuevo sistema de resize simplificado
+    window.initResize = function() {
+        const resizeHandle = document.querySelector('.resize-handle');
+        const leftPanel = document.querySelector('.left-panel');
+        const rightPanel = document.querySelector('.right-panel');
+        
+        if (!resizeHandle || !leftPanel || !rightPanel) return;
+        
+        let isResizing = false;
+        
+        resizeHandle.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            isResizing = true;
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        });
+        
+        document.addEventListener('mousemove', function(e) {
+            if (!isResizing) return;
+            
+            const container = leftPanel.parentElement;
+            const containerRect = container.getBoundingClientRect();
+            const containerWidth = containerRect.width;
+            const mouseX = e.clientX - containerRect.left;
+            
+            // Calcular porcentajes
+            const leftPercent = (mouseX / containerWidth) * 100;
+            const rightPercent = 100 - leftPercent;
+            
+            // Limitar entre 20% y 80%
+            const clampedLeft = Math.max(20, Math.min(80, leftPercent));
+            const clampedRight = 100 - clampedLeft;
+            
+            // Aplicar anchos
+            leftPanel.style.width = clampedLeft + '%';
+            rightPanel.style.width = clampedRight + '%';
+        });
+        
+        document.addEventListener('mouseup', function() {
+            if (isResizing) {
+                isResizing = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+        });
+    }
+
+    window.forceMobileStyles = function () {
+        const isMobile = window.innerWidth <= 768;
+        
+        // Forzar ocultación del panel de productos en móviles
+        const rightPanel = document.querySelector('.right-panel');
+        if (rightPanel) {
+            if (isMobile) {
+                rightPanel.style.display = 'none !important';
+                rightPanel.style.width = '0 !important';
+                rightPanel.style.height = '0 !important';
+                rightPanel.style.overflow = 'hidden !important';
+                rightPanel.style.visibility = 'hidden !important';
+            } else {
+                rightPanel.style.display = '';
+                rightPanel.style.width = '';
+                rightPanel.style.height = '';
+                rightPanel.style.overflow = '';
+                rightPanel.style.visibility = '';
+            }
+        }
+
+        // Ocultar/mostrar resize handle
+        const resizeHandle = document.querySelector('.resize-handle');
+        if (resizeHandle) {
+            if (isMobile) {
+                resizeHandle.style.display = 'none !important';
+            } else {
+                resizeHandle.style.display = '';
+            }
+        }
+
+        // Forzar que el panel izquierdo ocupe toda la pantalla en móviles
+        const leftPanel = document.querySelector('.left-panel');
+        if (leftPanel) {
+            if (isMobile) {
+                leftPanel.style.width = '100% !important';
+                leftPanel.style.height = 'calc(100vh - 100px) !important';
+                leftPanel.style.minHeight = 'calc(100vh - 100px) !important';
+                leftPanel.style.maxHeight = 'calc(100vh - 100px) !important';
+                leftPanel.style.background = 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important';
+                leftPanel.style.borderRadius = '12px !important';
+                leftPanel.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.15) !important';
+                leftPanel.style.margin = '8px !important';
+                leftPanel.style.flex = '1 !important';
+                leftPanel.style.maxWidth = 'none !important';
+                leftPanel.style.minWidth = '100% !important';
+            } else {
+                leftPanel.style.width = '';
+                leftPanel.style.height = '';
+                leftPanel.style.minHeight = '';
+                leftPanel.style.maxHeight = '';
+                leftPanel.style.background = '';
+                leftPanel.style.borderRadius = '';
+                leftPanel.style.boxShadow = '';
+                leftPanel.style.margin = '';
+                leftPanel.style.flex = '';
+                leftPanel.style.maxWidth = '';
+                leftPanel.style.minWidth = '';
+            }
+        }
+
+        // Aplicar estilos al header
+        const header = document.querySelector('.depositos-header');
+        if (header) {
+            header.style.background = 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important';
+            header.style.borderRadius = '0 0 16px 16px !important';
+            header.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.1) !important';
+            header.style.marginBottom = '8px !important';
+            header.style.padding = '1rem !important';
+            header.style.display = 'flex !important';
+            header.style.alignItems = 'center !important';
+            header.style.justifyContent = 'space-between !important';
+            header.style.flexWrap = 'wrap !important';
+            header.style.gap = '1rem !important';
+        }
+
+        // Forzar layout horizontal en desktop
+        if (window.innerWidth > 768) {
+            const header = document.querySelector('.depositos-header');
+            if (header) {
+                header.style.flexDirection = 'row !important';
+            }
+        }
+    };
+
+    // Función para manejar el toggle del panel de ubicaciones
+    window.toggleLocationsPanel = function (isHidden) {
+        const leftPanel = document.querySelector('.left-panel');
+        const rightPanel = document.querySelector('.right-panel');
+        const resizeHandle = document.querySelector('.resize-handle');
+        
+        if (leftPanel && rightPanel) {
+            if (isHidden) {
+                // Ocultar panel de ubicaciones
+                leftPanel.style.display = 'none';
+                leftPanel.style.width = '0';
+                leftPanel.style.flex = 'none';
+                leftPanel.classList.add('panel-hidden');
+                
+                // Verificar si el panel de productos también está oculto
+                const isRightPanelHidden = rightPanel.classList.contains('panel-hidden') || 
+                                         rightPanel.style.display === 'none';
+                
+                if (isRightPanelHidden) {
+                    // Si ambos están ocultos, no mostrar ninguno
+                    rightPanel.style.display = 'none';
+                    rightPanel.style.width = '0';
+                    rightPanel.style.flex = 'none';
+                } else {
+                    // Si solo ubicaciones está oculto, mostrar productos al 100%
+                    rightPanel.style.display = 'flex';
+                    rightPanel.style.width = '100%';
+                    rightPanel.style.flex = '1';
+                    rightPanel.style.minWidth = '100%';
+                    rightPanel.style.maxWidth = '100%';
+                    rightPanel.classList.remove('panel-hidden');
+                }
+                
+                // Ocultar la barra divisoria
+                if (resizeHandle) {
+                    resizeHandle.style.display = 'none';
+                    resizeHandle.style.width = '0';
+                }
+            } else {
+                // Mostrar panel de ubicaciones
+                leftPanel.style.display = 'flex';
+                leftPanel.style.width = '35%';
+                leftPanel.style.flex = 'none';
+                leftPanel.style.minWidth = '280px';
+                leftPanel.style.maxWidth = '70%';
+                leftPanel.classList.remove('panel-hidden');
+                
+                // Verificar si el panel de productos está oculto
+                const isRightPanelHidden = rightPanel.classList.contains('panel-hidden') || 
+                                         rightPanel.style.display === 'none';
+                
+                if (isRightPanelHidden) {
+                    // Si productos está oculto, mantenerlo oculto
+                    rightPanel.style.display = 'none';
+                    rightPanel.style.width = '0';
+                    rightPanel.style.flex = 'none';
+                } else {
+                    // Si productos está visible, restaurar layout normal
+                    rightPanel.style.width = '65%';
+                    rightPanel.style.flex = 'none';
+                    rightPanel.style.minWidth = '30%';
+                    rightPanel.style.maxWidth = 'none';
+                }
+                
+                // Mostrar la barra divisoria solo si ambos paneles están visibles
+                if (resizeHandle) {
+                    if (!isRightPanelHidden) {
+                        resizeHandle.style.display = 'block';
+                        resizeHandle.style.width = '4px';
+                    } else {
+                        resizeHandle.style.display = 'none';
+                        resizeHandle.style.width = '0';
+                    }
+                }
+            }
+        }
+    };
+
+    // Función para manejar el toggle del panel de productos
+    window.toggleProductsPanel = function (isHidden) {
+        const rightPanel = document.querySelector('.right-panel');
+        const leftPanel = document.querySelector('.left-panel');
+        const resizeHandle = document.querySelector('.resize-handle');
+        
+        if (rightPanel && leftPanel) {
+            if (isHidden) {
+                // Ocultar panel de productos
+                rightPanel.style.display = 'none';
+                rightPanel.style.width = '0';
+                rightPanel.style.flex = 'none';
+                rightPanel.classList.add('panel-hidden');
+                rightPanel.classList.add('mobile-hidden');
+                
+                // Verificar si el panel de ubicaciones también está oculto
+                const isLeftPanelHidden = leftPanel.classList.contains('panel-hidden') || 
+                                        leftPanel.style.display === 'none';
+                
+                if (isLeftPanelHidden) {
+                    // Si ambos están ocultos, no mostrar ninguno
+                    leftPanel.style.display = 'none';
+                    leftPanel.style.width = '0';
+                    leftPanel.style.flex = 'none';
+                } else {
+                    // Si solo productos está oculto, mostrar ubicaciones al 100%
+                    leftPanel.style.display = 'flex';
+                    leftPanel.style.width = '100%';
+                    leftPanel.style.flex = '1';
+                    leftPanel.style.minWidth = '100%';
+                    leftPanel.style.maxWidth = '100%';
+                    leftPanel.classList.remove('panel-hidden');
+                }
+                
+                // Ocultar la barra divisoria
+                if (resizeHandle) {
+                    resizeHandle.style.display = 'none';
+                    resizeHandle.style.width = '0';
+                }
+            } else {
+                // Mostrar panel de productos
+                rightPanel.classList.remove('mobile-hidden');
+                rightPanel.style.display = 'flex';
+                // En móvil expandimos al 100%
+                if (window.innerWidth <= 768) {
+                    rightPanel.classList.add('show-on-mobile');
+                    rightPanel.style.width = '100%';
+                } else {
+                    rightPanel.classList.remove('show-on-mobile');
+                    rightPanel.style.width = '65%';
+                }
+                rightPanel.style.flex = 'none';
+                rightPanel.style.minWidth = '30%';
+                rightPanel.style.maxWidth = 'none';
+                rightPanel.classList.remove('panel-hidden');
+                
+                // Verificar si el panel de ubicaciones está oculto
+                const isLeftPanelHidden = leftPanel.classList.contains('panel-hidden') || 
+                                        leftPanel.style.display === 'none';
+                
+                if (isLeftPanelHidden) {
+                    // Si ubicaciones está oculto, mantenerlo oculto
+                    leftPanel.style.display = 'none';
+                    leftPanel.style.width = '0';
+                    leftPanel.style.flex = 'none';
+                } else {
+                    // Si ubicaciones está visible, restaurar layout normal
+                    leftPanel.style.width = '35%';
+                    leftPanel.style.flex = 'none';
+                    leftPanel.style.minWidth = '280px';
+                    leftPanel.style.maxWidth = '70%';
+                }
+                
+                // Mostrar la barra divisoria solo si ambos paneles están visibles
+                if (resizeHandle) {
+                    if (!isLeftPanelHidden) {
+                        resizeHandle.style.display = 'block';
+                        resizeHandle.style.width = '4px';
+                    } else {
+                        resizeHandle.style.display = 'none';
+                        resizeHandle.style.width = '0';
+                    }
+                }
+            }
+        }
+    };
+
+
+    // Función para establecer la referencia del componente Blazor
+    window.setBlazorComponent = function(component) {
+        window.blazorComponent = component;
+        console.log('🔥 BlazorComponent establecido:', window.blazorComponent);
+    };
+
+    // Función para seleccionar nodos del árbol
+    window.selectTreeNode = function(element) {
+        console.log('🔥 JAVASCRIPT CLICK EN NODO');
+        console.log('Element:', element);
+        console.log('Descripción:', element.dataset.nodeDescripcion);
+        console.log('ID:', element.dataset.nodeId);
+        console.log('Orden:', element.dataset.nodeOrden);
+        console.log('Nivel:', element.dataset.level);
+        console.log('Todos los data attributes:', element.dataset);
+        
+        // Validar que tenemos los datos necesarios
+        if (!element.dataset.nodeId || !element.dataset.nodeDescripcion) {
+            console.error('❌ ERROR: Faltan datos del nodo');
+            console.error('nodeId:', element.dataset.nodeId);
+            console.error('nodeDescripcion:', element.dataset.nodeDescripcion);
+            return;
+        }
+        
+        // Remover selección anterior
+        const previousSelected = document.querySelector('.tree-node.selected');
+        if (previousSelected) {
+            previousSelected.classList.remove('selected');
+        }
+        
+        // Seleccionar nuevo nodo
+        element.classList.add('selected');
+        
+        // Llamar al método C# usando la referencia del componente
+        if (window.blazorComponent) {
+            console.log('🔥 Invocando SelectNodeFromJS...');
+            try {
+                window.blazorComponent.invokeMethodAsync('SelectNodeFromJS', 
+                    parseInt(element.dataset.nodeId),
+                    element.dataset.nodeDescripcion,
+                    parseInt(element.dataset.level),
+                    element.dataset.nodeOrden
+                ).then(() => {
+                    console.log('✅ SelectNodeFromJS completado');
+                }).catch(error => {
+                    console.error('❌ Error en SelectNodeFromJS:', error);
+                });
+            } catch (error) {
+                console.error('❌ Error al invocar SelectNodeFromJS:', error);
+            }
+        } else {
+            console.log('ERROR: blazorComponent no está disponible');
+        }
+    };
+
+    // Ejecutar al cargar la página
+    document.addEventListener('DOMContentLoaded', function() {
+        window.forceMobileStyles();
+        window.initResize();
+        // Inicializa el resize interno de filtros/grilla
+        window.initInnerVerticalResize();
+    });
+
+    // Ejecutar al redimensionar la ventana
+    window.addEventListener('resize', function() {
+        window.forceMobileStyles();
+    });
+
+    // Resize vertical interno entre filtros y grilla de productos
+    window.initInnerVerticalResize = function() {
+        const handle = document.querySelector('.data-grid-section .resize-handle');
+        const filters = document.querySelector('.data-grid-section .filters-content');
+        if (!handle || !filters) return;
+
+        let resizing = false;
+        let startY = 0;
+        let startHeight = 0;
+
+        handle.addEventListener('mousedown', function(e) {
+            resizing = true;
+            startY = e.clientY;
+            startHeight = filters.getBoundingClientRect().height;
+            document.body.style.cursor = 'row-resize';
+            document.body.style.userSelect = 'none';
+        });
+        document.addEventListener('mousemove', function(e) {
+            if (!resizing) return;
+            const dy = e.clientY - startY;
+            let newH = Math.max(80, startHeight + dy); // mínimo 80px
+            filters.style.height = newH + 'px';
+        });
+        document.addEventListener('mouseup', function() {
+            if (!resizing) return;
+            resizing = false;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        });
+    }
+
+    window.innerResizeBegin = function(){};
+    window.innerResizeEnd = function(){};
+</script>

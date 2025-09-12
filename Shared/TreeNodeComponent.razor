@@ -1,0 +1,110 @@
+@using BlazorApp_ProductosAPI.Models
+
+@if (Node.IsVisible)
+{
+        <div class="tree-node @(Node.IsSelected ? "selected" : "") @(Node.Item.Inhabilitado == true ? "disabled" : "")" 
+             data-level="@Node.Level"
+             data-node-id="@Node.Item.ProductoUbicacionID"
+             data-node-descripcion="@Node.Item.Descripcion"
+             data-node-orden="@Node.Item.Orden"
+             @onclick="HandleClick"
+             @onkeydown="OnKeyDown"
+             tabindex="0"
+             role="treeitem"
+             aria-expanded="@Node.IsExpanded"
+             aria-selected="@Node.IsSelected">
+        
+        <div class="node-content" style="padding-left: @(Node.Level * 20)px">
+            @if (Node.Children.Any())
+            {
+                <button @onclick="ToggleExpanded" 
+                        @onclick:stopPropagation="true"
+                        class="expand-btn @(Node.IsExpanded ? "expanded" : "")"
+                        aria-label="@(Node.IsExpanded ? "Colapsar" : "Expandir")">
+                    <i class="oi oi-chevron-right"></i>
+                </button>
+            }
+            else
+            {
+                <span class="expand-spacer"></span>
+            }
+            
+                    <span class="node-text" title="ID: @Node.Item.ProductoUbicacionID | Orden: @Node.Item.Orden">
+                        @Node.Item.Descripcion
+                    </span>
+            @if (Node.Item.Inhabilitado == true)
+            {
+                <span class="disabled-indicator" title="Inhabilitado">
+                    <i class="oi oi-ban"></i>
+                </span>
+            }
+        </div>
+        
+        @if (Node.IsExpanded && Node.Children.Any())
+        {
+            <div class="node-children">
+                @foreach (var child in Node.Children.Where(c => c.IsVisible))
+                {
+                    <TreeNodeComponent Node="child" OnNodeSelected="OnNodeSelected" />
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public TreeNode Node { get; set; } = new();
+    [Parameter] public EventCallback<TreeNode> OnNodeSelected { get; set; }
+
+    private void ToggleExpanded()
+    {
+        Node.IsExpanded = !Node.IsExpanded;
+    }
+
+    private async Task HandleClick()
+    {
+        try
+        {
+            if (OnNodeSelected.HasDelegate)
+            {
+                await OnNodeSelected.InvokeAsync(Node);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Error al invocar OnNodeSelected
+        }
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" || e.Key == " ")
+        {
+            await HandleClick();
+        }
+    }
+
+    private string GetNodeTypeClass()
+    {
+        return Node.Level switch
+        {
+            0 => "badge-empresa",
+            1 => "badge-deposito", 
+            2 => "badge-zona",
+            3 => "badge-subzona",
+            _ => "badge-otros"
+        };
+    }
+
+    private string GetNodeTypeLabel()
+    {
+        return Node.Level switch
+        {
+            0 => "Empresa",
+            1 => "Depósito",
+            2 => "Zona", 
+            3 => "Subzona",
+            _ => "Otros"
+        };
+    }
+}
