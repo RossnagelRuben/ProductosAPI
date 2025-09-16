@@ -1,0 +1,494 @@
+@using BlazorApp_ProductosAPI.Models
+@using BlazorApp_ProductosAPI.Components
+@inject IJSRuntime JSRuntime
+
+<style>
+    /* Estilos para la grilla de datos */
+    .data-grid-container {
+        display: flex;
+        flex-direction: column;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+    }
+
+    .data-grid-header {
+        background: #f8f9fa;
+        border-bottom: 2px solid #dee2e6;
+        padding: 0.5rem;
+        flex-shrink: 0;
+    }
+
+    .data-grid-content {
+        overflow: visible; /* dejar que la página maneje el scroll total */
+        position: relative;
+    }
+
+    .data-grid-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+    }
+
+    .data-grid-th {
+        background: #f8f9fa;
+        padding: 0.75rem;
+        font-weight: 600;
+        color: #495057;
+        border-right: 1px solid #dee2e6;
+        position: relative;
+        cursor: col-resize;
+        user-select: none;
+        text-align: left;
+    }
+
+    .data-grid-th:hover {
+        background: #e9ecef;
+    }
+
+    .data-grid-th::after {
+        content: '';
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        background: transparent;
+        cursor: col-resize;
+    }
+
+    .data-grid-th:hover::after {
+        background: #007bff;
+    }
+
+    .data-grid-td {
+        padding: 0.75rem 1rem; /* más aire a la izquierda/derecha */
+        border-right: 1px solid #dee2e6;
+        border-bottom: 1px solid #eee;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        background: white;
+    }
+
+    .data-grid-tbody tr:hover .data-grid-td {
+        background: #f8f9fa;
+    }
+
+    .data-grid-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        color: #6c757d;
+    }
+
+    .data-grid-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 3rem;
+        color: #6c757d;
+        text-align: center;
+    }
+
+    .data-grid-empty i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    /* Estilos para el modal de configuración */
+    .column-config-content {
+        padding: 1rem;
+    }
+
+    .column-list {
+        max-height: 300px;
+        overflow-y: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 0.5rem;
+    }
+
+    .column-item {
+        padding: 0.75rem;
+        border-bottom: 1px solid #f8f9fa;
+        transition: background-color 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .column-item:hover {
+        background-color: #f8f9fa;
+    }
+
+    .column-item:last-child {
+        border-bottom: none;
+    }
+
+    .column-item .form-check-input {
+        margin: 0;
+    }
+
+    .column-item .form-check-label {
+        font-weight: 500;
+        cursor: pointer;
+        margin: 0;
+        flex: 1;
+    }
+
+    .column-item .drag-handle {
+        cursor: move;
+        color: #6c757d;
+        font-size: 1.2rem;
+    }
+
+    .column-item .drag-handle:hover {
+        color: #495057;
+    }
+
+    /* Responsive */
+    @@media (max-width: 768px) {
+        .data-grid-table { display: block; }
+        .data-grid-thead { display: none; }
+        .data-grid-tbody { display: block; }
+
+        .data-grid-tr {
+            display: block;
+            margin-bottom: 0.75rem; /* filas más compactas */
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+
+        /* Etiqueta arriba, contenido ocupa 100% */
+        .data-grid-td {
+            display: block;
+            border: none;
+            border-bottom: 1px solid #dee2e6;
+            padding: 0.5rem 0.75rem; /* más compacto en móvil */
+            position: relative;
+            padding-left: 0; /* sin reserva lateral */
+            white-space: normal; /* altura se adapta al texto */
+            line-height: 1.25;
+        }
+
+        .data-grid-td:before {
+            content: attr(data-label) ": ";
+            position: static; /* deja de ser absoluta */
+            display: block;
+            margin: 0 0 0.2rem 0;
+            font-weight: 600;
+            color: #6c757d;
+            width: auto;
+        }
+
+        .data-grid-td:last-child { border-bottom: none; }
+
+        /* Ignorar anchos fijos definidos en columnas cuando es móvil */
+        .data-grid-th,
+        .data-grid-td {
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+
+        /* Inputs ocupan todo el ancho disponible */
+        .data-grid-td .form-control {
+            width: 100% !important;
+            min-width: 0 !important;
+            height: auto !important; /* que tome la altura del contenido */
+            padding: 0.5rem 0.6rem !important; /* compacto pero usable */
+            line-height: 1.25 !important;
+        }
+    }
+
+    /* Estilos para modo developer (pantallas muy pequeñas) */
+    @@media (max-width: 1024px) {
+        .data-grid-container {
+            min-height: 300px;
+        }
+        
+        .data-grid-content {
+            min-height: 250px;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+    }
+
+    /* Forzar responsividad en pantallas pequeñas */
+    .data-grid-container.responsive {
+        height: auto !important;
+        min-height: 300px;
+    }
+
+    .data-grid-container.responsive .data-grid-content {
+        height: auto !important;
+        min-height: 250px;
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+
+    .data-grid-container.responsive .data-grid-table {
+        width: 100%;
+        table-layout: auto;
+    }
+
+    .data-grid-container.responsive .data-grid-th,
+    .data-grid-container.responsive .data-grid-td {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 80px;
+    }
+</style>
+
+<div class="data-grid-container">
+    <!-- Header de la grilla -->
+    <div class="data-grid-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">@Title</h6>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-primary" @onclick="OpenColumnConfig">
+                    <i class="oi oi-cog"></i> Configurar columnas
+                </button>
+                @if (ShowRefreshButton)
+                {
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="OnRefresh">
+                        <i class="oi oi-reload"></i> Actualizar
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Contenido de la grilla -->
+    <div class="data-grid-content">
+        @if (IsLoading)
+        {
+            <div class="data-grid-loading">
+                <span class="spinner-border spinner-border-sm me-2"></span>
+                @LoadingText
+            </div>
+        }
+        else if (!Data?.Any() == true)
+        {
+            <div class="data-grid-empty">
+                <i class="oi oi-table"></i>
+                <p>@EmptyText</p>
+            </div>
+        }
+        else
+        {
+            <table class="data-grid-table">
+                <thead class="data-grid-thead">
+                    <tr>
+                        @foreach (var column in VisibleColumns)
+                        {
+                            <th class="data-grid-th" 
+                                style="@(column.Width != null ? $"width: {column.Width}" : "")"
+                                data-column="@column.Key"
+                                @oncontextmenu="(e) => OnColumnContextMenu(e, column)"
+                                @onmousedown="(e) => StartColumnResize(e, column)">
+                                @column.Label
+                            </th>
+                        }
+                    </tr>
+                </thead>
+                <tbody class="data-grid-tbody">
+                    @foreach (var item in Data)
+                    {
+                        <tr class="data-grid-tr" @onclick="() => OnRowClick.InvokeAsync(item)">
+                        @foreach (var column in VisibleColumns)
+                        {
+                            <td class="data-grid-td" 
+                                data-label="@column.Label"
+                                style="@(column.Width != null ? $"width: {column.Width}" : "")">
+                                @{
+                                    var value = GetColumnValue(item, column.Key);
+                                    if (value is StockInputModel stockModel)
+                                    {
+                                        <StockInput Model="@stockModel" />
+                                    }
+                                    else
+                                    {
+                                        @value
+                                    }
+                                }
+                            </td>
+                        }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            
+            <!-- Separador mínimo dentro de la grilla -->
+            <div class="data-grid-footer-spacer" style="height: 16px; background: transparent;"></div>
+        }
+    </div>
+</div>
+
+<!-- Modal de configuración de columnas -->
+<AppModal IsOpen="showColumnConfigModal" Title="Configurar Columnas" OnClose="() => showColumnConfigModal = false">
+    <ChildContent>
+        <div class="column-config-content">
+            <p class="text-muted mb-3">Arrastra para reordenar y selecciona qué columnas mostrar:</p>
+            <div class="column-list" id="column-list">
+                @foreach (var column in Columns.OrderBy(c => c.Order))
+                {
+                    <div class="column-item" draggable="true" data-column="@column.Key">
+                        <i class="oi oi-move drag-handle"></i>
+                        <input class="form-check-input" 
+                               type="checkbox" 
+                               @bind="column.IsVisible" 
+                               id="column-@column.Key" />
+                        <label class="form-check-label" for="column-@column.Key">
+                            @column.Label
+                        </label>
+                    </div>
+                }
+            </div>
+        </div>
+    </ChildContent>
+    <FooterContent>
+        <button class="btn btn-secondary" @onclick="ResetColumnConfig">Restaurar por defecto</button>
+        <button class="btn btn-primary" @onclick="SaveColumnConfig">Guardar configuración</button>
+        <button class="btn btn-outline-secondary" @onclick="() => showColumnConfigModal = false">Cerrar</button>
+    </FooterContent>
+</AppModal>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Datos";
+    [Parameter] public IEnumerable<object>? Data { get; set; }
+    [Parameter] public List<ColumnConfig> Columns { get; set; } = new();
+    [Parameter] public bool IsLoading { get; set; } = false;
+    [Parameter] public string LoadingText { get; set; } = "Cargando...";
+    [Parameter] public string EmptyText { get; set; } = "No hay datos para mostrar";
+    [Parameter] public bool ShowRefreshButton { get; set; } = true;
+    [Parameter] public EventCallback<object> OnRowClick { get; set; }
+    [Parameter] public EventCallback OnRefresh { get; set; }
+    [Parameter] public Func<object, string, object>? GetValueFunction { get; set; }
+
+    private bool showColumnConfigModal = false;
+    private List<ColumnConfig> availableColumns = new();
+
+    private IEnumerable<ColumnConfig> VisibleColumns => availableColumns.Where(c => c.IsVisible).OrderBy(c => c.Order);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadColumnConfig();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Columns?.Any() == true)
+        {
+            availableColumns = Columns.ToList();
+        }
+    }
+
+    private object GetColumnValue(object item, string columnKey)
+    {
+        if (GetValueFunction != null)
+        {
+            return GetValueFunction(item, columnKey);
+        }
+
+        // Función por defecto usando reflexión
+        var property = item.GetType().GetProperty(columnKey);
+        if (property != null)
+        {
+            return property.GetValue(item) ?? string.Empty;
+        }
+
+        return string.Empty;
+    }
+
+    private async Task OnColumnContextMenu(MouseEventArgs e, ColumnConfig column)
+    {
+        showColumnConfigModal = true;
+        await LoadColumnConfig();
+        StateHasChanged();
+    }
+
+    private async Task StartColumnResize(MouseEventArgs e, ColumnConfig column)
+    {
+        if (e.Button == 0 && column.IsResizable) // Solo botón izquierdo
+        {
+            await JSRuntime.InvokeVoidAsync("startColumnResize", e.ClientX, column.Key);
+        }
+    }
+
+    private async Task LoadColumnConfig()
+    {
+        if (!availableColumns.Any() && Columns?.Any() == true)
+        {
+            availableColumns = Columns.ToList();
+        }
+
+        // Cargar configuración desde localStorage
+        try
+        {
+            var savedConfig = await JSRuntime.InvokeAsync<string>("localStorage.getItem", $"columnConfig_{Title}");
+            if (!string.IsNullOrEmpty(savedConfig))
+            {
+                var config = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, bool>>(savedConfig);
+                foreach (var column in availableColumns)
+                {
+                    if (config.ContainsKey(column.Key))
+                    {
+                        column.IsVisible = config[column.Key];
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Usar configuración por defecto si hay error
+        }
+    }
+
+    private async Task SaveColumnConfig()
+    {
+        try
+        {
+            var config = availableColumns.ToDictionary(c => c.Key, c => c.IsVisible);
+            var configJson = System.Text.Json.JsonSerializer.Serialize(config);
+            await JSRuntime.InvokeVoidAsync("localStorage.setItem", $"columnConfig_{Title}", configJson);
+            showColumnConfigModal = false;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            // Manejar error
+        }
+    }
+
+    private async Task ResetColumnConfig()
+    {
+        foreach (var column in availableColumns)
+        {
+            column.IsVisible = true;
+        }
+        await JSRuntime.InvokeVoidAsync("localStorage.removeItem", $"columnConfig_{Title}");
+        StateHasChanged();
+    }
+
+    private async Task OpenColumnConfig()
+    {
+        showColumnConfigModal = true;
+        await LoadColumnConfig();
+        StateHasChanged();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("initDataGridResponsive");
+        }
+    }
+}

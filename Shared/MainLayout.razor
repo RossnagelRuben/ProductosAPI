@@ -1,0 +1,91 @@
+﻿@inherits LayoutComponentBase
+@inject IJSRuntime JS
+
+<div class="page">
+    <div class="sidebar @SidebarClass">
+        <NavMenu SidebarToggled="OnSidebarToggled" IsSidebarCollapsed="@_sidebarCollapsed" />
+    </div>
+
+    <main>
+
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+@if (_sidebarCollapsed)
+{
+    <button class="btn btn-primary btn-sm sidebar-toggle-floating" style="border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.25);" @onclick="ShowSidebar">
+        <span class="oi oi-chevron-right" aria-hidden="true"></span>
+    </button>
+}
+
+@code {
+    private bool _sidebarCollapsed = false;
+    private string SidebarClass => _sidebarCollapsed ? "sidebar-collapsed" : string.Empty;
+    private bool _initialized = false;
+
+    private void OnSidebarToggled(bool collapsed)
+    {
+        _sidebarCollapsed = collapsed;
+        StateHasChanged();
+    }
+
+    private void ShowSidebar()
+    {
+        _sidebarCollapsed = false;
+        StateHasChanged();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_initialized)
+        {
+            try
+            {
+                var width = await JS.InvokeAsync<int>("blazorGetViewportWidth");
+                if (width <= 768)
+                {
+                    _sidebarCollapsed = true;
+                    StateHasChanged();
+                }
+                await JS.InvokeVoidAsync("registerSidebarAutoCollapse", DotNetObjectReference.Create(this));
+            }
+            catch { }
+            _initialized = true;
+        }
+        // No forzar cambios en renders posteriores: respetar el botón del usuario
+    }
+
+    [JSInvokable]
+    public void SetSidebarCollapsedFromJs(bool collapsed)
+    {
+        _sidebarCollapsed = collapsed;
+        StateHasChanged();
+    }
+}
+
+<script>
+    window.blazorGetViewportWidth = function(){ return window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth; };
+</script>
+<script>
+    window.collapseSidebar = function(collapsed){
+        try {
+            var el = document.querySelector('.sidebar');
+            if (!el) return;
+            if (collapsed) { el.classList.add('sidebar-collapsed'); }
+            else { el.classList.remove('sidebar-collapsed'); }
+        } catch {}
+    }
+    window.registerSidebarAutoCollapse = function(dotnetHelper){
+        function apply(){
+            var w = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
+            var collapsed = w <= 768;
+            window.collapseSidebar(collapsed);
+            try { if (dotnetHelper) dotnetHelper.invokeMethodAsync('SetSidebarCollapsedFromJs', collapsed); } catch {}
+        }
+        window.addEventListener('resize', apply);
+        apply();
+    }
+</script>

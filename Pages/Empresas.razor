@@ -1,0 +1,339 @@
+﻿@page "/empresas"
+@using System.Net.Http.Headers
+@using System.Text.Json
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<h3 class="hdr">Información de la Empresa</h3>
+
+<div class="card">
+    <div class="row token-row">
+        <label for="tokenInput">Token (Bearer)</label>
+        <input id="tokenInput" type="text" @bind="Token" @bind:event="oninput" placeholder="Pega tu token aquí..." />
+        <button class="btn" @onclick="CargarEmpresa" disabled="@IsLoading">@(IsLoading ? "Cargando..." : "Cargar")</button>
+        <button class="btn btn-light" @onclick="Limpiar">Limpiar</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Error))
+    {
+        <div class="alert error">@Error</div>
+    }
+
+    @if (IsLoading)
+    {
+        <div class="loading">Cargando datos de la empresa...</div>
+    }
+
+    @if (Empresa is not null)
+    {
+        <div class="section">
+            <div class="section-title">Información Principal</div>
+            <div class="grid">
+                <div class="label">Nombre de Fantasía:</div>
+                <div class="value">@Empresa.NombreFantasia</div>
+
+                <div class="label">Razón Social:</div>
+                <div class="value">@Empresa.RazonSocial</div>
+
+                <div class="label">CUIT:</div>
+                <div class="value">@Empresa.Cuit</div>
+
+                <div class="label">Descripción:</div>
+                <div class="value">@Empresa.DescripcionEmpresa</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Información de Contacto</div>
+            <div class="grid">
+                <div class="label">Teléfono:</div>
+                <div class="value">@Mostrar(Empresa.Telefono)</div>
+
+                <div class="label">Teléfono Móvil:</div>
+                <div class="value">@Mostrar(Empresa.TelefonoMovil)</div>
+
+                <div class="label">E-Mail:</div>
+                <div class="value">@Mostrar(Empresa.E_Mail)</div>
+
+                <div class="label">Página Web:</div>
+                <div class="value">@Mostrar(Empresa.PaginaWeb)</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Información Fiscal</div>
+            <div class="grid">
+                <div class="label">Categoría de Impuesto:</div>
+                <div class="value">@Mostrar(Empresa.CategoriaImpuesto?.Descripcion)</div>
+
+                <div class="label">Inicio de Actividad:</div>
+                <div class="value">@FormatoFecha(Empresa.InicioActividad)</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Domicilio</div>
+            <div class="grid">
+                <div class="label">Dirección:</div>
+                <div class="value">@Mostrar(Empresa.Domicilio?.Domicilio)</div>
+
+                <div class="label">Ciudad:</div>
+                <div class="value">@Mostrar(Empresa.Domicilio?.Ciudad)</div>
+
+                <div class="label">Código Postal:</div>
+                <div class="value">@Mostrar(Empresa.Domicilio?.CodigoPostal)</div>
+
+                <div class="label">Provincia:</div>
+                <div class="value">@Mostrar(Empresa.Domicilio?.Provincia)</div>
+
+                <div class="label">País:</div>
+                <div class="value">@Mostrar(Empresa.Domicilio?.Pais)</div>
+            </div>
+        </div>
+    }
+    else if (!IsLoading && string.IsNullOrWhiteSpace(Error))
+    {
+        <div class="muted">Pegá el token y presioná “Cargar”.</div>
+    }
+</div>
+
+<style>
+    .hdr {
+        font-size: 24px;
+        font-weight: 700;
+        color: #1DA1F2;
+        margin: 12px 0 16px;
+    }
+
+    .card {
+        background: #fff;
+        border-radius: 14px;
+        padding: 16px;
+        box-shadow: 0 6px 18px rgba(0,0,0,.08);
+    }
+
+    .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .token-row label {
+        font-weight: 600;
+        color: #2C3E50;
+    }
+
+    .token-row input {
+        flex: 1 1 420px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid #d0d7de;
+        outline: none;
+    }
+
+        .token-row input:focus {
+            border-color: #1DA1F2;
+            box-shadow: 0 0 0 3px rgba(29,161,242,.15);
+        }
+
+    .btn {
+        padding: 9px 14px;
+        border-radius: 10px;
+        border: none;
+        background: #1DA1F2;
+        color: #fff;
+        cursor: pointer;
+    }
+
+        .btn[disabled] {
+            opacity: .6;
+            cursor: default;
+        }
+
+    .btn-light {
+        background: #eef2f7;
+        color: #2C3E50;
+    }
+
+    .alert.error {
+        margin-top: 10px;
+        padding: 10px 12px;
+        color: #842029;
+        background: #f8d7da;
+        border: 1px solid #f5c2c7;
+        border-radius: 10px;
+    }
+
+    .loading {
+        margin-top: 12px;
+        color: #2C3E50;
+    }
+
+    .section {
+        margin-top: 22px;
+    }
+
+    .section-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #2C3E50;
+        margin-bottom: 10px;
+    }
+
+    .grid {
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        gap: 8px 14px;
+        align-items: center;
+    }
+
+    .label {
+        color: #34495E;
+    }
+
+    .value {
+        color: #2C3E50;
+        font-weight: 600;
+    }
+
+    .muted {
+        color: #6b7280;
+        padding: 8px 0;
+    }
+</style>
+
+@code {
+    // ====== Config ======
+    private const string ApiUrl = "https://drrsystemas4.azurewebsites.net/Empresa";
+    private const string StorageKey = "empresas_token";
+
+    // ====== UI State ======
+    private string? Token { get; set; }
+    private string? Error { get; set; }
+    private bool IsLoading { get; set; }
+
+    // ====== Data ======
+    private EmpresaData? Empresa { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // intento recuperar token guardado
+        try
+        {
+            Token = await JS.InvokeAsync<string?>("localStorage.getItem", StorageKey);
+        }
+        catch { /* ignore */ }
+    }
+
+    private async Task CargarEmpresa()
+    {
+        Error = null;
+        Empresa = null;
+
+        if (string.IsNullOrWhiteSpace(Token))
+        {
+            Error = "Pegá un token válido.";
+            return;
+        }
+
+        IsLoading = true;
+        try
+        {
+            // guarda token para próximas visitas
+            await JS.InvokeVoidAsync("localStorage.setItem", StorageKey, Token);
+
+            // prepara request
+            var req = new HttpRequestMessage(HttpMethod.Get, ApiUrl);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+
+            var res = await Http.SendAsync(req);
+            var json = await res.Content.ReadAsStringAsync();
+
+            if (!res.IsSuccessStatusCode)
+            {
+                Error = $"Error HTTP {(int)res.StatusCode} - {res.ReasonPhrase}. Respuesta: {json}";
+                return;
+            }
+
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var parsed = JsonSerializer.Deserialize<EmpresaResponse>(json, options);
+
+            if (parsed?.Status?.Equals("ok", StringComparison.OrdinalIgnoreCase) == true &&
+                parsed.Data is not null && parsed.Data.Count > 0)
+            {
+                Empresa = parsed.Data[0];
+            }
+            else
+            {
+                Error = "No se encontraron datos de la empresa.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Error = $"Excepción al consultar la API: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private void Limpiar()
+    {
+        Error = null;
+        Empresa = null;
+        Token = string.Empty;
+    }
+
+    // ====== Helpers UI ======
+    private static string Mostrar(string? v) => string.IsNullOrWhiteSpace(v) ? "No especificado" : v;
+
+    private static string FormatoFecha(DateTime? dt)
+    {
+        if (dt is null || dt == default) return "No especificado";
+        return dt.Value.ToString("dd/MM/yyyy");
+    }
+
+    // ====== DTOs (adaptados a tu respuesta) ======
+    private sealed class EmpresaResponse
+    {
+        public string? Status { get; set; }
+        public List<EmpresaData> Data { get; set; } = new();
+    }
+
+    private sealed class EmpresaData
+    {
+        public int EmpresaID { get; set; }
+        public string? RazonSocial { get; set; }
+        public string? NombreFantasia { get; set; }
+        public long Cuit { get; set; }
+        public DomicilioData? Domicilio { get; set; }
+        public string? Telefono { get; set; }
+        public string? TelefonoMovil { get; set; }
+        public CategoriaImpuestoData? CategoriaImpuesto { get; set; }
+        public DateTime? InicioActividad { get; set; }
+        public string? E_Mail { get; set; }
+        public string? PaginaWeb { get; set; }
+        public string? Propietario { get; set; }
+        public string? DescripcionEmpresa { get; set; }
+        public DateTime? FechaUltModific { get; set; }
+        public string? Logo { get; set; }
+    }
+
+    private sealed class DomicilioData
+    {
+        public string? Domicilio { get; set; }
+        public int CiudadID { get; set; }
+        public string? Ciudad { get; set; }
+        public string? CodigoPostal { get; set; }
+        public string? Provincia { get; set; }
+        public string? Pais { get; set; }
+    }
+
+    private sealed class CategoriaImpuestoData
+    {
+        public int CategoriaImpuestoID { get; set; }
+        public string? Descripcion { get; set; }
+    }
+}

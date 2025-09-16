@@ -1,0 +1,345 @@
+/* ========================================
+   SISTEMA DE MODALES APP - CSS
+   ======================================== */
+
+/* Variables CSS para consistencia */
+:root {
+    --modal-backdrop-bg: rgba(0, 0, 0, 0.5);
+    --modal-bg: #ffffff;
+    --modal-border: #e1e5e9;
+    --modal-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    --modal-border-radius: 12px;
+    --modal-padding: 24px;
+    --modal-header-height: 60px;
+    --modal-footer-height: 60px;
+    --modal-z-index: 999999;
+    --modal-backdrop-z-index: 999998;
+}
+
+/* ========================================
+   BACKDROP Y CONTENEDOR PRINCIPAL
+   ======================================== */
+
+.app-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--modal-backdrop-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: var(--modal-backdrop-z-index);
+    padding: 20px;
+    backdrop-filter: blur(2px);
+    animation: modalFadeIn 0.2s ease-out;
+}
+
+.app-modal {
+    position: relative;
+    background: var(--modal-bg);
+    border-radius: var(--modal-border-radius);
+    box-shadow: var(--modal-shadow);
+    display: flex;
+    flex-direction: column;
+    max-width: 90vw;
+    max-height: 90vh;
+    z-index: var(--modal-z-index);
+    animation: modalSlideIn 0.3s ease-out;
+    border: 1px solid var(--modal-border);
+    overflow: hidden;
+}
+
+/* ========================================
+   TAMAÑOS DE MODAL
+   ======================================== */
+
+.app-modal-sm {
+    width: 400px;
+    min-width: 320px;
+}
+
+.app-modal-md {
+    width: 600px;
+    min-width: 480px;
+}
+
+.app-modal-lg {
+    width: 800px;
+    min-width: 640px;
+}
+
+.app-modal-xl {
+    width: 1000px;
+    min-width: 800px;
+}
+
+/* ========================================
+   HEADER DEL MODAL
+   ======================================== */
+
+.app-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--modal-padding);
+    height: var(--modal-header-height);
+    border-bottom: 1px solid var(--modal-border);
+    background: #f8f9fa;
+    flex-shrink: 0;
+}
+
+.app-modal-title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #333;
+    flex: 1;
+}
+
+.app-modal-close {
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: bold;
+    line-height: 1;
+    transition: background-color 0.2s ease;
+    flex-shrink: 0;
+}
+
+.app-modal-close:hover {
+    background: #c82333;
+}
+
+.app-modal-close:focus {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
+}
+
+/* ========================================
+   BODY DEL MODAL
+   ======================================== */
+
+.app-modal-body {
+    padding: var(--modal-padding);
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+}
+
+/* ========================================
+   FOOTER DEL MODAL
+   ======================================== */
+
+.app-modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 0 var(--modal-padding);
+    height: var(--modal-footer-height);
+    border-top: 1px solid var(--modal-border);
+    background: #f8f9fa;
+    flex-shrink: 0;
+}
+
+/* ========================================
+   ANIMACIONES
+   ======================================== */
+
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9) translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+/* ========================================
+   RESPONSIVE DESIGN
+   ======================================== */
+
+@media (max-width: 768px) {
+    .app-modal-backdrop {
+        padding: 10px;
+    }
+    
+    .app-modal {
+        width: 95vw !important;
+        min-width: 280px !important;
+        max-height: 95vh;
+    }
+    
+    .app-modal-header {
+        padding: 0 16px;
+        height: 50px;
+    }
+    
+    .app-modal-body {
+        padding: 16px;
+    }
+    
+    .app-modal-footer {
+        padding: 0 16px;
+        height: 50px;
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .app-modal-title {
+        font-size: 1.1rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .app-modal-backdrop {
+        padding: 5px;
+    }
+    
+    .app-modal {
+        width: 98vw !important;
+        min-width: 250px !important;
+    }
+    
+    .app-modal-header {
+        padding: 0 12px;
+        height: 45px;
+    }
+    
+    .app-modal-body {
+        padding: 12px;
+    }
+    
+    .app-modal-footer {
+        padding: 0 12px;
+        height: auto;
+        min-height: 45px;
+    }
+}
+
+/* ========================================
+   FOCUS VISIBLE PARA ACCESIBILIDAD
+   ======================================== */
+
+.app-modal:focus-within {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
+}
+
+/* ========================================
+   SCROLLBAR PERSONALIZADO PARA EL BODY
+   ======================================== */
+
+.app-modal-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+.app-modal-body::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.app-modal-body::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+.app-modal-body::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* ========================================
+   ESTADOS ESPECIALES
+   ======================================== */
+
+/* Modal sin header */
+.app-modal:not(:has(.app-modal-header)) .app-modal-body {
+    border-top-left-radius: var(--modal-border-radius);
+    border-top-right-radius: var(--modal-border-radius);
+}
+
+/* Modal sin footer */
+.app-modal:not(:has(.app-modal-footer)) .app-modal-body {
+    border-bottom-left-radius: var(--modal-border-radius);
+    border-bottom-right-radius: var(--modal-border-radius);
+}
+
+/* Modal solo con body */
+.app-modal:not(:has(.app-modal-header)):not(:has(.app-modal-footer)) .app-modal-body {
+    border-radius: var(--modal-border-radius);
+}
+
+/* ========================================
+   UTILIDADES PARA CONTENIDO INTERNO
+   ======================================== */
+
+/* Para formularios dentro del modal */
+.app-modal-body form {
+    margin: 0;
+}
+
+/* Para botones en el footer */
+.app-modal-footer .btn {
+    min-width: 80px;
+}
+
+/* Para listas dentro del modal */
+.app-modal-body .modal-list {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--modal-border);
+    border-radius: 6px;
+    background: #f8f9fa;
+}
+
+.app-modal-body .modal-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--modal-border);
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.app-modal-body .modal-item:hover {
+    background: #e9ecef;
+}
+
+.app-modal-body .modal-item:last-child {
+    border-bottom: none;
+}
+
+/* Para inputs dentro del modal */
+.app-modal-body .modal-input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--modal-border);
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+}
+
+.app-modal-body .modal-input:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}

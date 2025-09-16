@@ -1,0 +1,21 @@
+@using BlazorApp_ProductosAPI.Models
+
+@if (Model != null)
+{
+    <input class="form-control fast-number" 
+           type="text" 
+           inputmode="decimal" 
+           autocomplete="off" 
+           spellcheck="false" 
+           value="@Model.Value" 
+           @oninput="(e) => Model.OnInput(Model.Producto, e)" />
+}
+else
+{
+    <span class="numeric">@Value</span>
+}
+
+@code {
+    [Parameter] public StockInputModel? Model { get; set; }
+    [Parameter] public string Value { get; set; } = "0";
+}

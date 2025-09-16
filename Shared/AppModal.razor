@@ -1,0 +1,106 @@
+@using Microsoft.JSInterop
+@using Microsoft.AspNetCore.Components.Web
+@inject IJSRuntime JS
+
+@if (IsOpen)
+{
+    <div class="app-modal-backdrop" @onclick="OnBackdropClick" @onkeydown="OnKeyDown">
+        <div class="app-modal @SizeClass" @ref="modalElement" @onclick:stopPropagation="true">
+            <div class="app-modal-header">
+                @if (!string.IsNullOrEmpty(Title))
+                {
+                    <h4 class="app-modal-title">@Title</h4>
+                }
+                @if (ShowCloseButton)
+                {
+                    <button type="button" 
+                            class="app-modal-close" 
+                            @onclick="Close" 
+                            aria-label="Cerrar">
+                        ×
+                    </button>
+                }
+            </div>
+            
+            <div class="app-modal-body">
+                @ChildContent
+            </div>
+            
+            @if (FooterContent != null)
+            {
+                <div class="app-modal-footer">
+                    @FooterContent
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? FooterContent { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public bool DisableBackdropClose { get; set; }
+    [Parameter] public bool DisableEsc { get; set; }
+    [Parameter] public bool ShowCloseButton { get; set; } = true;
+    [Parameter] public ModalSize Size { get; set; } = ModalSize.Medium;
+    
+    private ElementReference modalElement;
+    private bool isInitialized = false;
+    
+    public enum ModalSize
+    {
+        Small,
+        Medium,
+        Large,
+        ExtraLarge
+    }
+    
+    private string SizeClass => Size switch
+    {
+        ModalSize.Small => "app-modal-sm",
+        ModalSize.Medium => "app-modal-md", 
+        ModalSize.Large => "app-modal-lg",
+        ModalSize.ExtraLarge => "app-modal-xl",
+        _ => "app-modal-md"
+    };
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (IsOpen && !isInitialized)
+        {
+            await JS.InvokeVoidAsync("appModal.init", modalElement, DisableEsc);
+            isInitialized = true;
+        }
+        else if (!IsOpen && isInitialized)
+        {
+            await JS.InvokeVoidAsync("appModal.destroy");
+            isInitialized = false;
+        }
+    }
+    
+    private async Task Close()
+    {
+        await OnClose.InvokeAsync();
+    }
+    
+    private async Task OnBackdropClick()
+    {
+        if (!DisableBackdropClose)
+        {
+            await Close();
+        }
+    }
+    
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape" && !DisableEsc)
+        {
+            await Close();
+        }
+    }
+    
+
+}
