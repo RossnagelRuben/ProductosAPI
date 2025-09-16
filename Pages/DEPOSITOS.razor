@@ -1852,21 +1852,12 @@
             
             <div class="mt-2">
                 <small class="text-muted">
-                    El QR debe contener un número entero que corresponda al ProductoUbicacionID de la ubicación.
+                    El QR debe contener un JSON con ProductoUbicacionID o un número entero. La modal se cerrará automáticamente al detectar un QR válido.
                 </small>
             </div>
         </div>
     </ChildContent>
-    <FooterContent>
-        <button class="btn btn-outline-secondary" @onclick="CerrarQRModal">
-            <i class="oi oi-x"></i> Cancelar
-        </button>
-        <button class="btn btn-primary" 
-                @onclick="BuscarPorQR" 
-                disabled="@(string.IsNullOrEmpty(qrDetectedValue))">
-            <i class="oi oi-magnifying-glass"></i> Buscar Ubicación
-        </button>
-    </FooterContent>
+    <!-- Footer removido - la modal se cierra automáticamente al detectar QR -->
 </AppModal>
 
 @code {
@@ -3444,14 +3435,42 @@
             qrDetectedValue = qrValue;
             
             // Mostrar el resultado en la UI
-            _ = JSRuntime.InvokeVoidAsync("showQRResult", $"ID: {qrValue}");
+            _ = JSRuntime.InvokeVoidAsync("showQRResult", $"QR: {qrValue}");
             
             // Habilitar el botón de búsqueda
             _ = JSRuntime.InvokeVoidAsync("enableQRSearchButton");
             
-            // Verificar si el valor del QR es un ProductoUbicacionID válido
-            if (int.TryParse(qrValue, out int productoUbicacionID))
+            // Intentar extraer ProductoUbicacionID del QR
+            int? productoUbicacionID = null;
+            
+            // Primero intentar parsear como JSON
+            try
             {
+                var jsonDoc = System.Text.Json.JsonDocument.Parse(qrValue);
+                if (jsonDoc.RootElement.TryGetProperty("ProductoUbicacionID", out var idElement))
+                {
+                    if (idElement.TryGetInt32(out int id))
+                    {
+                        productoUbicacionID = id;
+                        Console.WriteLine($"📱 QR JSON detectado: ProductoUbicacionID = {id}");
+                    }
+                }
+            }
+            catch
+            {
+                // Si no es JSON válido, intentar parsear como número directo
+                if (int.TryParse(qrValue, out int directId))
+                {
+                    productoUbicacionID = directId;
+                    Console.WriteLine($"📱 QR número directo detectado: {directId}");
+                }
+            }
+            
+            // Si se encontró un ProductoUbicacionID válido, procesar automáticamente
+            if (productoUbicacionID.HasValue)
+            {
+                Console.WriteLine($"🚀 Iniciando procesamiento automático del QR...");
+                
                 // Cerrar el modal QR automáticamente después de 1 segundo
                 _ = Task.Run(async () =>
                 {
@@ -3460,13 +3479,15 @@
                     {
                         try
                         {
+                            Console.WriteLine($"⏱️ Esperando 1 segundo antes de procesar...");
+                            
                             // Cerrar el modal QR
                             await CerrarQRModal();
                             
                             // Buscar y seleccionar la ubicación automáticamente
-                            await BuscarUbicacionPorID(productoUbicacionID);
+                            await BuscarUbicacionPorID(productoUbicacionID.Value);
                             
-                            Console.WriteLine($"✅ QR detectado y procesado automáticamente: ProductoUbicacionID = {productoUbicacionID}");
+                            Console.WriteLine($"✅ QR detectado y procesado automáticamente: ProductoUbicacionID = {productoUbicacionID.Value}");
                         }
                         catch (Exception ex)
                         {
@@ -3474,6 +3495,10 @@
                         }
                     });
                 });
+            }
+            else
+            {
+                Console.WriteLine($"❌ QR no contiene un ProductoUbicacionID válido: {qrValue}");
             }
             
             StateHasChanged();
