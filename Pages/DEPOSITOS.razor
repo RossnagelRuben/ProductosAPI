@@ -2597,10 +2597,20 @@
         StateHasChanged();
     }
 
+    /// <summary>
+    /// Carga los productos de una ubicación específica seleccionada
+    /// Este método se ejecuta automáticamente cuando:
+    /// - Se selecciona una ubicación manualmente desde el árbol
+    /// - Se detecta un QR con un ProductoUbicacionID válido
+    /// - Se busca una ubicación por ID desde el modal QR
+    /// </summary>
+    /// <param name="node">Nodo de la ubicación seleccionada</param>
     private async Task LoadProductsForNode(TreeNode node)
     {
         try
         {
+            Console.WriteLine($"📦 Cargando productos para ubicación: {node.Item.Descripcion} (ID: {node.Item.ProductoUbicacionID})");
+            
             // Ocultar completamente el panel de ubicaciones al seleccionar una ubicación
             leftPanelHidden = true;
             await JSRuntime.InvokeVoidAsync("toggleLocationsPanel", leftPanelHidden);
@@ -2614,6 +2624,7 @@
             selectedProductsCount = 0;
             await InvokeAsync(StateHasChanged);
             await Task.Yield();
+            
             // 1 = incluir stock; usar Orden del nodo para incluir sub-ubicaciones
             var resp = await UbicacionService.GetUbicacionesAsync(token, node.Item.Orden, 1);
             if (resp?.Data != null)
@@ -3381,19 +3392,25 @@
     }
     
     /// <summary>
-    /// Busca una ubicación por su ProductoUbicacionID y la selecciona
+    /// Busca una ubicación por su ProductoUbicacionID y la selecciona automáticamente
+    /// Este método es llamado cuando se detecta un QR con un ProductoUbicacionID válido
     /// </summary>
     /// <param name="productoUbicacionID">ID de la ubicación a buscar</param>
     private async Task BuscarUbicacionPorID(int productoUbicacionID)
     {
         try
         {
+            Console.WriteLine($"🔍 Buscando ubicación con ProductoUbicacionID: {productoUbicacionID}");
+            
             // Buscar el nodo por ProductoUbicacionID en el árbol
             var nodoEncontrado = FindNodeById(rootNodes, productoUbicacionID);
             
             if (nodoEncontrado != null)
             {
+                Console.WriteLine($"✅ Ubicación encontrada: {nodoEncontrado.Item.Descripcion} (Nivel: {nodoEncontrado.Level})");
+                
                 // Seleccionar el nodo encontrado usando el método existente
+                // Esto automáticamente cargará los productos de esa ubicación
                 await SelectNodeFromJS(
                     nodoEncontrado.Item.ProductoUbicacionID, 
                     nodoEncontrado.Item.Descripcion, 
@@ -3401,16 +3418,17 @@
                     nodoEncontrado.Item.Orden
                 );
                 
-                Console.WriteLine($"Ubicación encontrada y seleccionada: {nodoEncontrado.Item.Descripcion}");
+                Console.WriteLine($"🎯 Ubicación seleccionada y productos cargados automáticamente: {nodoEncontrado.Item.Descripcion}");
             }
             else
             {
-                Console.WriteLine($"No se encontró la ubicación con ID: {productoUbicacionID}");
+                Console.WriteLine($"❌ No se encontró la ubicación con ProductoUbicacionID: {productoUbicacionID}");
+                Console.WriteLine("💡 Verifica que el ID del QR corresponda a una ubicación válida en el sistema");
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error buscando ubicación por ID: {ex.Message}");
+            Console.WriteLine($"❌ Error buscando ubicación por ID {productoUbicacionID}: {ex.Message}");
         }
     }
     
@@ -3430,6 +3448,33 @@
             
             // Habilitar el botón de búsqueda
             _ = JSRuntime.InvokeVoidAsync("enableQRSearchButton");
+            
+            // Verificar si el valor del QR es un ProductoUbicacionID válido
+            if (int.TryParse(qrValue, out int productoUbicacionID))
+            {
+                // Cerrar el modal QR automáticamente después de 1 segundo
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(1000); // Esperar 1 segundo
+                    await InvokeAsync(async () =>
+                    {
+                        try
+                        {
+                            // Cerrar el modal QR
+                            await CerrarQRModal();
+                            
+                            // Buscar y seleccionar la ubicación automáticamente
+                            await BuscarUbicacionPorID(productoUbicacionID);
+                            
+                            Console.WriteLine($"✅ QR detectado y procesado automáticamente: ProductoUbicacionID = {productoUbicacionID}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"❌ Error procesando QR automáticamente: {ex.Message}");
+                        }
+                    });
+                });
+            }
             
             StateHasChanged();
         }
