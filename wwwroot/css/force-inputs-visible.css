@@ -1,0 +1,113 @@
+/* FORZAR VISIBILIDAD DE TODOS LOS INPUT - SÚPER AGRESIVO */
+input,
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+input[type="tel"],
+input[type="url"],
+input.form-control,
+.form-control,
+.fast-number,
+input.fast-number,
+.form-control.fast-number,
+input[class*="form-control"],
+input[class*="fast-number"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    background-color: white !important;
+    border: 2px solid #007bff !important;
+    color: #000 !important;
+    font-size: 14px !important;
+    padding: 8px 12px !important;
+    height: 38px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    position: relative !important;
+    z-index: 99999 !important;
+    pointer-events: auto !important;
+    user-select: auto !important;
+    -webkit-user-select: auto !important;
+    -moz-user-select: auto !important;
+    -ms-user-select: auto !important;
+    /* ELIMINAR CUALQUIER TRANSICIÓN */
+    transition: none !important;
+    -webkit-transition: none !important;
+    -moz-transition: none !important;
+    -o-transition: none !important;
+    /* ELIMINAR CUALQUIER FILTRO */
+    filter: none !important;
+    -webkit-filter: none !important;
+    /* FORZAR ESTADO NORMAL */
+    transform: none !important;
+    -webkit-transform: none !important;
+    -moz-transform: none !important;
+    -ms-transform: none !important;
+    /* FORZAR QUE NO SE OCULTE */
+    clip: auto !important;
+    clip-path: none !important;
+    -webkit-clip-path: none !important;
+    mask: none !important;
+    -webkit-mask: none !important;
+    /* FORZAR VISIBILIDAD EN TODOS LOS ESTADOS */
+    :not(:focus):not(:hover):not(:active):not(:visited):not(:link) {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        background-color: white !important;
+        border: 2px solid #007bff !important;
+        color: #000 !important;
+    }
+}
+
+/* FORZAR VISIBILIDAD DE CONTENEDORES */
+.control-buttons,
+.control-buttons .ms-auto,
+.control-buttons .ms-auto:first-child,
+.ms-auto,
+.ms-auto:first-child,
+.grid-row,
+.grid-columns,
+.data-grid,
+.table,
+tbody,
+tr,
+td {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+}
+
+/* FORZAR VISIBILIDAD DE INPUT EN CONTENEDORES */
+.control-buttons input,
+.control-buttons .ms-auto input,
+.control-buttons .ms-auto:first-child input,
+.ms-auto input,
+.ms-auto:first-child input,
+.grid-row input,
+.grid-columns input,
+.data-grid input,
+.table input,
+tbody input,
+tr input,
+td input {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    background-color: white !important;
+    border: 2px solid #007bff !important;
+    color: #000 !important;
+    font-size: 14px !important;
+    padding: 8px 12px !important;
+    height: 38px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    position: relative !important;
+    z-index: 99999 !important;
+    text-align: center !important;
+}

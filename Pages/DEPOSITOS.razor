@@ -4,17 +4,72 @@
 @using BlazorApp_ProductosAPI.Components
 @inject UbicacionService UbicacionService
 @inject TreeBuilderService TreeBuilderService
-@inject IJSRuntime JSRuntime
-@inject ProductoService ProductoService
 
 <style>
-    /* Estilos inline para asegurar que se apliquen */
+/* FORZAR VISIBILIDAD DE TODOS LOS INPUT - SÚPER AGRESIVO */
+input,
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+input[type="tel"],
+input[type="url"],
+input.form-control,
+.form-control,
+.fast-number,
+input.fast-number,
+.form-control.fast-number,
+input[class*="form-control"],
+input[class*="fast-number"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    background-color: white !important;
+    border: 2px solid #007bff !important;
+    color: #000 !important;
+    font-size: 14px !important;
+    padding: 8px 12px !important;
+    height: 38px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    position: relative !important;
+    z-index: 99999 !important;
+    pointer-events: auto !important;
+    user-select: auto !important;
+    -webkit-user-select: auto !important;
+    -moz-user-select: auto !important;
+    -ms-user-select: auto !important;
+    transition: none !important;
+    -webkit-transition: none !important;
+    -moz-transition: none !important;
+    -o-transition: none !important;
+    filter: none !important;
+    -webkit-filter: none !important;
+    transform: none !important;
+    -webkit-transform: none !important;
+    -moz-transform: none !important;
+    -ms-transform: none !important;
+    clip: auto !important;
+    clip-path: none !important;
+    -webkit-clip-path: none !important;
+    mask: none !important;
+    -webkit-mask: none !important;
+}
+</style>
+@inject IJSRuntime JSRuntime
+@inject ProductoService ProductoService
+@inject IAuthService AuthService
+
+<style>
+    /* Estilos unificados para un layout vertical responsivo */
     .depositos-container {
         min-height: 100vh;
         display: flex;
         flex-direction: column;
         background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        gap: 0;
     }
 
     .depositos-header {
@@ -26,67 +81,140 @@
         border-bottom: 1px solid #dee2e6;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         z-index: 1000;
-        flex-wrap: nowrap;
+        flex-wrap: wrap;
+        position: sticky;
+        top: 0;
     }
 
     .depositos-content {
         flex: 1;
         display: flex;
+        flex-direction: column;
         overflow: hidden;
         position: relative;
+        gap: 1rem;
+        padding: 1rem;
+    }
+
+    .main-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        flex: 1;
+        min-height: 0;
     }
 
     .left-panel {
-        width: 35%;
-        min-width: 280px;
-        max-width: 70%;
+        width: 100%;
         display: flex;
         flex-direction: column;
         background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
-        border-right: 1px solid #dee2e6;
-        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
-        resize: horizontal;
-        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        overflow: hidden;
+        transition: all 0.3s ease;
+        min-height: 300px;
+    }
+
+    .right-panel {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        overflow: hidden;
+        transition: all 0.3s ease;
+        min-height: 300px;
+    }
+
+    .products-container {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        padding: 1rem;
+        height: 100%;
+        overflow-y: auto;
+    }
+
+    .selected-location {
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        border: 2px solid #007bff;
+        border-radius: 12px;
+        padding: 1rem;
+        box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
         transition: all 0.3s ease;
     }
 
-    /* Cuando el panel derecho está oculto, el izquierdo ocupa todo el espacio */
-    .right-panel.panel-hidden ~ .left-panel,
-    .right-panel[style*="display: none"] ~ .left-panel {
-        width: 100% !important;
-        max-width: 100% !important;
-        min-width: 100% !important;
-        flex: 1 !important;
+    .control-buttons {
+        display: flex;
+        gap: 0.75rem;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+        flex-wrap: wrap;
+        align-items: center;
+        border-radius: 8px;
     }
 
+    .filters-section {
+        padding: 1rem;
+        background: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+        border-radius: 8px;
+    }
+
+    .data-grid-section {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+    }
+
+    .grid-content {
+        flex: 1;
+        overflow: visible;
+        min-height: 200px;
+    }
+
+    .grid-footer {
+        padding: 0.5rem;
+        background: #f8f9fa;
+        border-top: 1px solid #dee2e6;
+        text-align: center;
+        border-radius: 0 0 8px 8px;
+    }
+
+    .no-selection {
+        background: #f8f9fa;
+        border: 2px dashed #dee2e6;
+        border-radius: 12px;
+        padding: 2rem;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 200px;
+    }
+
+    .no-selection i {
+        font-size: 2rem;
+        color: #6c757d;
+        margin-bottom: 1rem;
+    }
+
+    .no-selection p {
+        color: #6c757d;
+        font-size: 1rem;
+        margin: 0;
+    }
+
+    /* Ocultar elementos de redimensionamiento ya que no los necesitamos */
     .resize-handle {
-        width: 4px;
-        background: #dee2e6;
-        cursor: col-resize;
-        flex-shrink: 0;
-        transition: background-color 0.2s ease;
-        position: relative;
-    }
-
-    .resize-handle:hover {
-        background: #007bff;
-        width: 6px;
-    }
-
-    .resize-handle::before {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 2px;
-        height: 20px;
-        background: #6c757d;
-        border-radius: 1px;
-    }
-
-    .resize-handle:hover::before {
-        background: white;
+        display: none !important;
     }
 
     .tree-node {
@@ -308,6 +436,40 @@
         .panel-toggle {
             flex-shrink: 0 !important;
             white-space: nowrap !important;
+        }
+
+        .depositos-content {
+            flex-direction: row !important;
+            height: calc(100vh - 80px) !important;
+        }
+
+        .main-panel {
+            flex-direction: row !important;
+            gap: 1rem !important;
+        }
+
+        .left-panel {
+            width: 40% !important;
+            min-width: 350px !important;
+            max-width: 50% !important;
+            height: 100% !important;
+        }
+
+        .right-panel {
+            width: 60% !important;
+            min-width: 400px !important;
+            height: 100% !important;
+        }
+
+        /* Cuando no hay ubicación seleccionada, el panel izquierdo ocupa todo el espacio */
+        .main-panel:has(.left-panel:only-child) .left-panel {
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+
+        .products-container {
+            padding: 1rem !important;
+            gap: 1rem !important;
         }
     }
 
@@ -817,6 +979,44 @@
         .right-panel { display: flex !important; width: 100% !important; height: auto; }
     }
 
+    /* Estilos responsivos para el contenedor unificado de productos */
+    @@media (max-width: 768px) {
+        .products-container {
+            padding: 0.5rem !important;
+            gap: 0.75rem !important;
+        }
+
+        .selected-location {
+            padding: 0.75rem !important;
+            margin: 0 !important;
+        }
+
+        .control-buttons {
+            padding: 0.75rem !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+        }
+
+        .filters-section {
+            padding: 0.75rem !important;
+        }
+
+        .data-grid-section {
+            min-height: 200px !important;
+        }
+
+        .no-selection {
+            padding: 1.5rem !important;
+            min-height: 150px !important;
+        }
+
+        /* En móviles, cuando no hay ubicación seleccionada, el panel izquierdo ocupa todo el espacio */
+        .main-panel:has(.left-panel:only-child) .left-panel {
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+    }
+
     /* Touch-friendly improvements */
     @@media (hover: none) and (pointer: coarse) {
         .tree-node {
@@ -1289,9 +1489,10 @@
     }
 </style>
 
+<AuthorizeView>
 <div class="depositos-container">
     <!-- Header -->
-    <div class="depositos-header" style="background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important; border-radius: 0 0 16px 16px !important; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1) !important; margin-bottom: 8px !important; padding: 1rem !important; display: flex !important; align-items: center !important; justify-content: space-between !important; flex-wrap: wrap !important; gap: 1rem !important; position: sticky; top: 0; z-index: 1001;">
+    <div class="depositos-header" style="background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important; border-radius: 0 !important; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1) !important; margin: 0 !important; padding: 1rem !important; display: flex !important; align-items: center !important; justify-content: space-between !important; flex-wrap: wrap !important; gap: 1rem !important; position: sticky; top: 0; z-index: 1001;">
         <!-- Título -->
         <h2 class="page-title" style="margin: 0 !important; display: flex !important; align-items: center !important; gap: 0.5rem !important;">
             <span class="title-text">Stock por ubicación:</span>
@@ -1299,19 +1500,8 @@
         
         <!-- Controles del lado derecho -->
         <div class="header-right">
-            <!-- Token Section -->
-            <div class="token-section">
-                <label for="token-input" class="token-label">Token:</label>
-                <input type="password" 
-                       id="token-input"
-                       @bind="token" 
-                       @oninput="OnTokenInput"
-                       @onkeypress="OnTokenKeyPress"
-                       placeholder="Ingrese Bearer Token"
-                       class="token-input" />
-            </div>
             
-            <!-- Botón Cargar -->
+            @* <!-- Botón Cargar -->
             <button @onclick="LoadUbicaciones" 
                     disabled="@isLoading"
                     class="load-btn">
@@ -1336,14 +1526,16 @@
                     class="panel-toggle">
                 <i class="oi @(rightPanelHidden ? "oi-eye" : "oi-eye")"></i>
                 <span class="toggle-text">@(rightPanelHidden ? "Mostrar" : "Ocultar") Productos</span>
-            </button>
+            </button> *@
         </div>
     </div>
 
         <!-- Main Content -->
-        <div class="depositos-content" style="display: flex !important; flex-direction: row !important; height: 100% !important; overflow: hidden !important; visibility: visible !important; opacity: 1 !important;">
-            <!-- Left Panel - Tree -->
-            <div class="left-panel @(leftPanelHidden ? "panel-hidden" : "")" style="display: flex !important; width: 35% !important; min-width: 320px !important; max-width: 70% !important; height: 100% !important; flex-direction: column !important; background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%) !important; border-right: 1px solid #dee2e6 !important; box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05) !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 1 !important;">
+        <div class="depositos-content">
+            <!-- Panel principal unificado -->
+            <div class="main-panel">
+                <!-- Left Panel - Tree -->
+                <div class="left-panel @(leftPanelHidden ? "panel-hidden" : "")">
             <div class="panel-header">
                 <div class="search-section">
                     <label for="search-input">Buscar ubicación:</label>
@@ -1402,25 +1594,24 @@
                     </div>
                 </div>
             </div>
-            </div>
-
-            <!-- Resize Handle -->
-            <div class="resize-handle" 
-                 @ref="resizeHandle"
-                 style="display: block !important; width: 4px !important; height: 100% !important; background: #dee2e6 !important; cursor: col-resize !important; flex-shrink: 0 !important; visibility: visible !important; opacity: 1 !important;"></div>
-
-            <!-- Right Panel - Filters -->
-            <div class="right-panel @(rightPanelHidden ? "panel-hidden" : "")" style="display: flex !important; width: 65% !important; height: 100% !important; flex-direction: column !important; background: white !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 1 !important;">
-
-            @if (selectedNode != null)
-            {
-                <!-- Versión simplificada para móviles -->
-                <div class="mobile-location-simple" style="display: none;">
-                    <strong>Ubicación seleccionada:</strong> @GetLocationPath(selectedNode)
                 </div>
-                
-                <!-- Versión completa para desktop -->
-                <div class="selected-location @(ubicacionCollapsed ? "collapsed" : "")" style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%) !important; border: 2px solid #007bff !important; border-radius: 12px !important; padding: 1rem !important; margin: 1rem !important; box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15) !important; transition: all 0.3s ease !important;">
+
+                <!-- Right Panel - Products (solo visible cuando hay ubicación seleccionada) -->
+                @if (selectedNode != null)
+                {
+                    <div class="right-panel @(rightPanelHidden ? "panel-hidden" : "") show-on-mobile">
+                        <!-- Contenedor unificado de productos con alineación vertical -->
+                        <div class="products-container">
+                            <!-- Botón Volver - Solo visible en móviles -->
+                            <div class="d-block d-md-none mb-3">
+                                <button @onclick="VolverAUbicaciones" 
+                                        class="btn btn-outline-secondary btn-sm">
+                                    <i class="oi oi-arrow-left"></i> Volver a ubicaciones
+                                </button>
+                            </div>
+                            
+                            <!-- Ubicación seleccionada -->
+                            <div class="selected-location @(ubicacionCollapsed ? "collapsed" : "")">
                     @if (ubicacionCollapsed)
                     {
                         <!-- Vista colapsada: una sola línea horizontal -->
@@ -1468,11 +1659,10 @@
                             RENDERIZANDO: @selectedNode.Item.Descripcion (Level: @selectedNode.Level)
                         </div>
                     }
-                </div>
-                
-                <!-- Productos: filtros + divisor + grilla -->
-                <!-- Botones de control siempre visibles -->
-                <div class="control-buttons" style="display: flex; gap: 0.75rem; padding: 1rem; background: #f8f9fa; border-bottom: 1px solid #dee2e6; flex-wrap: wrap; align-items: center;">
+                            </div>
+                            
+                            <!-- Botones de control -->
+                            <div class="control-buttons">
 @*                     <button class="btn btn-sm btn-info" @onclick="ToggleLocationsPanel">
                         <i class="oi oi-location"></i> @(leftPanelHidden ? "Mostrar ubicaciones" : "Ocultar ubicaciones")
                     </button>
@@ -1490,13 +1680,21 @@
                         <i class="oi @(filtersExpanded ? "oi-chevron-up" : "oi-chevron-down")"></i>
                         @(filtersExpanded ? "Contraer filtros" : "Expandir filtros")
                     </button>
-                    <div class="ms-auto" style="display:flex;align-items:center;gap:.5rem;">
-                        <input id="barcodeInput" class="form-control" style="max-width: 260px;" placeholder="Escanear código de barras..." @bind="barcodeInput" @bind:event="oninput" @onkeypress="OnBarcodeKeyPress" />
-                        <button class="btn btn-outline-primary" @onclick="BuscarPorCodigoBarra" title="Buscar por código de barras" style="height: 38px; display: flex; align-items: center; justify-content: center;">
-                            <i class="oi oi-magnifying-glass"></i>
-                        </button>
-                        <!-- Botón QR para escanear ubicaciones -->
-                        <button class="btn btn-outline-success" @onclick="AbrirQRScanner" title="Escanear QR de ubicación" style="height: 38px; display: flex; align-items: center; justify-content: center;">
+                    <div class="ms-auto" style="display:flex;align-items:center;gap:.5rem;width:100%;max-width:400px;">
+                        <!-- Textbox de código de barras - 90% del ancho -->
+                        <input id="barcodeInput" 
+                               class="form-control" 
+                               style="width: 90%; height: 38px;" 
+                               placeholder="Escanear código de barras..." 
+                               @bind="barcodeInput" 
+                               @bind:event="oninput" 
+                               @onkeypress="OnBarcodeKeyPress" />
+                        
+                        <!-- Botón QR para escanear ubicaciones - 10% del ancho -->
+                        <button class="btn btn-outline-success" 
+                                @onclick="AbrirQRScanner" 
+                                title="Escanear QR de ubicación" 
+                                style="width: 10%; height: 38px; display: flex; align-items: center; justify-content: center; min-width: 40px; padding: 0;">
                             <i class="oi oi-camera-slr"></i>
                         </button>
                     </div>
@@ -1528,12 +1726,12 @@
                     <div class="ms-auto">
                         <span class="badge bg-primary">Registros: @selectedProductsCount</span>
                     </div>
-                </div>
+                            </div>
 
-                <!-- Filtros internos -->
-                @if (filtersExpanded)
-                {
-                    <div class="filters-section" style="margin: 0 1rem; padding: 1rem; background: #f8f9fa; border-bottom: 1px solid #dee2e6;">
+                            <!-- Filtros internos -->
+                            @if (filtersExpanded)
+                            {
+                                <div class="filters-section">
                         <div class="row">
                             <div class="col-md-6">
                                 <label class="form-label">Descripción</label>
@@ -1564,10 +1762,11 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
-                }
+                                </div>
+                            }
 
-                <div class="data-grid-section" style="margin: 0 1rem 1rem 1rem; display: flex; flex-direction: column;">
+                            <!-- Sección de grilla de datos -->
+                            <div class="data-grid-section">
 
 
                     <!-- Grilla -->
@@ -1627,58 +1826,32 @@
                                 ShowRefreshButton="false"
                                 GetValueFunction="@GetProductoValue" />
                             
+                            }
+                        </div>
+                        
+                        <!-- Footer de la grilla -->
+                        <div class="grid-footer">
+                            <span class="record-count">Registros: @selectedProductsCount</span>
+                        </div>
+                            </div>
                         }
                     </div>
                 </div>
-            }
-            else
-            {
-                <div class="no-selection" style="background: #f8f9fa !important; border: 2px dashed #dee2e6 !important; border-radius: 12px !important; padding: 2rem !important; margin: 1rem !important; text-align: center !important;">
-                    <i class="oi oi-location" style="font-size: 2rem !important; color: #6c757d !important; margin-bottom: 1rem !important;"></i>
-                    <p style="color: #6c757d !important; font-size: 1rem !important; margin: 0 !important;">Seleccione una ubicación para ver los productos</p>
-                </div>
-            }
+                }
+        </div>
 
-            
-
-            <!-- Data Grid Placeholder -->
-@*             <div class="data-grid-section">
-                <div class="grid-header">
-                    <div class="grid-columns">
-                        <div class="grid-column" data-label="Rub/Cód">Rub/Cód</div>
-                        <div class="grid-column" data-label="Producto">Producto</div>
-                        <div class="grid-column" data-label="Stock Actual">Stock Actual</div>
-                        <div class="grid-column" data-label="Mínimo">Mínimo</div>
-                        <div class="grid-column" data-label="Sugerido">Sugerido</div>
-                    </div>
-                </div>
-                <div class="grid-content">
-                    <div class="empty-grid">
-                        <i class="oi oi-table"></i>
-                        <p>Seleccione una ubicación para ver los productos</p>
-                    </div>
-                </div>
-
-            </div> *@
-
-            <!-- Footer fuera de la grilla -->
-            <div class="grid-footer" style="position: static; margin-top: 0;">
-                <span class="record-count">Registros: @selectedProductsCount</span>
+        <!-- Error Banner -->
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="error-banner">
+                <i class="oi oi-warning"></i>
+                <span>@errorMessage</span>
+                <button @onclick="() => errorMessage = string.Empty" class="btn-close">
+                    <i class="oi oi-x"></i>
+                </button>
             </div>
-        </div>
+        }
     </div>
-
-    <!-- Error Banner -->
-    @if (!string.IsNullOrEmpty(errorMessage))
-    {
-        <div class="error-banner">
-            <i class="oi oi-warning"></i>
-            <span>@errorMessage</span>
-            <button @onclick="() => errorMessage = string.Empty" class="btn-close">
-                <i class="oi oi-x"></i>
-            </button>
-        </div>
-    }
 </div>
 
 <!-- Modal: Rubro / Familia -->
@@ -1710,18 +1883,24 @@
     </FooterContent>
 </AppModal>
 
-<!-- Modal: Configuración de Columnas -->
+<!-- Modal: Configuración de Columnas - SIN BOTONES EN FOOTER -->
 <AppModal IsOpen="showColumnConfigModal" Title="Configurar Columnas" OnClose="() => showColumnConfigModal = false">
     <ChildContent>
         <div class="column-config-content">
-            <p class="text-muted mb-3">Selecciona qué columnas mostrar en la grilla de productos:</p>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <p class="text-muted mb-0">Selecciona qué columnas mostrar en la grilla de productos. Los cambios se guardan automáticamente:</p>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="ResetColumnConfig" title="Restaurar configuración por defecto">
+                    <i class="oi oi-reload"></i> Restaurar por defecto
+                </button>
+            </div>
             <div class="column-list">
                 @foreach (var column in availableColumns)
                 {
                     <div class="form-check column-item">
                         <input class="form-check-input" 
                                type="checkbox" 
-                               @bind="column.IsVisible" 
+                               checked="@column.IsVisible"
+                               @onchange="@((ChangeEventArgs e) => OnColumnVisibilityChanged(e, column))"
                                id="column-@column.Key" />
                         <label class="form-check-label" for="column-@column.Key">
                             @column.Label
@@ -1731,45 +1910,9 @@
             </div>
         </div>
     </ChildContent>
-    <FooterContent>
-        <button class="btn btn-secondary" @onclick="ResetColumnConfig">Restaurar por defecto</button>
-        <button class="btn btn-primary" @onclick="SaveColumnConfig">Guardar configuración</button>
-        <button class="btn btn-outline-secondary" @onclick="() => showColumnConfigModal = false">Cerrar</button>
-    </FooterContent>
+    <!-- NO HAY FOOTER - Los cambios se guardan automáticamente al marcar/desmarcar checkboxes -->
 </AppModal>
 
-<!-- Modal: Solicitar Token -->
-<AppModal IsOpen="showTokenModal" Title="Token requerido" OnClose="CerrarTokenModal">
-    <ChildContent>
-        <div style="padding: 1rem;">
-            <p>Para cargar las ubicaciones, necesitas ingresar un token de autenticación.</p>
-            <div class="mb-3">
-                <label for="modal-token-input" class="form-label">Token de autenticación:</label>
-                <input type="password" 
-                       id="modal-token-input"
-                       class="form-control" 
-                       @bind="modalToken" 
-                       @onkeypress="OnModalTokenKeyPress"
-                       placeholder="Ingrese su Bearer Token"
-                       style="font-family: monospace;" />
-            </div>
-            <div class="alert alert-info">
-                <i class="oi oi-info"></i>
-                <small>El token se guardará automáticamente para futuras sesiones.</small>
-            </div>
-        </div>
-    </ChildContent>
-    <FooterContent>
-        <div style="display: flex; gap: 0.5rem; justify-content: center; align-items: center; width: 100%;">
-            <button class="btn btn-primary" @onclick="GuardarTokenYExpandir" style="flex: 1; max-width: 150px;">
-                <i class="oi oi-check"></i> Cargar ubicaciones
-            </button>
-            <button class="btn btn-outline-secondary" @onclick="CerrarTokenModal" style="flex: 1; max-width: 120px;">
-                <i class="oi oi-x"></i> Cancelar
-            </button>
-        </div>
-    </FooterContent>
-</AppModal>
 
 <!-- Modal: Detalle de Producto por Código de Barras -->
 <AppModal IsOpen="showProductoModal" Title="Detalle de producto" OnClose="CerrarProductoModal">
@@ -1869,7 +2012,7 @@
     private List<TreeNode> rootNodes = new();
     private TreeNode? selectedNode = null;
     private Timer? searchTimer;
-    private bool rightPanelHidden = false;
+    private bool rightPanelHidden = true;
     private bool leftPanelHidden = false;
     private bool isResizing = false;
     private ElementReference resizeHandle;
@@ -1901,17 +2044,28 @@
     private string? barcodeInput;
     private bool showProductoModal = false;
     private ProductoStock? productoModal;
-    private bool showTokenModal = false;
-    private string modalToken = string.Empty;
     
     // Variables para QR Scanner
     private bool showQRModal = false;
     private string qrDetectedValue = string.Empty;
     private bool isCameraActive = false;
 
-    private void OnAddUbicacionClick()
+    private async Task OnAddUbicacionClick()
     {
-        // Acción placeholder solicitada: no hace nada por ahora
+        // Abrir el QR scanner para escanear ubicaciones
+        await AbrirQRScanner();
+    }
+
+    private async Task VolverAUbicaciones()
+    {
+        // Limpiar selección
+        selectedNode = null;
+        
+        // Mostrar solo el panel de ubicaciones
+        await JSRuntime.InvokeVoidAsync("toggleLocationsPanel", leftPanelHidden);
+        
+        // Actualizar estado
+        StateHasChanged();
     }
 
     private async Task OnBarcodeKeyPress(KeyboardEventArgs e)
@@ -1979,54 +2133,6 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private void CerrarTokenModal()
-    {
-        showTokenModal = false;
-        modalToken = string.Empty;
-    }
-
-    private async Task AbrirTokenModal()
-    {
-        showTokenModal = true;
-        modalToken = string.Empty;
-        StateHasChanged();
-        
-        // Enfocar el input después de que se renderice la modal
-        await Task.Delay(100);
-        try 
-        { 
-            await JSRuntime.InvokeVoidAsync("blazorFocusById", "modal-token-input"); 
-        } 
-        catch { }
-    }
-
-    private async Task OnModalTokenKeyPress(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter")
-        {
-            await GuardarTokenYExpandir();
-        }
-    }
-
-    private async Task GuardarTokenYExpandir()
-    {
-        if (string.IsNullOrWhiteSpace(modalToken))
-        {
-            errorMessage = "Por favor ingrese un token válido";
-            return;
-        }
-
-        // Guardar el token
-        token = modalToken.Trim();
-        await SaveTokenToStorage();
-        
-        // Cerrar la modal
-        showTokenModal = false;
-        modalToken = string.Empty;
-        
-        // Cargar ubicaciones
-        await LoadUbicaciones();
-    }
 
     // Foco en stock actual dentro de la modal al abrirse (se maneja en el OnAfterRenderAsync principal)
     private bool _focusStockInModal = false;
@@ -2051,32 +2157,44 @@
     {
         if (firstRender)
         {
-            await JSRuntime.InvokeVoidAsync("forceMobileStyles");
-            await LoadTokenFromStorage();
-            // Aplicar el estado inicial de ambos paneles
-            await JSRuntime.InvokeVoidAsync("toggleProductsPanel", rightPanelHidden);
-            // En móviles, asegurar clase show-on-mobile cuando se va a mostrar
-            if (!rightPanelHidden)
+            try
             {
-                await JSRuntime.InvokeVoidAsync("toggleProductsPanel", false);
+                // Comentado temporalmente para evitar errores
+                // await JSRuntime.InvokeVoidAsync("forceMobileStyles");
+                await LoadTokenFromStorage();
+                // Aplicar el estado inicial de ambos paneles
+                // await JSRuntime.InvokeVoidAsync("toggleProductsPanel", rightPanelHidden);
+                
+                // Inicializar listeners responsivos
+                await JSRuntime.InvokeVoidAsync("initResponsiveListeners");
+                // En móviles, asegurar clase show-on-mobile cuando se va a mostrar
+                // if (!rightPanelHidden)
+                // {
+                //     await JSRuntime.InvokeVoidAsync("toggleProductsPanel", false);
+                // }
+                // await JSRuntime.InvokeVoidAsync("toggleLocationsPanel", leftPanelHidden);
+                // Inicializar el sistema de resize
+                // await JSRuntime.InvokeVoidAsync("initResize");
+                // Establecer la referencia del componente para JavaScript
+                // await JSRuntime.InvokeVoidAsync("setBlazorComponent", DotNetObjectReference.Create(this));
+                // No pre-cargar familias - se cargarán solo cuando se abra el modal
+                
+                // Colapsar ubicación automáticamente en móviles
+                // var isMobile = await JSRuntime.InvokeAsync<bool>("isMobileDevice");
+                // if (isMobile)
+                // {
+                //     ubicacionCollapsed = true;
+                // }
+                
+                // Inicializar configuración de columnas
+                await LoadColumnConfig();
+                await LoadGridColumnConfig();
             }
-            await JSRuntime.InvokeVoidAsync("toggleLocationsPanel", leftPanelHidden);
-            // Inicializar el sistema de resize
-            await JSRuntime.InvokeVoidAsync("initResize");
-            // Establecer la referencia del componente para JavaScript
-            await JSRuntime.InvokeVoidAsync("setBlazorComponent", DotNetObjectReference.Create(this));
-            // No pre-cargar familias - se cargarán solo cuando se abra el modal
-            
-            // Colapsar ubicación automáticamente en móviles
-            var isMobile = await JSRuntime.InvokeAsync<bool>("isMobileDevice");
-            if (isMobile)
+            catch (Exception ex)
             {
-                ubicacionCollapsed = true;
+                // Log del error pero no romper la aplicación
+                Console.WriteLine($"Error en OnAfterRenderAsync: {ex.Message}");
             }
-            
-            // Inicializar configuración de columnas
-            await LoadColumnConfig();
-            await LoadGridColumnConfig();
         }
         // Seleccionar el campo de stock en la modal si corresponde
         if (_focusStockInModal && showProductoModal)
@@ -2094,10 +2212,11 @@
     {
         try
         {
-            var savedToken = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "depositos_token");
-            if (!string.IsNullOrEmpty(savedToken))
+            // Usar el TOKEN FINAL del AuthService
+            var tokenFinal = await AuthService.GetTokenFINALAsync();
+            if (!string.IsNullOrEmpty(tokenFinal))
             {
-                token = savedToken;
+                token = tokenFinal;
                 StateHasChanged();
             }
         }
@@ -2107,26 +2226,12 @@
         }
     }
 
-    private async Task SaveTokenToStorage()
-    {
-        try
-        {
-            if (!string.IsNullOrEmpty(token))
-            {
-                await JSRuntime.InvokeVoidAsync("localStorage.setItem", "depositos_token", token);
-            }
-        }
-        catch (Exception ex)
-        {
-            // Error saving token
-        }
-    }
 
     private async Task LoadUbicaciones()
     {
         if (string.IsNullOrWhiteSpace(token))
         {
-            errorMessage = "Por favor ingrese un token válido";
+            errorMessage = "No se encontró token de autenticación. Por favor, inicie sesión nuevamente.";
             return;
         }
 
@@ -2138,15 +2243,12 @@
         {
             // Asegurar que el panel de ubicaciones esté visible al recargar
             leftPanelHidden = false;
-            await JSRuntime.InvokeVoidAsync("toggleLocationsPanel", leftPanelHidden);
+            // await JSRuntime.InvokeVoidAsync("toggleLocationsPanel", leftPanelHidden);
 
             // Colapsar panel de productos al cargar ubicaciones
             rightPanelHidden = true;
-            await JSRuntime.InvokeVoidAsync("toggleProductsPanel", rightPanelHidden);
+            // await JSRuntime.InvokeVoidAsync("toggleProductsPanel", rightPanelHidden);
 
-            // Guardar el token en localStorage
-            await SaveTokenToStorage();
-            
             var response = await UbicacionService.GetUbicacionesAsync(token);
             
             if (response?.Data != null)
@@ -2168,23 +2270,6 @@
         }
     }
 
-    private async Task OnTokenKeyPress(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter")
-        {
-            await LoadUbicaciones();
-        }
-    }
-
-    private async Task OnTokenInput(ChangeEventArgs e)
-    {
-        token = e.Value?.ToString() ?? string.Empty;
-        // Guardar automáticamente cuando el usuario escribe
-        if (!string.IsNullOrEmpty(token))
-        {
-            await SaveTokenToStorage();
-        }
-    }
 
     private void OnSearchInput(ChangeEventArgs e)
     {
@@ -2237,8 +2322,8 @@
                 // No hay ubicaciones, verificar si hay token
                 if (string.IsNullOrWhiteSpace(token))
                 {
-                    // No hay token, abrir modal para solicitarlo
-                    await AbrirTokenModal();
+                    // No hay token, mostrar error
+                    errorMessage = "No se encontró token de autenticación. Por favor, inicie sesión nuevamente.";
                     return;
                 }
                 
@@ -2261,7 +2346,7 @@
     private async Task ToggleProductsPanel()
     {
         rightPanelHidden = !rightPanelHidden;
-        await JSRuntime.InvokeVoidAsync("toggleProductsPanel", rightPanelHidden);
+        await JSRuntime.InvokeVoidAsync("showOnlyProductsPanel");
     }
 
     [JSInvokable]
@@ -2324,7 +2409,7 @@
                 
                 // Ocultar completamente el panel de ubicaciones al seleccionar cualquier ubicación
                 leftPanelHidden = true;
-                await JSRuntime.InvokeVoidAsync("toggleLocationsPanel", leftPanelHidden);
+                await JSRuntime.InvokeVoidAsync("toggleProductsPanel", false);
                 
                 // Asegurar que el panel de productos esté visible (especialmente en móviles)
                 await JSRuntime.InvokeVoidAsync("toggleProductsPanel", false);
@@ -2417,13 +2502,22 @@
             // Forzar actualización del estado
             StateHasChanged();
             
-            // Ocultar completamente el panel de ubicaciones al seleccionar una ubicación
+            // FORZAR: Ocultar ubicaciones y mostrar productos
             leftPanelHidden = true;
-            await JSRuntime.InvokeVoidAsync("toggleLocationsPanel", leftPanelHidden);
-            
-            // Asegurar que el panel de productos esté visible (especialmente en móviles)
-            await JSRuntime.InvokeVoidAsync("toggleProductsPanel", false);
             rightPanelHidden = false;
+            
+            Console.WriteLine($"🔥 OnNodeSelected - Ocultando ubicaciones, mostrando productos");
+            Console.WriteLine($"🔥 OnNodeSelected - leftPanelHidden: {leftPanelHidden}, rightPanelHidden: {rightPanelHidden}");
+            Console.WriteLine($"🔥 OnNodeSelected - selectedNode: {selectedNode?.Item?.Descripcion}");
+            
+            // Forzar actualización del estado
+            await InvokeAsync(StateHasChanged);
+            
+            // Forzar actualización adicional después de un pequeño delay
+            await Task.Delay(100);
+            await InvokeAsync(StateHasChanged);
+            
+            Console.WriteLine($"🔥 OnNodeSelected - Estado actualizado, leftPanelHidden: {leftPanelHidden}, rightPanelHidden: {rightPanelHidden}");
 
             // Si es pantalla pequeña (incluye F12 responsive), ocultar elementos no necesarios
             bool isMobile = await JSRuntime.InvokeAsync<bool>("isMobileDevice");
@@ -2447,10 +2541,17 @@
 
             // Cargar productos de la ubicación seleccionada
             _currentPage = 0; // Reiniciar paginación al cambiar de nodo
-            await LoadProductsForNode(node);
-            // Cargar productos de la ubicación seleccionada
-            _currentPage = 0; // Reiniciar paginación al cambiar de nodo
-            await LoadProductsForNode(node);
+            Console.WriteLine($"🔥 OnNodeSelected - Llamando LoadProductsForNode para: {node.Item.Descripcion}");
+            try
+            {
+                await LoadProductsForNode(node);
+                Console.WriteLine($"🔥 OnNodeSelected - LoadProductsForNode completado");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"🔥 OnNodeSelected - Error en LoadProductsForNode: {ex.Message}");
+                Console.WriteLine($"🔥 OnNodeSelected - Stack trace: {ex.StackTrace}");
+            }
         }
         finally
         {
@@ -2490,8 +2591,8 @@
             // No hay ubicaciones, verificar si hay token
             if (string.IsNullOrWhiteSpace(token))
             {
-                // No hay token, abrir modal para solicitarlo
-                await AbrirTokenModal();
+                // No hay token, mostrar error
+                errorMessage = "No se encontró token de autenticación. Por favor, inicie sesión nuevamente.";
                 return;
             }
             
@@ -2515,8 +2616,8 @@
             // No hay ubicaciones, verificar si hay token
             if (string.IsNullOrWhiteSpace(token))
             {
-                // No hay token, abrir modal para solicitarlo
-                await AbrirTokenModal();
+                // No hay token, mostrar error
+                errorMessage = "No se encontró token de autenticación. Por favor, inicie sesión nuevamente.";
                 return;
             }
             
@@ -2563,8 +2664,8 @@
             // Verificar si hay token guardado
             if (string.IsNullOrWhiteSpace(token))
             {
-                // No hay token, abrir modal para solicitarlo
-                await AbrirTokenModal();
+                // No hay token, mostrar error
+                errorMessage = "No se encontró token de autenticación. Por favor, inicie sesión nuevamente.";
                 return;
             }
             
@@ -2600,24 +2701,29 @@
     {
         try
         {
-            Console.WriteLine($"📦 Cargando productos para ubicación: {node.Item.Descripcion} (ID: {node.Item.ProductoUbicacionID})");
+            Console.WriteLine($"📦 LoadProductsForNode - Iniciando carga para: {node.Item.Descripcion} (ID: {node.Item.ProductoUbicacionID})");
             
-            // Ocultar completamente el panel de ubicaciones al seleccionar una ubicación
+            // SIMPLIFICADO: Solo cambiar las variables de estado
             leftPanelHidden = true;
-            await JSRuntime.InvokeVoidAsync("toggleLocationsPanel", leftPanelHidden);
-            
-            // Mostrar panel de productos
             rightPanelHidden = false;
-            await JSRuntime.InvokeVoidAsync("toggleProductsPanel", rightPanelHidden);
+            
+            Console.WriteLine($"📦 LoadProductsForNode - leftPanelHidden: {leftPanelHidden}, rightPanelHidden: {rightPanelHidden}");
+            
+            // Forzar actualización del estado
+            await InvokeAsync(StateHasChanged);
 
             isLoading = true;
             productosSeleccionados.Clear();
             selectedProductsCount = 0;
+            Console.WriteLine($"📦 LoadProductsForNode - Limpiando productos anteriores, isLoading: {isLoading}");
             await InvokeAsync(StateHasChanged);
             await Task.Yield();
             
             // 1 = incluir stock; usar Orden del nodo para incluir sub-ubicaciones
+            Console.WriteLine($"📦 LoadProductsForNode - Llamando API con Orden: {node.Item.Orden}");
             var resp = await UbicacionService.GetUbicacionesAsync(token, node.Item.Orden, 1);
+            Console.WriteLine($"📦 LoadProductsForNode - Respuesta API recibida: {resp?.Data?.Count ?? 0} elementos");
+            
             if (resp?.Data != null)
             {
                 var processed = 0;
@@ -2625,6 +2731,7 @@
                 {
                     if (it.ItemsStock != null && it.ItemsStock.Count > 0)
                     {
+                        Console.WriteLine($"📦 LoadProductsForNode - Procesando {it.ItemsStock.Count} productos de ubicación: {it.Descripcion}");
                         foreach (var s in it.ItemsStock)
                         {
                             try
@@ -2647,15 +2754,17 @@
                     }
                 }
                 selectedProductsCount = productosSeleccionados.Count;
+                Console.WriteLine($"📦 LoadProductsForNode - Total productos cargados: {selectedProductsCount}");
                 // Activar paginación automática si la cantidad es alta
                 _useVirtualization = selectedProductsCount > 200;
                 _currentPage = 0;
-            // Al finalizar la carga y mostrar todos, enfocar textbox de código de barras
-            try { 
-                await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput"); 
-                // Asegurar focus en móviles también
-                await JSRuntime.InvokeVoidAsync("ensureBarcodeFocus");
-            } catch { }
+                
+                // Al finalizar la carga y mostrar todos, enfocar textbox de código de barras
+                try { 
+                    await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput"); 
+                    // Asegurar focus en móviles también
+                    await JSRuntime.InvokeVoidAsync("ensureBarcodeFocus");
+                } catch { }
             }
             else
             {
@@ -2669,6 +2778,7 @@
         finally
         {
             isLoading = false;
+            Console.WriteLine($"📦 LoadProductsForNode - Finalizando, isLoading: {isLoading}, productosSeleccionados: {productosSeleccionados.Count}");
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -3032,12 +3142,12 @@
         {
             gridColumns = new List<ColumnConfig>
             {
-                new() { Key = "rubro", Label = "Rub/Cód", IsVisible = true, Width = "100px", Order = 1, IsResizable = true },
+                new() { Key = "rubro", Label = "Rub/Cód", IsVisible = false, Width = "100px", Order = 1, IsResizable = true },
                 new() { Key = "producto", Label = "Producto", IsVisible = true, Width = "300px", Order = 2, IsResizable = true },
                 new() { Key = "stock", Label = "Stock Actual", IsVisible = true, Width = "120px", Order = 3, IsResizable = true },
-                new() { Key = "minimo", Label = "Mínimo", IsVisible = true, Width = "100px", Order = 4, IsResizable = true },
-                new() { Key = "sugerido", Label = "Sugerido", IsVisible = true, Width = "100px", Order = 5, IsResizable = true },
-                new() { Key = "codigoBarra", Label = "Código de barras", IsVisible = false, Width = "220px", Order = 6, IsResizable = true }
+                new() { Key = "minimo", Label = "Mínimo", IsVisible = false, Width = "100px", Order = 4, IsResizable = true },
+                new() { Key = "sugerido", Label = "Sugerido", IsVisible = false, Width = "100px", Order = 5, IsResizable = true },
+                new() { Key = "codigoBarra", Label = "Código de barras", IsVisible = true, Width = "220px", Order = 6, IsResizable = true }
             };
         }
         return gridColumns;
@@ -3124,6 +3234,41 @@
         StateHasChanged();
     }
 
+    // Método que se ejecuta automáticamente cuando cambia la visibilidad de una columna
+    private async Task OnColumnVisibilityChanged(ChangeEventArgs e, ColumnConfig column)
+    {
+        try
+        {
+            // Actualizar el valor de la columna
+            column.IsVisible = (bool)e.Value;
+            
+            // Guardar configuración automáticamente
+            var config = availableColumns.ToDictionary(c => c.Key, c => c.IsVisible);
+            var configJson = System.Text.Json.JsonSerializer.Serialize(config);
+            await JSRuntime.InvokeVoidAsync("localStorage.setItem", "columnConfig_Productos en Stock", configJson);
+            
+            // Sincronizar con gridColumns
+            if (gridColumns == null || gridColumns.Count == 0)
+            {
+                gridColumns = GetProductoColumns();
+            }
+            foreach (var gc in gridColumns)
+            {
+                if (config.ContainsKey(gc.Key))
+                {
+                    gc.IsVisible = config[gc.Key];
+                }
+            }
+            
+            Console.WriteLine($"✅ Configuración de columnas guardada automáticamente - {column.Label}: {column.IsVisible}");
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error guardando configuración automáticamente: {ex.Message}");
+        }
+    }
+
     private async Task StartColumnResize(MouseEventArgs e)
     {
         if (e.Button == 0) // Solo botón izquierdo
@@ -3141,12 +3286,12 @@
         {
             availableColumns = new List<ColumnConfig>
             {
-                new() { Key = "rubro", Label = "Rub/Cód", IsVisible = true },
+                new() { Key = "rubro", Label = "Rub/Cód", IsVisible = false },
                 new() { Key = "producto", Label = "Producto", IsVisible = true },
                 new() { Key = "stock", Label = "Stock Actual", IsVisible = true },
-                new() { Key = "minimo", Label = "Mínimo", IsVisible = true },
-                new() { Key = "sugerido", Label = "Sugerido", IsVisible = true },
-                new() { Key = "codigoBarra", Label = "Código de barras", IsVisible = false }
+                new() { Key = "minimo", Label = "Mínimo", IsVisible = false },
+                new() { Key = "sugerido", Label = "Sugerido", IsVisible = false },
+                new() { Key = "codigoBarra", Label = "Código de barras", IsVisible = true }
             };
         }
 
@@ -3215,14 +3360,18 @@
 
     private async Task ResetColumnConfig()
     {
+        // Configuración por defecto: solo Producto, Stock Actual y Código de barras
         foreach (var column in availableColumns)
         {
-            column.IsVisible = true;
+            column.IsVisible = column.Key == "producto" || column.Key == "stock" || column.Key == "codigoBarra";
         }
         await JSRuntime.InvokeVoidAsync("localStorage.removeItem", "columnConfig_Productos en Stock");
         if (gridColumns != null)
         {
-            foreach (var gc in gridColumns) gc.IsVisible = true;
+            foreach (var gc in gridColumns) 
+            {
+                gc.IsVisible = gc.Key == "producto" || gc.Key == "stock" || gc.Key == "codigoBarra";
+            }
         }
         StateHasChanged();
     }
@@ -3236,11 +3385,12 @@
             {
                 gridColumns = new List<ColumnConfig>
                 {
-                    new() { Key = "rubro", Label = "Rub/Cód", IsVisible = true, Width = "100px", Order = 1, IsResizable = true },
+                    new() { Key = "rubro", Label = "Rub/Cód", IsVisible = false, Width = "100px", Order = 1, IsResizable = true },
                     new() { Key = "producto", Label = "Producto", IsVisible = true, Width = "300px", Order = 2, IsResizable = true },
                     new() { Key = "stock", Label = "Stock Actual", IsVisible = true, Width = "120px", Order = 3, IsResizable = true },
-                    new() { Key = "minimo", Label = "Mínimo", IsVisible = true, Width = "100px", Order = 4, IsResizable = true },
-                    new() { Key = "sugerido", Label = "Sugerido", IsVisible = true, Width = "100px", Order = 5, IsResizable = true }
+                    new() { Key = "minimo", Label = "Mínimo", IsVisible = false, Width = "100px", Order = 4, IsResizable = true },
+                    new() { Key = "sugerido", Label = "Sugerido", IsVisible = false, Width = "100px", Order = 5, IsResizable = true },
+                    new() { Key = "codigoBarra", Label = "Código de barras", IsVisible = true, Width = "220px", Order = 6, IsResizable = true }
                 };
             }
 
@@ -3723,7 +3873,7 @@
         }
     };
 
-    // Función para manejar el toggle del panel de ubicaciones
+    // Funciones JavaScript para manejo de paneles
     window.toggleLocationsPanel = function (isHidden) {
         const leftPanel = document.querySelector('.left-panel');
         const rightPanel = document.querySelector('.right-panel');
@@ -3734,171 +3884,155 @@
         
         if (leftPanel && rightPanel) {
             if (isHidden) {
-                // OCULTAR COMPLETAMENTE el panel de ubicaciones con !important
-                console.log('🔥 OCULTANDO panel de ubicaciones');
-                leftPanel.style.cssText = 'display: none !important; width: 0 !important; height: 0 !important; overflow: hidden !important; visibility: hidden !important; opacity: 0 !important; position: absolute !important; left: -9999px !important; top: -9999px !important; z-index: -9999 !important;';
-                leftPanel.classList.add('panel-hidden');
+                // OCULTAR COMPLETAMENTE el panel de ubicaciones
+                leftPanel.style.display = 'none';
+                leftPanel.style.width = '0';
+                leftPanel.style.minWidth = '0';
+                leftPanel.style.maxWidth = '0';
+                leftPanel.style.flex = '0';
+                leftPanel.style.flexGrow = '0';
+                leftPanel.style.flexShrink = '0';
+                leftPanel.style.flexBasis = '0';
+                leftPanel.style.overflow = 'hidden';
+                leftPanel.style.visibility = 'hidden';
+                leftPanel.style.opacity = '0';
+                leftPanel.style.position = 'absolute';
+                leftPanel.style.zIndex = '-1';
                 
-                // Verificar si el panel de productos también está oculto
-                const isRightPanelHidden = rightPanel.classList.contains('panel-hidden') || 
-                                         rightPanel.style.display === 'none';
+                // Mostrar panel de productos
+                rightPanel.style.display = 'flex';
+                rightPanel.style.width = '100%';
+                rightPanel.style.minWidth = '100%';
+                rightPanel.style.maxWidth = '100%';
+                rightPanel.style.flex = '1';
+                rightPanel.style.flexGrow = '1';
+                rightPanel.style.flexShrink = '0';
+                rightPanel.style.flexBasis = '100%';
+                rightPanel.style.visibility = 'visible';
+                rightPanel.style.opacity = '1';
+                rightPanel.style.position = 'relative';
+                rightPanel.style.zIndex = '1';
                 
-                if (isRightPanelHidden) {
-                    // Si ambos están ocultos, no mostrar ninguno
-                    rightPanel.style.display = 'none';
-                    rightPanel.style.width = '0';
-                    rightPanel.style.flex = 'none';
-                } else {
-                    // Si solo ubicaciones está oculto, mostrar productos al 100% con !important
-                    console.log('🔥 MOSTRANDO panel de productos al 100%');
-                    rightPanel.style.cssText = 'display: flex !important; width: 100% !important; height: 100% !important; flex: 1 !important; min-width: 100% !important; max-width: 100% !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 1 !important;';
-                    rightPanel.classList.remove('panel-hidden');
-                }
-                
-                // Ocultar la barra divisoria
+                // Ocultar resize handle
                 if (resizeHandle) {
                     resizeHandle.style.display = 'none';
-                    resizeHandle.style.width = '0';
                 }
             } else {
                 // Mostrar panel de ubicaciones
                 leftPanel.style.display = 'flex';
                 leftPanel.style.width = '35%';
-                leftPanel.style.flex = 'none';
                 leftPanel.style.minWidth = '280px';
                 leftPanel.style.maxWidth = '70%';
-                leftPanel.classList.remove('panel-hidden');
+                leftPanel.style.flex = '0 0 35%';
+                leftPanel.style.flexGrow = '0';
+                leftPanel.style.flexShrink = '0';
+                leftPanel.style.flexBasis = '35%';
+                leftPanel.style.overflow = 'auto';
+                leftPanel.style.visibility = 'visible';
+                leftPanel.style.opacity = '1';
+                leftPanel.style.position = 'relative';
+                leftPanel.style.zIndex = '1';
                 
-                // Verificar si el panel de productos está oculto
-                const isRightPanelHidden = rightPanel.classList.contains('panel-hidden') || 
-                                         rightPanel.style.display === 'none';
+                // Ocultar panel de productos
+                rightPanel.style.display = 'none';
+                rightPanel.style.width = '0';
+                rightPanel.style.minWidth = '0';
+                rightPanel.style.maxWidth = '0';
+                rightPanel.style.flex = '0';
+                rightPanel.style.flexGrow = '0';
+                rightPanel.style.flexShrink = '0';
+                rightPanel.style.flexBasis = '0';
+                rightPanel.style.overflow = 'hidden';
+                rightPanel.style.visibility = 'hidden';
+                rightPanel.style.opacity = '0';
+                rightPanel.style.position = 'absolute';
+                rightPanel.style.zIndex = '-1';
                 
-                if (isRightPanelHidden) {
-                    // Si productos está oculto, mantenerlo oculto
-                    rightPanel.style.display = 'none';
-                    rightPanel.style.width = '0';
-                    rightPanel.style.flex = 'none';
-                } else {
-                    // Si productos está visible, restaurar layout normal
-                    rightPanel.style.width = '65%';
-                    rightPanel.style.flex = 'none';
-                    rightPanel.style.minWidth = '30%';
-                    rightPanel.style.maxWidth = 'none';
-                }
-                
-                // Mostrar la barra divisoria solo si ambos paneles están visibles
+                // Mostrar resize handle
                 if (resizeHandle) {
-                    if (!isRightPanelHidden) {
-                        resizeHandle.style.display = 'block';
-                        resizeHandle.style.width = '4px';
-                    } else {
-                        resizeHandle.style.display = 'none';
-                        resizeHandle.style.width = '0';
-                    }
+                    resizeHandle.style.display = 'block';
                 }
             }
         }
     };
 
-    // Función para manejar el toggle del panel de productos
     window.toggleProductsPanel = function (isHidden) {
         const rightPanel = document.querySelector('.right-panel');
         const leftPanel = document.querySelector('.left-panel');
         const resizeHandle = document.querySelector('.resize-handle');
         const isMobile = window.innerWidth <= 768;
+
+        console.log('🔥 toggleProductsPanel - isHidden:', isHidden);
+        console.log('🔥 rightPanel encontrado:', rightPanel);
         
         if (rightPanel && leftPanel) {
             if (isHidden) {
                 // Ocultar panel de productos
                 rightPanel.style.display = 'none';
                 rightPanel.style.width = '0';
-                rightPanel.style.flex = 'none';
-                rightPanel.classList.add('panel-hidden');
-                rightPanel.classList.remove('show-on-mobile');
+                rightPanel.style.minWidth = '0';
+                rightPanel.style.maxWidth = '0';
+                rightPanel.style.flex = '0';
+                rightPanel.style.flexGrow = '0';
+                rightPanel.style.flexShrink = '0';
+                rightPanel.style.flexBasis = '0';
+                rightPanel.style.overflow = 'hidden';
+                rightPanel.style.visibility = 'hidden';
+                rightPanel.style.opacity = '0';
+                rightPanel.style.position = 'absolute';
+                rightPanel.style.zIndex = '-1';
                 
-                // Verificar si el panel de ubicaciones también está oculto
-                const isLeftPanelHidden = leftPanel.classList.contains('panel-hidden') || 
-                                        leftPanel.style.display === 'none';
+                // Mostrar panel de ubicaciones
+                leftPanel.style.display = 'flex';
+                leftPanel.style.width = '100%';
+                leftPanel.style.minWidth = '100%';
+                leftPanel.style.maxWidth = '100%';
+                leftPanel.style.flex = '1';
+                leftPanel.style.flexGrow = '1';
+                leftPanel.style.flexShrink = '0';
+                leftPanel.style.flexBasis = '100%';
+                leftPanel.style.visibility = 'visible';
+                leftPanel.style.opacity = '1';
+                leftPanel.style.position = 'relative';
+                leftPanel.style.zIndex = '1';
                 
-                if (isLeftPanelHidden) {
-                    // Si ambos están ocultos, no mostrar ninguno
-                    leftPanel.style.display = 'none';
-                    leftPanel.style.width = '0';
-                    leftPanel.style.flex = 'none';
-                } else {
-                    // Si solo productos está oculto, mostrar ubicaciones al 100%
-                    leftPanel.style.display = 'flex';
-                    leftPanel.style.width = '100%';
-                    leftPanel.style.flex = '1';
-                    leftPanel.style.minWidth = '100%';
-                    leftPanel.style.maxWidth = '100%';
-                    leftPanel.classList.remove('panel-hidden');
-                }
-                
-                // Ocultar la barra divisoria
+                // Ocultar resize handle
                 if (resizeHandle) {
                     resizeHandle.style.display = 'none';
-                    resizeHandle.style.width = '0';
                 }
             } else {
                 // Mostrar panel de productos
-                rightPanel.classList.remove('panel-hidden');
                 rightPanel.style.display = 'flex';
+                rightPanel.style.width = isMobile ? '100%' : '65%';
+                rightPanel.style.minWidth = isMobile ? '100%' : '300px';
+                rightPanel.style.maxWidth = isMobile ? '100%' : '70%';
+                rightPanel.style.flex = isMobile ? '1' : '0 0 65%';
+                rightPanel.style.flexGrow = isMobile ? '1' : '0';
+                rightPanel.style.flexShrink = '0';
+                rightPanel.style.flexBasis = isMobile ? '100%' : '65%';
+                rightPanel.style.visibility = 'visible';
+                rightPanel.style.opacity = '1';
+                rightPanel.style.position = 'relative';
+                rightPanel.style.zIndex = '1';
                 
-                if (isMobile) {
-                    // En móvil: mostrar productos al 100% y ocultar ubicaciones
-                    rightPanel.classList.add('show-on-mobile');
-                    rightPanel.style.width = '100%';
-                    rightPanel.style.height = 'auto';
-                    rightPanel.style.minHeight = 'auto';
-                    rightPanel.style.maxHeight = 'none';
-                    rightPanel.style.flex = '1';
-                    rightPanel.style.minWidth = '100%';
-                    rightPanel.style.maxWidth = '100%';
-                    
-                    // Ocultar panel de ubicaciones en móvil cuando se muestran productos
-                    leftPanel.style.display = 'none';
-                    leftPanel.style.width = '0';
-                    leftPanel.style.flex = 'none';
-                    leftPanel.classList.add('panel-hidden');
-                } else {
-                    // En desktop: layout normal
-                    rightPanel.classList.remove('show-on-mobile');
-                    rightPanel.style.width = '65%';
-                    rightPanel.style.height = '';
-                    rightPanel.style.minHeight = '';
-                    rightPanel.style.maxHeight = '';
-                    rightPanel.style.flex = 'none';
-                    rightPanel.style.minWidth = '30%';
-                    rightPanel.style.maxWidth = 'none';
-                    
-                    // Verificar si el panel de ubicaciones está oculto
-                    const isLeftPanelHidden = leftPanel.classList.contains('panel-hidden') || 
-                                            leftPanel.style.display === 'none';
-                    
-                    if (isLeftPanelHidden) {
-                        // Si ubicaciones está oculto, mantenerlo oculto
-                        leftPanel.style.display = 'none';
-                        leftPanel.style.width = '0';
-                        leftPanel.style.flex = 'none';
-                    } else {
-                        // Si ubicaciones está visible, restaurar layout normal
-                        leftPanel.style.width = '35%';
-                        leftPanel.style.flex = 'none';
-                        leftPanel.style.minWidth = '280px';
-                        leftPanel.style.maxWidth = '70%';
-                    }
-                }
+                // Ajustar panel de ubicaciones
+                leftPanel.style.display = isMobile ? 'none' : 'flex';
+                leftPanel.style.width = isMobile ? '0' : '35%';
+                leftPanel.style.minWidth = isMobile ? '0' : '280px';
+                leftPanel.style.maxWidth = isMobile ? '0' : '70%';
+                leftPanel.style.flex = isMobile ? '0' : '0 0 35%';
+                leftPanel.style.flexGrow = isMobile ? '0' : '0';
+                leftPanel.style.flexShrink = '0';
+                leftPanel.style.flexBasis = isMobile ? '0' : '35%';
+                leftPanel.style.overflow = isMobile ? 'hidden' : 'auto';
+                leftPanel.style.visibility = isMobile ? 'hidden' : 'visible';
+                leftPanel.style.opacity = isMobile ? '0' : '1';
+                leftPanel.style.position = isMobile ? 'absolute' : 'relative';
+                leftPanel.style.zIndex = isMobile ? '-1' : '1';
                 
-                // Mostrar la barra divisoria solo si ambos paneles están visibles y no es móvil
+                // Mostrar resize handle solo en desktop
                 if (resizeHandle) {
-                    if (!isMobile && !leftPanel.classList.contains('panel-hidden') && leftPanel.style.display !== 'none') {
-                        resizeHandle.style.display = 'block';
-                        resizeHandle.style.width = '4px';
-                    } else {
-                        resizeHandle.style.display = 'none';
-                        resizeHandle.style.width = '0';
-                    }
+                    resizeHandle.style.display = isMobile ? 'none' : 'block';
                 }
             }
         }
@@ -3976,18 +4110,93 @@
     window.ensureBarcodeFocus = function() {
         const isMobile = window.innerWidth <= 768;
         console.log('🔍 ensureBarcodeFocus - isMobile:', isMobile, 'width:', window.innerWidth);
-        if (isMobile) {
-            const barcodeInput = document.getElementById('barcodeInput');
-            if (barcodeInput) {
+        
+        // Aplicar focus en todas las pantallas, no solo móviles
+        const barcodeInput = document.getElementById('barcodeInput');
+        if (barcodeInput) {
+            try {
+                // Asegurar que el elemento esté visible
+                barcodeInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
                 // Enfocar y seleccionar texto
                 barcodeInput.focus();
                 barcodeInput.select();
-                // Asegurar que esté visible
-                barcodeInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                console.log('🎯 Focus aplicado al textbox de código de barras');
-            } else {
-                console.log('❌ No se encontró el textbox de código de barras');
+                
+                // Verificar que el focus se aplicó correctamente
+                if (document.activeElement === barcodeInput) {
+                    console.log('✅ Focus aplicado correctamente al textbox de código de barras');
+                } else {
+                    console.log('⚠️ Focus no se aplicó correctamente, reintentando...');
+                    // Reintentar después de un breve delay
+                    setTimeout(() => {
+                        barcodeInput.focus();
+                        barcodeInput.select();
+                    }, 100);
+                }
+            } catch (error) {
+                console.log('❌ Error aplicando focus al textbox de código de barras:', error);
             }
+        } else {
+            console.log('❌ No se encontró el textbox de código de barras');
+        }
+    };
+
+    // Función genérica para hacer focus por ID
+    window.blazorFocusById = function(elementId) {
+        console.log('🎯 blazorFocusById - Buscando elemento:', elementId);
+        const element = document.getElementById(elementId);
+        if (element) {
+            try {
+                element.focus();
+                // Si es un input, seleccionar el texto
+                if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+                    element.select();
+                }
+                console.log('✅ Focus aplicado a:', elementId);
+                return true;
+            } catch (error) {
+                console.log('❌ Error aplicando focus a:', elementId, error);
+                return false;
+            }
+        } else {
+            console.log('❌ Elemento no encontrado:', elementId);
+            return false;
+        }
+    };
+
+    // Función mejorada para focus del textbox de código de barras
+    window.focusBarcodeInput = function() {
+        console.log('🎯 focusBarcodeInput - Aplicando focus al textbox de código de barras');
+        const barcodeInput = document.getElementById('barcodeInput');
+        if (barcodeInput) {
+            try {
+                // Asegurar que el elemento esté visible
+                barcodeInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                // Aplicar focus
+                barcodeInput.focus();
+                barcodeInput.select();
+                
+                // Verificar que el focus se aplicó correctamente
+                if (document.activeElement === barcodeInput) {
+                    console.log('✅ Focus aplicado correctamente al textbox de código de barras');
+                    return true;
+                } else {
+                    console.log('⚠️ Focus no se aplicó correctamente, reintentando...');
+                    // Reintentar después de un breve delay
+                    setTimeout(() => {
+                        barcodeInput.focus();
+                        barcodeInput.select();
+                    }, 100);
+                    return false;
+                }
+            } catch (error) {
+                console.log('❌ Error aplicando focus al textbox de código de barras:', error);
+                return false;
+            }
+        } else {
+            console.log('❌ No se encontró el textbox de código de barras');
+            return false;
         }
     };
 
@@ -4240,20 +4449,82 @@
     window.addEventListener('keydown', function(e) {
         // F12 o Ctrl+Shift+I (Developer Tools)
         if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key === 'I')) {
+            console.log('🔧 F12 detectado - Aplicando focus al textbox de código de barras');
             // Delay para que se abra el Developer Tools y cambie el tamaño
             setTimeout(() => {
-                const isMobile = window.innerWidth <= 768;
-                if (isMobile) {
-                    window.ensureBarcodeFocus();
-                }
+                window.focusBarcodeInput();
             }, 500);
+            
+            // Aplicar focus adicional después de más tiempo para asegurar
+            setTimeout(() => {
+                window.focusBarcodeInput();
+            }, 1000);
+            
+            setTimeout(() => {
+                window.focusBarcodeInput();
+            }, 2000);
         }
+    });
+
+    // Detectar cambios en el tamaño de la ventana (incluyendo F12)
+    let resizeTimeout;
+    window.addEventListener('resize', function() {
+        console.log('📏 Resize detectado - Aplicando focus al textbox de código de barras');
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+            window.focusBarcodeInput();
+        }, 300);
     });
 
     // Detectar si es dispositivo móvil
     window.isMobileDevice = function() {
         return window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     }
+
+    // Funciones para ocultar elementos
+    window.hideById = function(id) {
+        const element = document.getElementById(id);
+        if (element) {
+            element.style.display = 'none';
+        }
+    }
+
+    window.hideByClass = function(className) {
+        const elements = document.getElementsByClassName(className);
+        for (let i = 0; i < elements.length; i++) {
+            elements[i].style.display = 'none';
+        }
+    }
+
+    // Función para aplicar focus automáticamente al textbox de código de barras
+    window.autoFocusBarcode = function() {
+        console.log('🎯 autoFocusBarcode - Aplicando focus automático al textbox de código de barras');
+        
+        // Aplicar focus inmediatamente
+        window.focusBarcodeInput();
+        
+        // Aplicar focus después de un delay para asegurar
+        setTimeout(() => {
+            window.focusBarcodeInput();
+        }, 500);
+        
+        // Aplicar focus después de más tiempo para casos difíciles
+        setTimeout(() => {
+            window.focusBarcodeInput();
+        }, 1000);
+    };
+
+    // Aplicar focus automáticamente cuando se carga la página
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('📄 DOMContentLoaded - Aplicando focus automático');
+        window.autoFocusBarcode();
+    });
+
+    // Aplicar focus cuando la página está completamente cargada
+    window.addEventListener('load', function() {
+        console.log('🔄 Window load - Aplicando focus automático');
+        window.autoFocusBarcode();
+    });
 
     window.innerResizeBegin = function(){};
     window.innerResizeEnd = function(){};
@@ -4528,3 +4799,4 @@
     }
 
 </script>
+</AuthorizeView>

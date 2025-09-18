@@ -1,0 +1,64 @@
+@using BlazorApp_ProductosAPI.Services
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+
+<link href="css/authorize.css" rel="stylesheet" />
+
+@if (isLoading)
+{
+    <div class="loading-container">
+        <div class="loading-spinner"></div>
+        <p>Verificando autorización...</p>
+    </div>
+}
+else if (isAuthenticated)
+{
+    @ChildContent
+}
+else
+{
+    <div class="unauthorized-container">
+        <div class="unauthorized-message">
+            <h2>Acceso No Autorizado</h2>
+            <p>Debes iniciar sesión para acceder a esta página.</p>
+            <button class="btn btn-primary" @onclick="RedirectToLogin">
+                Ir al Login
+            </button>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    
+    private bool isLoading = true;
+    private bool isAuthenticated = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckAuthentication();
+    }
+
+    private async Task CheckAuthentication()
+    {
+        try
+        {
+            isAuthenticated = await AuthService.IsLoggedInAsync();
+        }
+        catch
+        {
+            isAuthenticated = false;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void RedirectToLogin()
+    {
+        Navigation.NavigateTo("/", true);
+    }
+}
+

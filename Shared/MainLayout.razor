@@ -1,13 +1,17 @@
 ﻿@inherits LayoutComponentBase
+@using BlazorApp_ProductosAPI.Services
 @inject IJSRuntime JS
+@inject IAuthService AuthService
 
 <div class="page">
-    <div class="sidebar @SidebarClass">
-        <NavMenu SidebarToggled="OnSidebarToggled" IsSidebarCollapsed="@_sidebarCollapsed" />
-    </div>
+    @if (isAuthenticated)
+    {
+        <div class="sidebar @SidebarClass">
+            <NavMenu SidebarToggled="OnSidebarToggled" IsSidebarCollapsed="@_sidebarCollapsed" />
+        </div>
+    }
 
-    <main>
-
+    <main class="@(isAuthenticated ? "" : "full-width")">
         <article class="content px-4">
             @Body
         </article>
@@ -25,6 +29,7 @@
     private bool _sidebarCollapsed = false;
     private string SidebarClass => _sidebarCollapsed ? "sidebar-collapsed" : string.Empty;
     private bool _initialized = false;
+    private bool isAuthenticated = false;
 
     private void OnSidebarToggled(bool collapsed)
     {
@@ -36,6 +41,11 @@
     {
         _sidebarCollapsed = false;
         StateHasChanged();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckAuthentication();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -56,6 +66,24 @@
             _initialized = true;
         }
         // No forzar cambios en renders posteriores: respetar el botón del usuario
+    }
+
+    private async Task CheckAuthentication()
+    {
+        try
+        {
+            isAuthenticated = await AuthService.IsLoggedInAsync();
+        }
+        catch
+        {
+            isAuthenticated = false;
+        }
+    }
+
+    public async Task RefreshAuthentication()
+    {
+        await CheckAuthentication();
+        StateHasChanged();
     }
 
     [JSInvokable]

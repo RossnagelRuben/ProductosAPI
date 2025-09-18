@@ -30,19 +30,79 @@
     }
 }
 
-/* Main container */
+/* Main container - FORZAR ANCHO COMPLETO SIEMPRE */
 .depositos-container {
     min-height: 100vh;
+    height: 100vh;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    min-width: 100vw !important;
     display: flex;
     flex-direction: column;
     background-color: var(--light-color);
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    padding-bottom: 0; /* eliminar espacio sobrante */
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: hidden;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 9999 !important;
 }
 
 /* Ocultar versión simplificada en desktop */
 .mobile-location-simple {
     display: none !important;
+}
+
+/* Reglas para mostrar/ocultar paneles - MÁS ESPECÍFICAS */
+.panel-hidden {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+}
+
+.left-panel:not(.panel-hidden) {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+}
+
+.right-panel:not(.panel-hidden) {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+}
+
+/* REGLA SUPER ESPECÍFICA PARA SOBRESCRIBIR TODO */
+.depositos-content .right-panel:not(.panel-hidden) {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 65% !important;
+    height: auto !important;
+    overflow: visible !important;
+    position: relative !important;
+    z-index: 1 !important;
+}
+
+.depositos-content .left-panel.panel-hidden {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
 }
 
 /* Header */
@@ -102,22 +162,32 @@
     box-shadow: var(--box-shadow-lg);
 }
 
-/* Main content */
+/* Main content - FORZAR ANCHO COMPLETO */
 .depositos-content {
     flex: 1;
     display: flex !important;
-    overflow: hidden; /* evitar scroll horizontal accidental */
+    overflow: hidden;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    min-width: 100vw !important;
+    height: calc(100vh - 80px) !important;
+    position: relative !important;
 }
 
-/* Left Panel - Tree */
+/* Left Panel - Tree - FORZAR ANCHO COMPLETO SIEMPRE */
 .left-panel {
-    width: 35% !important;
-    min-width: 320px !important;
+    width: 100vw !important;
+    min-width: 100vw !important;
+    max-width: 100vw !important;
     display: flex !important;
     flex-direction: column !important;
     background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%) !important;
     border-right: 1px solid #dee2e6 !important;
     box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05) !important;
+    flex: 1 !important;
+    position: relative !important;
+    height: 100% !important;
+    overflow: hidden !important;
 }
 
 .panel-header {
@@ -754,14 +824,60 @@
 .grid-row:nth-child(odd) .grid-column { background: #f9fbfd; }
 
 @media (max-width: 768px) {
-    /* Forzar visibilidad del panel de productos en móviles */
+    /* Ocultar panel de productos en móviles por defecto - solo se muestra cuando se selecciona ubicación */
     .right-panel {
-        display: block !important;
+        display: none !important;
+        width: 0 !important;
+        max-width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+    }
+    
+    /* Solo mostrar panel de productos cuando hay ubicación seleccionada */
+    .right-panel.show-on-mobile {
+        display: flex !important;
         width: 100% !important;
         max-width: 100% !important;
         height: auto !important;
         overflow: visible !important;
+        visibility: visible !important;
+        opacity: 1 !important;
     }
+    
+    /* Mostrar panel de productos cuando no está oculto */
+    .right-panel:not(.panel-hidden) {
+        display: flex !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+        overflow: visible !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+    
+    /* REGLA SUPER ESPECÍFICA PARA MÓVILES */
+    .depositos-content .right-panel:not(.panel-hidden) {
+        display: flex !important;
+        width: 100vw !important;
+        height: calc(100vh - 80px) !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        overflow: visible !important;
+        position: relative !important;
+        z-index: 1 !important;
+    }
+    
+    .depositos-content .left-panel.panel-hidden {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+    }
+    
     /* En móvil, el zebra lo maneja la tarjeta completa */
     .grid-row:nth-child(even) { background: #ffffff; }
     .grid-row:nth-child(odd) { background: #f9fbfd; }
@@ -831,7 +947,72 @@
     background-color: rgba(255, 255, 255, 0.1);
 }
 
-/* FORZAR VISIBILIDAD EN PANTALLA COMPLETA */
+/* FORZAR ANCHO COMPLETO EN TODAS LAS PANTALLAS - MÁXIMA AGRESIVIDAD */
+.depositos-container {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    min-width: 100vw !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 1 !important;
+}
+
+.depositos-content {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    min-width: 100vw !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: row !important;
+}
+
+.left-panel {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    min-width: 100vw !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    flex: 1 !important;
+    flex-grow: 1 !important;
+    flex-shrink: 0 !important;
+    flex-basis: 100% !important;
+}
+
+/* SOBRESCRIBIR CUALQUIER LIMITACIÓN DE ANCHO - MÁXIMA ESPECIFICIDAD */
+.depositos-container,
+.depositos-content,
+.left-panel {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    min-width: 100vw !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+}
+
+/* FORZAR ANCHO COMPLETO EN TODAS LAS MEDIA QUERIES */
+@media screen {
+    .depositos-container,
+    .depositos-content,
+    .left-panel {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        min-width: 100vw !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-sizing: border-box !important;
+    }
+}
+
+/* ELIMINAR TODAS LAS LIMITACIONES DE ANCHO */
 @media (min-width: 769px) {
     .depositos-content {
         display: flex !important;
@@ -840,34 +1021,100 @@
         overflow: hidden !important;
         visibility: visible !important;
         opacity: 1 !important;
+        width: 100vw !important;
+        max-width: 100vw !important;
+        min-width: 100vw !important;
     }
     
     .left-panel {
         display: flex !important;
-        width: 35% !important;
-        min-width: 320px !important;
-        max-width: 70% !important;
+        width: 100vw !important;
+        min-width: 100vw !important;
+        max-width: 100vw !important;
         height: 100% !important;
         visibility: visible !important;
         opacity: 1 !important;
         position: relative !important;
         z-index: 1 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-sizing: border-box !important;
+        flex: 1 !important;
+        flex-grow: 1 !important;
+        flex-shrink: 0 !important;
+        flex-basis: 100% !important;
     }
     
     .right-panel {
+        display: none;
+    }
+    
+    .right-panel:not(.panel-hidden) {
         display: flex !important;
-        width: 65% !important;
-        height: 100% !important;
-        visibility: visible !important;
-        opacity: 1 !important;
+    }
+    
+    .right-panel.show-on-mobile {
+        display: flex !important;
+        width: 100vw !important;
+        height: calc(100vh - 80px) !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-sizing: border-box !important;
         position: relative !important;
         z-index: 1 !important;
+        flex: 1 !important;
+        visibility: visible !important;
+        opacity: 1 !important;
     }
     
     .depositos-header {
         display: flex !important;
         visibility: visible !important;
         opacity: 1 !important;
+    }
+}
+
+/* Regla específica para mantener el div de ubicaciones al 100% del ancho disponible */
+@media (min-width: 769px) {
+    .left-panel {
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
+        flex: 1 !important;
+        flex-shrink: 1 !important;
+        flex-grow: 1 !important;
+        flex-basis: 100% !important;
+    }
+    
+    .right-panel {
+        width: 100% !important;
+        min-width: 100% !important;
+        flex: 1 !important;
+        flex-shrink: 1 !important;
+        flex-grow: 1 !important;
+        flex-basis: 100% !important;
+    }
+}
+
+/* Regla adicional para mantener 100% del ancho en todas las pantallas de escritorio */
+@media (min-width: 769px) and (max-width: 1200px) {
+    .left-panel {
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
+        flex: 1 !important;
+        flex-shrink: 1 !important;
+        flex-grow: 1 !important;
+        flex-basis: 100% !important;
+    }
+    
+    .right-panel {
+        width: 100% !important;
+        min-width: 100% !important;
+        flex: 1 !important;
+        flex-shrink: 1 !important;
+        flex-grow: 1 !important;
+        flex-basis: 100% !important;
     }
 }
 
@@ -893,22 +1140,33 @@
         width: 200px;
         min-width: 150px;
     }
+    
+    /* Mantener 100% del ancho en pantallas medianas */
+    .left-panel {
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
+        flex: 1 !important;
+    }
 }
 
 @media (max-width: 992px) {
     .left-panel {
-        width: 40%;
-        min-width: 280px;
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
+        flex: 1 !important;
     }
     
     .right-panel {
-        width: 60%;
+        width: 100% !important;
+        min-width: 100% !important;
+        flex: 1 !important;
     }
 }
 
 @media (max-width: 768px) {
-    /* Ocultar elementos del header en móviles - más específico */
-    .depositos-header,
+    /* Ocultar solo los botones del header en móviles, mantener el título */
     .depositos-header .token-section,
     .depositos-header .load-btn,
     .depositos-header .panel-toggle,
@@ -920,6 +1178,12 @@
         overflow: hidden !important;
         margin: 0 !important;
         padding: 0 !important;
+    }
+    
+    /* Mantener el header visible pero más compacto */
+    .depositos-header {
+        padding: 0.5rem 1rem !important;
+        min-height: 60px !important;
     }
     
     /* Ocultar elementos del div de productos en móviles */
@@ -991,18 +1255,6 @@
         top: -9999px !important;
     }
     
-    /* Ocultar TODOS los elementos internos del div azul */
-    .selected-location *,
-    div[style*="background: linear-gradient(135deg, #e3f2fd"] *,
-    div[style*="border: 2px solid #007bff"] * {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        height: 0 !important;
-        width: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
     
     /* CONTROLES EN MÓVILES - ALTURA UNIFICADA - TEXTO COHERENTE */
     .control-buttons {
@@ -1048,18 +1300,206 @@
         font-size: 0.7rem !important; /* Tamaño unificado */
     }
     
-    /* INPUT CÓDIGO DE BARRAS - MISMA ALTURA QUE BOTÓN - 100% ANCHO */
-    #barcodeInput {
-        width: 100% !important; /* Aprovechar todo el ancho disponible */
-        max-width: none !important;
+    /* BOTÓN QR - 10% ANCHO - COMPACTO */
+    .control-buttons .btn-outline-success {
+        width: 10% !important; /* 10% del ancho disponible */
+        min-width: 40px !important; /* Ancho mínimo para usabilidad */
         padding: 0.1rem 0.2rem !important;
         font-size: 0.7rem !important; /* Tamaño unificado */
+        height: 28px !important; /* MISMA ALTURA que el input */
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        flex-shrink: 0 !important; /* No se comprime */
+    }
+    
+    .control-buttons .btn-outline-success i {
+        font-size: 0.7rem !important; /* Tamaño unificado */
+    }
+    
+    /* INPUT CÓDIGO DE BARRAS - MISMA ALTURA QUE BOTÓN - 90% ANCHO */
+    #barcodeInput {
+        width: 90% !important; /* 90% del ancho disponible */
+        max-width: none !important;
+        padding: 8px 12px !important;
+        font-size: 14px !important; /* Tamaño normal */
         border-radius: 3px !important;
+        height: 38px !important; /* Altura normal */
+        background-color: white !important;
         border: 1px solid #007bff !important;
-        height: 28px !important; /* MISMA ALTURA que el botón */
+        color: #000 !important;
         line-height: 1.2 !important;
         box-sizing: border-box !important;
         flex: 1 !important; /* Ocupar espacio restante */
+        display: block !important; /* SIEMPRE VISIBLE */
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+    
+    /* FORZAR VISIBILIDAD DE TODOS LOS TEXTBOX - SÚPER AGRESIVO */
+    input[type="text"],
+    input[type="number"],
+    input.form-control,
+    .form-control,
+    input,
+    input:not(:hover),
+    input:not(:focus),
+    input:not(:active),
+    input:not(:visited),
+    input:not(:link) {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        background-color: white !important;
+        border: 2px solid #007bff !important;
+        color: #000 !important;
+        font-size: 14px !important;
+        padding: 8px 12px !important;
+        height: 38px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        position: relative !important;
+        z-index: 9999 !important;
+        pointer-events: auto !important;
+        user-select: auto !important;
+        -webkit-user-select: auto !important;
+        -moz-user-select: auto !important;
+        -ms-user-select: auto !important;
+        /* ELIMINAR CUALQUIER TRANSICIÓN */
+        transition: none !important;
+        -webkit-transition: none !important;
+        -moz-transition: none !important;
+        -o-transition: none !important;
+        /* ELIMINAR CUALQUIER FILTRO */
+        filter: none !important;
+        -webkit-filter: none !important;
+        /* FORZAR ESTADO NORMAL */
+        transform: none !important;
+        -webkit-transform: none !important;
+        -moz-transform: none !important;
+        -ms-transform: none !important;
+    }
+    
+    /* FORZAR VISIBILIDAD DEL MODAL STOCK */
+    #modalStockActual {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        background-color: white !important;
+        border: 2px solid #007bff !important;
+        color: #000 !important;
+        font-size: 14px !important;
+        padding: 8px 12px !important;
+        height: 38px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        position: relative !important;
+        z-index: 9999 !important;
+    }
+    
+    /* FORZAR VISIBILIDAD DE CONTENEDORES DE INPUT */
+    .control-buttons,
+    .control-buttons .ms-auto,
+    .control-buttons .ms-auto:first-child,
+    .ms-auto,
+    .ms-auto:first-child {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        width: 100% !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+    
+    /* FORZAR VISIBILIDAD DE INPUT EN CONTENEDORES */
+    .control-buttons input,
+    .control-buttons .ms-auto input,
+    .control-buttons .ms-auto:first-child input,
+    .ms-auto input,
+    .ms-auto:first-child input {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        background-color: white !important;
+        border: 2px solid #007bff !important;
+        color: #000 !important;
+        font-size: 14px !important;
+        padding: 8px 12px !important;
+        height: 38px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        position: relative !important;
+        z-index: 9999 !important;
+    }
+    
+    /* FORZAR VISIBILIDAD DE TODOS LOS INPUT - SÚPER AGRESIVO */
+    input,
+    input:not(:focus),
+    input:not(:hover),
+    input:not(:active),
+    input:not(:visited),
+    input:not(:link),
+    input:not(:target),
+    input:not(:checked),
+    input:not(:disabled),
+    input:not(:enabled),
+    input:not(:valid),
+    input:not(:invalid),
+    input:not(:required),
+    input:not(:optional),
+    input:not(:read-only),
+    input:not(:read-write),
+    input:not(:placeholder-shown),
+    input:not(:in-range),
+    input:not(:out-of-range),
+    input:not(:user-invalid),
+    input:not(:user-valid) {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        background-color: white !important;
+        border: 2px solid #007bff !important;
+        color: #000 !important;
+        font-size: 14px !important;
+        padding: 8px 12px !important;
+        height: 38px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        position: relative !important;
+        z-index: 9999 !important;
+        pointer-events: auto !important;
+        user-select: auto !important;
+        -webkit-user-select: auto !important;
+        -moz-user-select: auto !important;
+        -ms-user-select: auto !important;
+        /* ELIMINAR CUALQUIER TRANSICIÓN */
+        transition: none !important;
+        -webkit-transition: none !important;
+        -moz-transition: none !important;
+        -o-transition: none !important;
+        /* ELIMINAR CUALQUIER FILTRO */
+        filter: none !important;
+        -webkit-filter: none !important;
+        /* FORZAR ESTADO NORMAL */
+        transform: none !important;
+        -webkit-transform: none !important;
+        -moz-transform: none !important;
+        -ms-transform: none !important;
+        /* FORZAR QUE NO SE OCULTE */
+        clip: auto !important;
+        clip-path: none !important;
+        -webkit-clip-path: none !important;
+        mask: none !important;
+        -webkit-mask: none !important;
+        /* FORZAR VISIBILIDAD EN TODOS LOS ESTADOS */
+        :not(:focus):not(:hover):not(:active):not(:visited):not(:link) {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            background-color: white !important;
+            border: 2px solid #007bff !important;
+            color: #000 !important;
+        }
     }
     
     /* Asegurar que el input tenga focus en móviles */
@@ -1068,6 +1508,79 @@
         border-color: #007bff !important;
         box-shadow: 0 0 0 0.1rem rgba(0, 123, 255, 0.15) !important;
     }
+    
+    /* FORZAR VISIBILIDAD DE INPUT DE STOCK EN GRILLA - SÚPER AGRESIVO */
+    .fast-number,
+    .form-control.fast-number,
+    input.fast-number,
+    input[class*="fast-number"],
+    input[class*="form-control"],
+    .grid-row input,
+    .grid-columns input,
+    .data-grid input,
+    .table input,
+    tbody input,
+    tr input,
+    td input {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        background-color: white !important;
+        border: 2px solid #007bff !important;
+        color: #000 !important;
+        font-size: 14px !important;
+        padding: 4px 8px !important;
+        height: 32px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        position: relative !important;
+        z-index: 9999 !important;
+        text-align: center !important;
+        pointer-events: auto !important;
+        user-select: auto !important;
+        -webkit-user-select: auto !important;
+        -moz-user-select: auto !important;
+        -ms-user-select: auto !important;
+        /* ELIMINAR CUALQUIER TRANSICIÓN */
+        transition: none !important;
+        -webkit-transition: none !important;
+        -moz-transition: none !important;
+        -o-transition: none !important;
+        /* ELIMINAR CUALQUIER FILTRO */
+        filter: none !important;
+        -webkit-filter: none !important;
+        /* FORZAR ESTADO NORMAL */
+        transform: none !important;
+        -webkit-transform: none !important;
+        -moz-transform: none !important;
+        -ms-transform: none !important;
+        /* FORZAR QUE NO SE OCULTE */
+        clip: auto !important;
+        clip-path: none !important;
+        -webkit-clip-path: none !important;
+        mask: none !important;
+        -webkit-mask: none !important;
+    }
+    
+    /* REGLA ESPECÍFICA PARA MÓVILES - TEXTBOX SIEMPRE VISIBLE */
+    @media (max-width: 768px) {
+        #barcodeInput {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            width: 90% !important;
+            height: 38px !important;
+            font-size: 14px !important;
+            background-color: white !important;
+            border: 1px solid #007bff !important;
+            color: #000 !important;
+        }
+    }
+    
+    
+    
+    
+    
     
     /* Ocultar TODOS los elementos de registros */
     .ms-auto .badge,
@@ -1259,9 +1772,9 @@
         margin: 0 !important;
     }
     
-    /* DISTRIBUCIÓN 75% TEXTBOX - 25% BOTÓN - PROPORCIÓN OPTIMIZADA */
+    /* DISTRIBUCIÓN 90% TEXTBOX - 10% BOTÓN QR - PROPORCIÓN OPTIMIZADA */
     .control-buttons .ms-auto:first-child {
-        flex: 0 0 75% !important; /* 75% del ancho para el textbox */
+        flex: 0 0 90% !important; /* 90% del ancho para el textbox */
         margin-right: 0.1rem !important;
         display: flex !important;
         align-items: center !important;
@@ -1270,19 +1783,48 @@
     .control-buttons .ms-auto:first-child #barcodeInput {
         width: 100% !important;
         max-width: none !important;
-        flex: 1 !important; /* Ocupar todo el espacio del contenedor del 75% */
+        flex: 1 !important; /* Ocupar todo el espacio del contenedor del 90% */
     }
     
-    .control-buttons .btn-outline-primary {
-        flex: 0 0 25% !important; /* 25% del ancho para el botón */
-        width: auto !important; /* Se ajusta al 25% disponible */
-        min-width: auto !important;
+    .control-buttons .btn-outline-success {
+        flex: 0 0 10% !important; /* 10% del ancho para el botón QR */
+        width: auto !important; /* Se ajusta al 10% disponible */
+        min-width: 40px !important; /* Ancho mínimo para usabilidad */
     }
 
     .depositos-container {
-        height: auto;
+        height: 100vh;
         min-height: 100vh;
-        overflow: auto;
+        width: 100vw !important;
+        max-width: 100vw !important;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        padding: 0 !important;
+        margin: 0 !important;
+        position: relative;
+        left: 0;
+        right: 0;
+    }
+    
+    .depositos-content {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .main-panel {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
     }
 
     .depositos-header {
@@ -1353,50 +1895,135 @@
     }
 
     .depositos-content {
-        flex-direction: column;
-        height: auto;
-        overflow: visible;
+        flex-direction: column !important;
+        height: calc(100vh - 80px) !important;
+        overflow: hidden !important;
+        display: flex !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    
+    .main-panel {
+        flex-direction: column !important;
+        height: 100% !important;
+        overflow: hidden !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
     }
 
     .left-panel {
         width: 100% !important;
         max-width: 100% !important;
         min-width: 100% !important;
-        height: auto !important;
-        min-height: 0 !important;
-        max-height: none !important;
+        height: calc(100vh - 80px) !important;
+        min-height: calc(100vh - 80px) !important;
+        max-height: calc(100vh - 80px) !important;
         resize: none;
         border-right: none;
         border-bottom: none;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-        border-radius: 12px;
-        margin: 8px;
+        border-radius: 0;
+        margin: 0 !important;
+        padding: 0 !important;
         background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        position: relative;
+        overflow: hidden;
+        left: 0 !important;
+        right: 0 !important;
+        flex: 1 !important;
+        display: flex !important;
+        flex-direction: column !important;
     }
 
     .right-panel {
-        display: flex !important;
-        width: 100% !important;
-        max-width: 100% !important;
-        height: auto !important;
-        overflow: visible !important;
-        margin-bottom: 16px;
+        display: none !important;
+        width: 0 !important;
+        max-width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
     }
 
-    /* Forzar mostrar panel de productos en móvil cuando hay selección */
+    /* Solo mostrar panel de productos cuando hay ubicación seleccionada */
     .right-panel.show-on-mobile {
         display: flex !important;
         width: 100% !important;
-        height: auto !important;
-        overflow: visible !important;
+        max-width: 100% !important;
+        min-width: 100% !important;
+        height: calc(100vh - 80px) !important;
+        min-height: calc(100vh - 80px) !important;
+        max-height: calc(100vh - 80px) !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        border-radius: 0 !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
+        position: relative !important;
+        flex: 1 !important;
+        flex-direction: column !important;
+    }
+    
+    /* Ocultar panel de ubicaciones cuando se muestra el de productos en móviles */
+    .right-panel.show-on-mobile ~ .left-panel {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+    }
+    
+    /* Asegurar que solo se muestre un panel a la vez en móviles */
+    @media (max-width: 768px) {
+        .main-panel:has(.right-panel.show-on-mobile) .left-panel {
+            display: none !important;
+            width: 0 !important;
+            height: 0 !important;
+            overflow: hidden !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+        }
     }
 
     .panel-header {
-        padding: 1.5rem;
+        padding: 1rem;
         margin: 0;
         background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-        border-radius: 12px 12px 0 0;
+        border-radius: 8px 8px 0 0;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        flex-shrink: 0;
+    }
+    
+    .tree-panel {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        min-height: 0;
+    }
+    
+    .tree-container {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        min-height: 0;
+    }
+    
+    .tree-content {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        min-height: 0;
     }
 
     .search-input-group {
@@ -1568,13 +2195,17 @@
     }
 
     .left-panel {
+        width: 100% !important;
         height: 40vh;
         min-height: 250px;
+        flex: 1 !important;
     }
 
     .right-panel {
+        width: 100% !important;
         height: 60vh;
         min-height: 300px;
+        flex: 1 !important;
     }
 
     .panel-header {
@@ -1639,13 +2270,17 @@
     }
 
     .left-panel {
+        width: 100% !important;
         height: 35vh;
         min-height: 200px;
+        flex: 1 !important;
     }
 
     .right-panel {
+        width: 100% !important;
         height: 65vh;
         min-height: 250px;
+        flex: 1 !important;
     }
 
     .node-content {
@@ -1674,11 +2309,15 @@
 /* Landscape orientation for mobile */
 @media (max-width: 768px) and (orientation: landscape) {
     .left-panel {
+        width: 100% !important;
         height: 50vh;
+        flex: 1 !important;
     }
 
     .right-panel {
+        width: 100% !important;
         height: 50vh;
+        flex: 1 !important;
     }
 }
 
@@ -1761,6 +2400,22 @@
     .panel-toggle i {
         font-size: 1.1rem;
     }
+    
+    /* REGLA ESPECÍFICA PARA BOTÓN QR - MÁXIMA PRIORIDAD */
+    .control-buttons .ms-auto .btn-outline-success {
+        width: 10% !important;
+        min-width: 40px !important;
+        max-width: 60px !important;
+        flex: 0 0 10% !important;
+        padding: 0.1rem 0.2rem !important;
+        font-size: 0.7rem !important;
+        height: 28px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        flex-shrink: 0 !important;
+        margin-bottom: 0 !important;
+    }
 }
 
 @media (max-width: 480px) {
@@ -1806,6 +2461,117 @@
 @media (max-width: 768px) {
     .mobile-hidden {
         display: none !important;
+    }
+    
+    /* Forzar que use el 100% del ancho disponible en móviles */
+    .depositos-container,
+    .depositos-content,
+    .main-panel,
+    .left-panel {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        min-width: 100vw !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+    }
+    
+    /* Asegurar que no haya contenedores padre que limiten el ancho */
+    .depositos-container {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        z-index: 1 !important;
+    }
+}
+
+/* Responsive para cambios de tamaño de pantalla */
+@media (max-width: 1200px) {
+    .depositos-container {
+        width: 100vw !important;
+        height: 100vh !important;
+    }
+    
+    .left-panel,
+    .right-panel.show-on-mobile {
+        width: 100% !important;
+        height: calc(100vh - 80px) !important;
+        flex: 1 !important;
+    }
+}
+
+/* Responsive para tablets */
+@media (max-width: 992px) {
+    .depositos-container {
+        width: 100vw !important;
+        height: 100vh !important;
+    }
+    
+    .left-panel,
+    .right-panel.show-on-mobile {
+        width: 100% !important;
+        height: calc(100vh - 80px) !important;
+        flex: 1 !important;
+    }
+}
+
+/* Responsive para móviles en landscape */
+@media (max-width: 768px) and (orientation: landscape) {
+    .depositos-container {
+        width: 100vw !important;
+        height: 100vh !important;
+    }
+    
+    .left-panel,
+    .right-panel.show-on-mobile {
+        width: 100vw !important;
+        height: calc(100vh - 60px) !important;
+        min-height: calc(100vh - 60px) !important;
+    }
+    
+    .depositos-header {
+        padding: 0.5rem !important;
+        min-height: 60px !important;
+    }
+}
+
+/* Responsive para móviles en portrait */
+@media (max-width: 768px) and (orientation: portrait) {
+    .depositos-container {
+        width: 100vw !important;
+        height: 100vh !important;
+    }
+    
+    .left-panel,
+    .right-panel.show-on-mobile {
+        width: 100vw !important;
+        height: calc(100vh - 80px) !important;
+        min-height: calc(100vh - 80px) !important;
+    }
+}
+
+/* Responsive para pantallas muy pequeñas */
+@media (max-width: 480px) {
+    .depositos-container {
+        width: 100vw !important;
+        height: 100vh !important;
+    }
+    
+    .left-panel,
+    .right-panel.show-on-mobile {
+        width: 100% !important;
+        height: calc(100vh - 70px) !important;
+        min-height: calc(100vh - 70px) !important;
+        flex: 1 !important;
+    }
+    
+    .depositos-header {
+        padding: 0.25rem !important;
+        min-height: 70px !important;
     }
 }
 
@@ -2142,17 +2908,46 @@
         align-items: stretch !important;
     }
     
-    .control-buttons .btn {
+    .control-buttons .btn:not(.btn-outline-success) {
         width: 100% !important;
         padding: 1rem !important;
         font-size: 1rem !important;
         margin-bottom: 0.5rem !important;
     }
     
+    /* BOTÓN QR ESPECÍFICO - NO AFECTAR POR REGLAS GENERALES */
+    .control-buttons .btn-outline-success {
+        width: 10% !important; /* 10% del ancho disponible */
+        min-width: 40px !important; /* Ancho mínimo para usabilidad */
+        padding: 0.1rem 0.2rem !important;
+        font-size: 0.7rem !important; /* Tamaño unificado */
+        height: 28px !important; /* MISMA ALTURA que el input */
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        flex-shrink: 0 !important; /* No se comprime */
+        margin-bottom: 0 !important; /* Sin margen inferior */
+    }
+    
     .control-buttons .ms-auto {
         margin-left: 0 !important;
         text-align: center !important;
         margin-top: 0.25rem !important;
+    }
+    
+    /* CONTENEDOR DEL INPUT Y BOTÓN QR - DISTRIBUCIÓN CORRECTA */
+    .control-buttons .ms-auto:first-child {
+        flex: 0 0 90% !important; /* 90% del ancho para el textbox */
+        margin-right: 0.1rem !important;
+        display: flex !important;
+        align-items: center !important;
+        width: 90% !important; /* Forzar 90% */
+    }
+    
+    .control-buttons .ms-auto:first-child #barcodeInput {
+        width: 100% !important; /* 100% del contenedor del 90% */
+        max-width: none !important;
+        flex: 1 !important;
     }
     
     .control-buttons .form-check {
@@ -2199,4 +2994,189 @@
         justify-content: center !important;
     }
     
+}
+
+/* ======================================== */
+/* SOLUCIÓN AGRESIVA PARA BOTÓN QR - MÁXIMA PRIORIDAD */
+/* ======================================== */
+
+/* Forzar distribución correcta en móviles - SOBRESCRIBIR TODO */
+@media (max-width: 768px) {
+    /* CONTENEDOR PRINCIPAL - FORZAR DISTRIBUCIÓN */
+    .control-buttons .ms-auto:first-child {
+        width: 90% !important;
+        max-width: 90% !important;
+        flex: 0 0 90% !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.5rem !important;
+    }
+    
+    /* INPUT CÓDIGO DE BARRAS - 90% DEL CONTENEDOR */
+    .control-buttons .ms-auto:first-child #barcodeInput {
+        width: 100% !important;
+        max-width: 100% !important;
+        flex: 1 !important;
+        min-width: 0 !important;
+        height: 28px !important;
+        font-size: 0.7rem !important;
+        padding: 0.1rem 0.2rem !important;
+        border-radius: 3px !important;
+        border: 1px solid #007bff !important;
+        box-sizing: border-box !important;
+    }
+    
+    /* BOTÓN QR - 10% DEL CONTENEDOR - MÁXIMA ESPECIFICIDAD */
+    .control-buttons .ms-auto:first-child .btn-outline-success {
+        width: 10% !important;
+        min-width: 40px !important;
+        max-width: 50px !important;
+        flex: 0 0 10% !important;
+        height: 28px !important;
+        padding: 0.1rem 0.2rem !important;
+        font-size: 0.7rem !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        flex-shrink: 0 !important;
+        margin: 0 !important;
+        border-radius: 3px !important;
+        box-sizing: border-box !important;
+    }
+    
+    /* ICONO DEL BOTÓN QR */
+    .control-buttons .ms-auto:first-child .btn-outline-success i {
+        font-size: 0.7rem !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+}
+
+/* REGLA ADICIONAL PARA PANTALLAS MUY PEQUEÑAS */
+@media (max-width: 480px) {
+    .control-buttons .ms-auto:first-child {
+        width: 85% !important;
+        max-width: 85% !important;
+        flex: 0 0 85% !important;
+    }
+    
+    .control-buttons .ms-auto:first-child .btn-outline-success {
+        width: 15% !important;
+        min-width: 35px !important;
+        max-width: 45px !important;
+        flex: 0 0 15% !important;
+    }
+}
+
+/* ======================================== */
+/* REGLA ULTRA ESPECÍFICA - SOBRESCRIBIR TODO */
+/* ======================================== */
+@media (max-width: 768px) {
+    /* FORZAR DISTRIBUCIÓN CORRECTA - MÁXIMA ESPECIFICIDAD */
+    div.control-buttons div.ms-auto:first-child {
+        width: 90% !important;
+        max-width: 90% !important;
+        flex: 0 0 90% !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.5rem !important;
+        box-sizing: border-box !important;
+    }
+    
+    /* INPUT - OCUPAR TODO EL ESPACIO DEL CONTENEDOR */
+    div.control-buttons div.ms-auto:first-child input#barcodeInput {
+        width: 100% !important;
+        max-width: 100% !important;
+        flex: 1 !important;
+        min-width: 0 !important;
+        height: 28px !important;
+        font-size: 0.7rem !important;
+        padding: 0.1rem 0.2rem !important;
+        border-radius: 3px !important;
+        border: 1px solid #007bff !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+    }
+    
+    /* BOTÓN QR - SOLO 10% - ULTRA COMPACTO */
+    div.control-buttons div.ms-auto:first-child button.btn-outline-success {
+        width: 10% !important;
+        min-width: 40px !important;
+        max-width: 50px !important;
+        flex: 0 0 10% !important;
+        height: 28px !important;
+        padding: 0.1rem 0.2rem !important;
+        font-size: 0.7rem !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        flex-shrink: 0 !important;
+        margin: 0 !important;
+        border-radius: 3px !important;
+        box-sizing: border-box !important;
+        border: 1px solid #28a745 !important;
+        background-color: transparent !important;
+        color: #28a745 !important;
+    }
+    
+    /* ICONO DEL BOTÓN QR */
+    div.control-buttons div.ms-auto:first-child button.btn-outline-success i {
+        font-size: 0.7rem !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        line-height: 1 !important;
+    }
+}
+
+/* ======================================== */
+/* REGLA SÚPER AGRESIVA - SOBRESCRIBIR TODAS LAS MEDIA QUERIES */
+/* ======================================== */
+.depositos-container {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    min-width: 100vw !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 9999 !important;
+}
+
+.depositos-content {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    min-width: 100vw !important;
+    height: calc(100vh - 80px) !important;
+}
+
+.left-panel {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    min-width: 100vw !important;
+    height: 100% !important;
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* FORZAR EN TODAS LAS RESOLUCIONES */
+@media screen {
+    .depositos-container,
+    .depositos-content,
+    .left-panel {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        min-width: 100vw !important;
+    }
+}
+
+/* FORZAR EN TODAS LAS ORIENTACIONES */
+@media all {
+    .depositos-container,
+    .depositos-content,
+    .left-panel {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        min-width: 100vw !important;
+    }
 }

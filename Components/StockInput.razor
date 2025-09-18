@@ -1,21 +1,23 @@
 @using BlazorApp_ProductosAPI.Models
 
-@if (Model != null)
-{
-    <input class="form-control fast-number" 
-           type="text" 
-           inputmode="decimal" 
-           autocomplete="off" 
-           spellcheck="false" 
-           value="@Model.Value" 
-           @oninput="(e) => Model.OnInput(Model.Producto, e)" />
-}
-else
-{
-    <span class="numeric">@Value</span>
-}
+<input class="form-control fast-number" 
+       type="text" 
+       inputmode="decimal" 
+       autocomplete="off" 
+       spellcheck="false" 
+       value="@(Model?.Value ?? Value)" 
+       @oninput="OnInputChanged" 
+       style="display: block !important; visibility: visible !important; opacity: 1 !important; background-color: white !important; border: 1px solid #007bff !important; color: #000 !important; font-size: 14px !important; padding: 4px 8px !important; height: 32px !important; width: 100% !important; text-align: center !important;" />
 
 @code {
     [Parameter] public StockInputModel? Model { get; set; }
     [Parameter] public string Value { get; set; } = "0";
+    
+    private void OnInputChanged(ChangeEventArgs e)
+    {
+        if (Model != null)
+        {
+            Model.OnInput(Model.Producto, e);
+        }
+    }
 }

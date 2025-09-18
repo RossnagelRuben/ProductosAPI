@@ -10,11 +10,13 @@
 @using System.Linq
 @using System.Net.Http.Headers
 @using System.Threading
+@using BlazorApp_ProductosAPI.Components
 @inject IJSRuntime JS
 
 @inject HttpClient Http
 
-<h3>Productos</h3>
+<AuthorizeView>
+    <h3>Productos</h3>
 
 <!-- Autenticación -->
 @if (showAuthCard)
@@ -1975,3 +1977,4 @@ else
         }
     }
 }
+</AuthorizeView>

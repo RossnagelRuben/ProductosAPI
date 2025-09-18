@@ -1,16 +1,285 @@
 ﻿@page "/"
+@using BlazorApp_ProductosAPI.Services
+@using BlazorApp_ProductosAPI.Components
+@using BlazorApp_ProductosAPI.Models
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+
 <PageTitle>DRR SYSTEMAS</PageTitle>
 
-<div class="animated-background"></div>
+@if (isAuthenticated)
+{
+    <div class="animated-background"></div>
 
-<div class="center-content stack-tight">
-    <img src="AlmaNet.png" alt="Logo AlmaNet" class="logo-alma" loading="eager" decoding="async" />
-    <img src="drr.png" alt="Logo DRR" class="logo-drr" loading="eager" decoding="async" />
+    <div class="center-content stack-tight">
+        <img src="AlmaNet.png" alt="Logo AlmaNet" class="logo-alma" loading="eager" decoding="async" />
+        <img src="drr.png" alt="Logo DRR" class="logo-drr" loading="eager" decoding="async" />
 
-    <a class="powered-by" href="https://www.notion.so/Curriculum-Vitae-786c7d09af32431c885c7cccb5a4c1b9"
-       target="_blank" rel="noopener noreferrer" title="Abrir CV en Notion">
-        <span class="pb-label">Powered by:</span>
-        <span class="pb-name"><strong>Rubencito Sistemas.</strong></span>
-        <span aria-hidden="true" class="pb-arrow">↗</span>
-    </a>
-</div>
+        <div class="welcome-section">
+            <h2>¡Bienvenido, @currentUser!</h2>
+            <p>Has iniciado sesión correctamente en @(string.IsNullOrEmpty(company) ? "DRR SYSTEMAS" : company)</p>
+            
+            @if (currentUser == "DRRSysRuben" && (!string.IsNullOrEmpty(tokenDEV) || !string.IsNullOrEmpty(tokenUSER) || !string.IsNullOrEmpty(tokenFINAL)))
+            {
+                <div class="tokens-section">
+                    <h4>Tokens de Acceso:</h4>
+                    
+                    @if (!string.IsNullOrEmpty(tokenDEV))
+                    {
+                        <div class="token-section">
+                            <h5>Token DEV:</h5>
+                            <div class="token-container">
+                                <code class="token-code">@tokenDEV</code>
+                                <button class="btn btn-sm btn-outline-light copy-token-btn" @onclick="() => CopyToken(tokenDEV)">
+                                    <i class="oi oi-copy"></i> Copiar
+                                </button>
+                            </div>
+                        </div>
+                    }
+                    
+                    @if (!string.IsNullOrEmpty(tokenUSER))
+                    {
+                        <div class="token-section">
+                            <h5>Token USER:</h5>
+                            <div class="token-container">
+                                <code class="token-code">@tokenUSER</code>
+                                <button class="btn btn-sm btn-outline-light copy-token-btn" @onclick="() => CopyToken(tokenUSER)">
+                                    <i class="oi oi-copy"></i> Copiar
+                                </button>
+                            </div>
+                        </div>
+                    }
+                    
+                    @if (!string.IsNullOrEmpty(tokenFINAL))
+                    {
+                        <div class="token-section">
+                            <h5>Token FINAL (DEV.USER):</h5>
+                            <div class="token-container">
+                                <code class="token-code">@tokenFINAL</code>
+                                <button class="btn btn-sm btn-outline-light copy-token-btn" @onclick="() => CopyToken(tokenFINAL)">
+                                    <i class="oi oi-copy"></i> Copiar
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <a class="powered-by" href="https://www.notion.so/Curriculum-Vitae-786c7d09af32431c885c7cccb5a4c1b9"
+           target="_blank" rel="noopener noreferrer" title="Abrir CV en Notion">
+            <span class="pb-label">Powered by:</span>
+            <span class="pb-name"><strong>Rubencito Sistemas.</strong></span>
+            <span aria-hidden="true" class="pb-arrow">↗</span>
+        </a>
+
+        <button class="btn btn-danger btn-lg logout-button" @onclick="HandleLogout">
+            <i class="oi oi-account-logout"></i> Cerrar Sesión
+        </button>
+    </div>
+}
+else
+{
+    <div class="login-redirect">
+        <div class="animated-background"></div>
+        <div class="center-content stack-tight">
+            <img src="AlmaNet.png" alt="Logo AlmaNet" class="logo-alma" loading="eager" decoding="async" />
+            <img src="drr.png" alt="Logo DRR" class="logo-drr" loading="eager" decoding="async" />
+            
+            <div class="login-card">
+                <div class="login-header">
+                    <h2>Iniciar Sesión</h2>
+                    <p>Ingresa tus credenciales para acceder al sistema</p>
+                </div>
+
+                <div class="login-form">
+                    <EditForm Model="@loginModel" OnValidSubmit="@HandleLogin">
+                        <DataAnnotationsValidator />
+                        
+                        <div class="form-group">
+                            <label for="username"></label>
+                            <InputText @bind-Value="loginModel.User" 
+                                      id="username" 
+                                      class="@GetInputClass()" 
+                                      placeholder="Ingresa tu usuario:" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="password"></label>
+                            <InputText @bind-Value="loginModel.Pwd" 
+                                      type="password" 
+                                      id="password" 
+                                      class="@GetInputClass()" 
+                                      placeholder="Ingresa tu contraseña:" />
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(errorMessage))
+                        {
+                            <div class="alert alert-danger" role="alert">
+                                @errorMessage
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(successMessage))
+                        {
+                            <div class="alert alert-success" role="alert">
+                                @successMessage
+                            </div>
+                        }
+
+                        <div class="mt-4">
+                            <button type="submit" 
+                                class="btn btn-primary btn-lg w-100 @(isLoading ? "loading" : "")" 
+                                disabled="@isLoading">
+                            @if (isLoading)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                <span>@(isAuthenticated ? "Verificando sesión..." : "Iniciando sesión...")</span>
+                            }
+                            else
+                            {
+                                <span>Ingresar</span>
+                            }
+                        </button>
+                        </div>
+                    </EditForm>
+                </div>
+
+            </div>
+
+            <a class="powered-by" href="https://www.notion.so/Curriculum-Vitae-786c7d09af32431c885c7cccb5a4c1b9"
+               target="_blank" rel="noopener noreferrer" title="Abrir CV en Notion">
+                <span class="pb-label">Powered by:</span>
+                <span class="pb-name"><strong>Rubencito Sistemas.</strong></span>
+                <span aria-hidden="true" class="pb-arrow">↗</span>
+            </a>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private bool isAuthenticated = false;
+    private string currentUser = string.Empty;
+    private string company = string.Empty;
+    private string tokenDEV = string.Empty;
+    private string tokenUSER = string.Empty;
+    private string tokenFINAL = string.Empty;
+    
+    // Variables para el login
+    private LoginRequest loginModel = new();
+    private bool showError = false;
+    private string errorMessage = string.Empty;
+    private string successMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckAuthentication();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !isAuthenticated)
+        {
+            // Focus en el campo de usuario cuando se carga la página de login
+            await JSRuntime.InvokeVoidAsync("blazorFocusById", "username");
+        }
+    }
+
+    private async Task CheckAuthentication()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            isAuthenticated = await AuthService.IsLoggedInAsync();
+            if (isAuthenticated)
+            {
+                currentUser = await AuthService.GetUserAsync() ?? "Usuario";
+                company = await AuthService.GetCompanyAsync() ?? string.Empty;
+                tokenDEV = await AuthService.GetTokenDEVAsync() ?? string.Empty;
+                tokenUSER = await AuthService.GetTokenUSERAsync() ?? string.Empty;
+                tokenFINAL = await AuthService.GetTokenFINALAsync() ?? string.Empty;
+            }
+        }
+        catch
+        {
+            isAuthenticated = false;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleLogout()
+    {
+        await AuthService.LogoutAsync();
+        // Recargar la página para actualizar el layout
+        await JSRuntime.InvokeVoidAsync("location.reload");
+    }
+
+    private async Task CopyToken(string token)
+    {
+        if (!string.IsNullOrEmpty(token))
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", token);
+            // Aquí podrías agregar una notificación de que se copió
+        }
+    }
+
+    // Métodos para el login
+    private string GetInputClass()
+    {
+        return showError ? "form-control error" : "form-control";
+    }
+
+    private async Task HandleLogin()
+    {
+        isLoading = true;
+        showError = false;
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+
+        try
+        {
+            var response = await AuthService.LoginAsync(loginModel.User, loginModel.Pwd);
+
+            if (response != null)
+            {
+                if (response.Status == "ok" && response.Data != null)
+                {
+                    successMessage = $"¡Bienvenido {response.Data.User}! Iniciando sesión...";
+                    await Task.Delay(1500);
+                    
+                    // Recargar la página completa para actualizar el layout
+                    await JSRuntime.InvokeVoidAsync("location.reload");
+                }
+                else
+                {
+                    errorMessage = "Error en usuario o password";
+                    showError = true;
+                }
+            }
+            else
+            {
+                errorMessage = "Error en usuario o password";
+                showError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Error en usuario o password";
+            showError = true;
+            Console.WriteLine($"Error en login: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+}

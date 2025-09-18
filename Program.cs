@@ -10,5 +10,6 @@ builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.
 builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.UbicacionService>();
 builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.TreeBuilderService>();
 builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.ProductoService>();
+builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.IAuthService, BlazorApp_ProductosAPI.Services.AuthService>();
 
 await builder.Build().RunAsync();

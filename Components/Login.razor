@@ -1,0 +1,120 @@
+@using BlazorApp_ProductosAPI.Services
+@using BlazorApp_ProductosAPI.Models
+@inject IAuthService AuthService
+@inject IJSRuntime JSRuntime
+
+<div class="login-container">
+    <div class="login-card">
+        <div class="login-header">
+            <img src="AlmaNet.png" alt="Logo AlmaNet" class="login-logo" />
+            <h2>Iniciar Sesión</h2>
+            <p>Ingresa tus credenciales para acceder al sistema</p>
+        </div>
+
+        <div class="login-form">
+            <EditForm Model="@loginModel" OnValidSubmit="@HandleLogin">
+                <DataAnnotationsValidator />
+                
+                <div class="form-group">
+                    <label for="username">Usuario</label>
+                    <InputText @bind-Value="loginModel.User" 
+                              id="username" 
+                              class="@GetInputClass()" 
+                              placeholder="Ingresa tu usuario" />
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Contraseña</label>
+                    <InputText @bind-Value="loginModel.Pwd" 
+                              type="password" 
+                              id="password" 
+                              class="@GetInputClass()" 
+                              placeholder="Ingresa tu contraseña" />
+                </div>
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="error-message">
+                        <i class="error-icon">⚠️</i>
+                        @errorMessage
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(successMessage))
+                {
+                    <div class="success-message">
+                        <i class="success-icon">✅</i>
+                        @successMessage
+                    </div>
+                }
+
+                <button type="submit" 
+                        class="login-button @(isLoading ? "loading" : "")" 
+                        disabled="@isLoading">
+                    @if (isLoading)
+                    {
+                        <span class="spinner"></span>
+                        <span>Iniciando sesión...</span>
+                    }
+                    else
+                    {
+                        <span>Ingresar</span>
+                    }
+                </button>
+            </EditForm>
+        </div>
+
+        <div class="login-footer">
+            <p>Powered by <strong>Rubencito Sistemas</strong></p>
+        </div>
+    </div>
+</div>
+
+@code {
+    private LoginRequest loginModel = new();
+    private bool isLoading = false;
+    private bool showError = false;
+    private string errorMessage = string.Empty;
+    private string successMessage = string.Empty;
+
+    private string GetInputClass()
+    {
+        return showError ? "form-control error" : "form-control";
+    }
+
+    private async Task HandleLogin()
+    {
+        isLoading = true;
+        showError = false;
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+
+        try
+        {
+            var response = await AuthService.LoginAsync(loginModel.User, loginModel.Pwd);
+
+            if (response?.Status == "ok" && response.Data != null)
+            {
+                successMessage = $"¡Bienvenido {response.Data.User}! Iniciando sesión...";
+                await Task.Delay(1500); // Mostrar mensaje de éxito
+                
+                // Redirigir o actualizar la página
+                await JSRuntime.InvokeVoidAsync("location.reload");
+            }
+            else
+            {
+                errorMessage = "Usuario o contraseña incorrectos. Inténtalo de nuevo.";
+                showError = true;
+            }
+        }
+        catch (Exception)
+        {
+            errorMessage = "Error de conexión. Verifica tu conexión a internet e inténtalo de nuevo.";
+            showError = true;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

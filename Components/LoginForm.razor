@@ -1,0 +1,204 @@
+@using BlazorApp_ProductosAPI.Services
+@using BlazorApp_ProductosAPI.Models
+@inject IAuthService AuthService
+@inject IJSRuntime JSRuntime
+@layout LoginLayout
+
+<div class="animated-background"></div>
+
+<div class="center-content stack-tight">
+    <img src="AlmaNet.png" alt="Logo AlmaNet" class="logo-alma" loading="eager" decoding="async" />
+    <img src="drr.png" alt="Logo DRR" class="logo-drr" loading="eager" decoding="async" />
+
+    <div class="login-card">
+        <div class="login-header">
+            <h2>Iniciar Sesión</h2>
+            <p>Ingresa tus credenciales para acceder al sistema</p>
+        </div>
+
+        <div class="login-form">
+            <EditForm Model="@loginModel" OnValidSubmit="@HandleLogin">
+                <DataAnnotationsValidator />
+                
+                <div class="form-group">
+                    <label for="username">Usuario</label>
+                    <InputText @bind-Value="loginModel.User" 
+                              id="username" 
+                              class="@GetInputClass()" 
+                              placeholder="Ingresa tu usuario" />
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Contraseña</label>
+                    <InputText @bind-Value="loginModel.Pwd" 
+                              type="password" 
+                              id="password" 
+                              class="@GetInputClass()" 
+                              placeholder="Ingresa tu contraseña" />
+                </div>
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="error-message">
+                        <i class="error-icon">⚠️</i>
+                        @errorMessage
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(successMessage))
+                {
+                    <div class="success-message">
+                        <i class="success-icon">✅</i>
+                        @successMessage
+                    </div>
+                }
+
+                @if (showDebugInfo)
+                {
+                    <div class="debug-message">
+                        <i class="debug-icon">📋</i>
+                        Log copiado al portapapeles. Pega (Ctrl+V) para ver los detalles.
+                    </div>
+                }
+
+                <button type="submit" 
+                        class="login-button @(isLoading ? "loading" : "")" 
+                        disabled="@isLoading">
+                    @if (isLoading)
+                    {
+                        <span class="spinner"></span>
+                        <span>Iniciando sesión...</span>
+                    }
+                    else
+                    {
+                        <span>Ingresar</span>
+                    }
+                </button>
+            </EditForm>
+        </div>
+
+        <div class="login-footer">
+            <p>Powered by <strong>Rubencito Sistemas</strong></p>
+        </div>
+    </div>
+
+    <a class="powered-by" href="https://www.notion.so/Curriculum-Vitae-786c7d09af32431c885c7cccb5a4c1b9"
+       target="_blank" rel="noopener noreferrer" title="Abrir CV en Notion">
+        <span class="pb-label">Powered by:</span>
+        <span class="pb-name"><strong>Rubencito Sistemas.</strong></span>
+        <span aria-hidden="true" class="pb-arrow">↗</span>
+    </a>
+</div>
+
+@code {
+    private LoginRequest loginModel = new();
+    private bool isLoading = false;
+    private bool showError = false;
+    private bool showDebugInfo = false;
+    private string errorMessage = string.Empty;
+    private string successMessage = string.Empty;
+
+    private string GetInputClass()
+    {
+        return showError ? "form-control error" : "form-control";
+    }
+
+    private async Task HandleLogin()
+    {
+        isLoading = true;
+        showError = false;
+        showDebugInfo = false;
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+
+        try
+        {
+            // Log de debug
+            var debugInfo = $"🔍 DEBUG LOGIN:\n";
+            debugInfo += $"Usuario: {loginModel.User}\n";
+            debugInfo += $"Contraseña: {loginModel.Pwd}\n";
+            debugInfo += $"Timestamp: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n\n";
+            
+            debugInfo += $"📤 PETICIÓN ENVIADA:\n";
+            debugInfo += $"URL: https://drrsystemas4.azurewebsites.net/Auth/GetTokenDeveloper\n";
+            debugInfo += $"JSON: {{\"user\":\"{loginModel.User}\",\"pwd\":\"{loginModel.Pwd}\",\"usePublicLogin\":false}}\n";
+            debugInfo += $"Header: Authorization = Bearer 4a7183cf-9515-4d87-a9f1-a9e1f952cc7c\n";
+            debugInfo += $"Content-Type: application/json\n\n";
+
+            var response = await AuthService.LoginAsync(loginModel.User, loginModel.Pwd);
+            var rawResponse = await AuthService.GetLastRawResponseAsync();
+            var requestInfo = await AuthService.GetLastRequestInfoAsync();
+
+            debugInfo += requestInfo;
+            debugInfo += $"\n📡 RESPUESTA API:\n";
+            debugInfo += $"Raw Response: {rawResponse}\n\n";
+            debugInfo += $"Deserialized Response: {response != null}\n";
+            if (response != null)
+            {
+                debugInfo += $"Status: '{response.Status}'\n";
+                debugInfo += $"Data: {response.Data != null}\n";
+                if (response.Data != null)
+                {
+                    debugInfo += $"User: {response.Data.User}\n";
+                    debugInfo += $"Company: {response.Data.Company}\n";
+                    debugInfo += $"Token: {response.Data.Token}\n";
+                }
+                else
+                {
+                    debugInfo += $"⚠️ Data es null - posible problema de deserialización\n";
+                }
+            }
+
+            // Copiar al portapapeles
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", debugInfo);
+            showDebugInfo = true;
+
+            if (response != null)
+            {
+                if (response.Status == "ok" && response.Data != null)
+                {
+                    successMessage = $"¡Bienvenido {response.Data.User}! Iniciando sesión...";
+                    await Task.Delay(1500); // Mostrar mensaje de éxito
+                    
+                    // Redirigir o actualizar la página
+                    await JSRuntime.InvokeVoidAsync("location.reload");
+                }
+                else if (response.Status == "error")
+                {
+                    errorMessage = "Usuario o contraseña incorrectos. Inténtalo de nuevo.";
+                    showError = true;
+                }
+                else
+                {
+                    errorMessage = "Error en la respuesta del servidor. Inténtalo de nuevo.";
+                    showError = true;
+                }
+            }
+            else
+            {
+                errorMessage = "No se pudo conectar con el servidor. Verifica tu conexión e inténtalo de nuevo.";
+                showError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Error de conexión. Verifica tu conexión a internet e inténtalo de nuevo.";
+            showError = true;
+            Console.WriteLine($"Error en login: {ex.Message}");
+            
+            // Log de error al portapapeles
+            var errorLog = $"❌ ERROR LOGIN:\n";
+            errorLog += $"Usuario: {loginModel.User}\n";
+            errorLog += $"Error: {ex.Message}\n";
+            errorLog += $"StackTrace: {ex.StackTrace}\n";
+            errorLog += $"Timestamp: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n";
+            
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", errorLog);
+            showDebugInfo = true;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

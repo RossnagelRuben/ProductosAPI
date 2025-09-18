@@ -1,10 +1,12 @@
 ﻿@page "/empresas"
 @using System.Net.Http.Headers
 @using System.Text.Json
+@using BlazorApp_ProductosAPI.Components
 @inject HttpClient Http
 @inject IJSRuntime JS
 
-<h3 class="hdr">Información de la Empresa</h3>
+<AuthorizeView>
+    <h3 class="hdr">Información de la Empresa</h3>
 
 <div class="card">
     <div class="row token-row">
@@ -337,3 +339,4 @@
         public string? Descripcion { get; set; }
     }
 }
+</AuthorizeView>

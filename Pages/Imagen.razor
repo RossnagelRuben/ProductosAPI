@@ -3,10 +3,12 @@
 @using System.IO
 @using System.Text.Json
 @using System.Text.Json.Serialization
+@using BlazorApp_ProductosAPI.Components
 @inject HttpClient Http
 @inject IJSRuntime JS
 
-<h3 style="margin-bottom:10px;">Imagen</h3>
+<AuthorizeView>
+    <h3 style="margin-bottom:10px;">Imagen</h3>
 
 <div class="card">
     <div class="row">
@@ -1499,3 +1501,4 @@ IMPORTANTE:
         </div>
     </div>
 }
+</AuthorizeView>
