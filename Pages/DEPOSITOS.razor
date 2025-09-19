@@ -1524,6 +1524,8 @@ input[class*="fast-number"] {
                        @bind="barcodeInput"
                        @bind:event="oninput"
                        @onkeypress="OnBarcodeKeyPress"
+                       @onfocus="OnBarcodeFocus"
+                       @onblur="OnBarcodeBlur"
                        inputmode="none" />
 
                 <!-- Botón QR -->
@@ -2000,6 +2002,26 @@ input[class*="fast-number"] {
         {
             await BuscarPorCodigoBarra();
         }
+    }
+
+    private async Task OnBarcodeFocus(FocusEventArgs e)
+    {
+        // Cuando el usuario hace focus, permitir el teclado temporalmente
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("enableBarcodeKeyboard");
+        }
+        catch { }
+    }
+
+    private async Task OnBarcodeBlur(FocusEventArgs e)
+    {
+        // Cuando pierde el focus, volver a deshabilitar el teclado
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("disableBarcodeKeyboard");
+        }
+        catch { }
     }
 
 
@@ -4255,6 +4277,24 @@ input[class*="fast-number"] {
             }
         } else {
             console.log('❌ No se encontró el input de stock en la modal');
+        }
+    };
+
+    // Función para habilitar el teclado en el textbox de código de barras
+    window.enableBarcodeKeyboard = function() {
+        const barcodeInput = document.getElementById('barcodeInput');
+        if (barcodeInput) {
+            barcodeInput.setAttribute('inputmode', 'text');
+            console.log('⌨️ Teclado habilitado para el textbox de código de barras');
+        }
+    };
+
+    // Función para deshabilitar el teclado en el textbox de código de barras
+    window.disableBarcodeKeyboard = function() {
+        const barcodeInput = document.getElementById('barcodeInput');
+        if (barcodeInput) {
+            barcodeInput.setAttribute('inputmode', 'none');
+            console.log('🚫 Teclado deshabilitado para el textbox de código de barras');
         }
     };
 
