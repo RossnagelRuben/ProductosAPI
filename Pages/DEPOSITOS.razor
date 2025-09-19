@@ -2061,7 +2061,7 @@ input[class*="fast-number"] {
         
         // Asegurar que se seleccione el texto después de que se renderice la modal
         InvokeAsync(async () => {
-            await Task.Delay(100); // Pequeño delay para que se renderice
+            await Task.Delay(200); // Delay para que se renderice completamente la modal
             try {
                 await JSRuntime.InvokeVoidAsync("selectTextInModal");
             } catch { }
@@ -4255,6 +4255,7 @@ input[class*="fast-number"] {
 
     // Función para seleccionar texto en la modal de producto
     window.selectTextInModal = function() {
+        console.log('🎯 selectTextInModal - Iniciando selección en modal de producto');
         const modalStockInput = document.getElementById('modalStockActual');
         if (modalStockInput) {
             // Asegurar que el elemento esté visible
@@ -4267,16 +4268,20 @@ input[class*="fast-number"] {
             // Verificar que el focus se aplicó correctamente
             if (document.activeElement === modalStockInput) {
                 console.log('✅ Focus y selección aplicados correctamente en la modal de producto');
+                return true;
             } else {
                 console.log('⚠️ Focus no se aplicó correctamente, reintentando...');
                 // Reintentar después de un breve delay
                 setTimeout(() => {
                     modalStockInput.focus();
                     modalStockInput.select();
-                }, 100);
+                    console.log('🔄 Reintento de focus completado');
+                }, 150);
+                return false;
             }
         } else {
             console.log('❌ No se encontró el input de stock en la modal');
+            return false;
         }
     };
 
