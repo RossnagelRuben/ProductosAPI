@@ -1777,7 +1777,7 @@ input[class*="fast-number"] {
                             }
 
                             <!-- Usar el componente DataGrid reutilizable -->
-                            <DataGrid 
+                            <DataGrid @ref="dataGridRef"
                                 Title="Productos en Stock"
                                 Data="@GetProductosForGrid()"
                                 Columns="@GetProductoColumns()"
@@ -1887,7 +1887,7 @@ input[class*="fast-number"] {
                 <div>@(productoModal.Producto?.CodigoBarra ?? "-")</div>
                 <div><strong>Stock actual:</strong></div>
                 <div>
-                    <input id="modalStockActual" class="form-control" type="number" step="0.01" @bind-value="productoModal.StockActual" @bind-value:event="oninput" inputmode="numeric" />
+                    <input id="modalStockActual" class="form-control" type="number" step="0.01" @bind-value="productoModal.StockActual" @bind-value:event="oninput" @onkeypress="OnModalStockKeyPress" inputmode="numeric" />
                 </div>
                 <div><strong>Mínimo:</strong></div>
                 <div>@(productoModal.StockMinimo?.ToString("0.##") ?? "-")</div>
@@ -1973,6 +1973,9 @@ input[class*="fast-number"] {
     private bool showProductoModal = false;
     private ProductoStock? productoModal;
     
+    // Referencia al DataGrid para manejo de inventario
+    private DataGrid? dataGridRef;
+    
     // Variables para QR Scanner
     private bool showQRModal = false;
     private string qrDetectedValue = string.Empty;
@@ -2033,6 +2036,23 @@ input[class*="fast-number"] {
         var match = productosSeleccionados.FirstOrDefault(p => string.Equals(p.Producto?.CodigoBarra, codigo, StringComparison.OrdinalIgnoreCase));
         if (match != null)
         {
+            // Agregar al inventario si está disponible el DataGrid
+            if (dataGridRef != null)
+            {
+                // Usar la cantidad de inventario si está disponible, sino el stock actual
+                var cantidadInventario = match.CantidadInventario ?? match.StockActual ?? 0;
+                
+                Console.WriteLine($"DEBUG - Código: {codigo}, CantidadInventario: {match.CantidadInventario}, StockActual: {match.StockActual}, CantidadFinal: {cantidadInventario}");
+                
+                dataGridRef.AddInventoryItem(
+                    codigo, 
+                    match.Producto?.DescripcionLarga ?? "Producto sin descripción",
+                    match.Producto?.RubroCodigo ?? "",
+                    match.StockActual ?? 0, // Stock actual del sistema
+                    cantidadInventario // Cantidad ingresada por el usuario
+                );
+            }
+            
             AbrirProductoEnModal(match);
             barcodeInput = string.Empty;
             StateHasChanged();
@@ -2074,9 +2094,39 @@ input[class*="fast-number"] {
         productoModal = null;
     }
 
+    private async Task OnModalStockKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await GuardarProductoModal();
+        }
+    }
+
     private async Task GuardarProductoModal()
     {
-        // Aquí se guardaría el stock actual del productoModal usando el servicio correspondiente
+        // Actualizar la cantidad de inventario en el producto original
+        if (productoModal != null)
+        {
+            var productoOriginal = productosSeleccionados.FirstOrDefault(p => 
+                p.Producto?.CodigoBarra == productoModal.Producto?.CodigoBarra);
+            if (productoOriginal != null)
+            {
+                productoOriginal.CantidadInventario = productoModal.StockActual;
+                
+                // También actualizar en el inventario del DataGrid si existe
+                if (dataGridRef != null)
+                {
+                    dataGridRef.AddInventoryItem(
+                        productoModal.Producto?.CodigoBarra ?? "",
+                        productoModal.Producto?.DescripcionLarga ?? "Producto sin descripción",
+                        productoModal.Producto?.RubroCodigo ?? "",
+                        productoOriginal.StockActual ?? 0,
+                        productoModal.StockActual ?? 0
+                    );
+                }
+            }
+        }
+        
         showProductoModal = false;
         await InvokeAsync(StateHasChanged);
     }

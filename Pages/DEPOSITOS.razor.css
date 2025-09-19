@@ -1600,7 +1600,8 @@
     /* Ocultar texto de registros de paginación en móviles */
     .pagination-controls .text-muted,
     .pagination-controls span:contains("registros"),
-    .pagination-controls .ms-2 {
+    .pagination-controls .ms-2,
+    .pagination-controls text {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
@@ -1609,21 +1610,207 @@
         overflow: hidden !important;
     }
     
-    /* Alinear horizontalmente los botones de paginación */
+    /* Ocultar texto "Ver todos" en móviles, mantener solo el ícono */
+    .pagination-controls .btn-outline-primary {
+        padding: 0.25rem !important;
+        min-width: auto !important;
+        font-size: 0 !important;
+    }
+    
+    .pagination-controls .btn-outline-primary i {
+        font-size: 0.875rem !important;
+    }
+    
+    /* Alinear horizontalmente todos los elementos de paginación en móviles */
     .pagination-controls {
         display: flex !important;
         flex-direction: row !important;
         align-items: center !important;
         justify-content: space-between !important;
         gap: 0.5rem !important;
-        padding: 0.1rem 0.2rem !important;
+        padding: 0.5rem !important;
     }
     
-    .pagination-buttons {
+    /* Primer div con botones de inventario y ver todos */
+    .pagination-controls > div:first-child {
         display: flex !important;
         flex-direction: row !important;
         align-items: center !important;
-        gap: 0.25rem !important;
+        gap: 0.5rem !important;
+        justify-content: flex-start !important;
+    }
+    
+    /* Segundo div con botones de paginación */
+    .pagination-controls > div:last-child {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 0.5rem !important;
+        justify-content: flex-end !important;
+    }
+    
+    .pagination-controls .pagination-buttons {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 0.5rem !important;
+        justify-content: center !important;
+    }
+    
+    /* Ocultar texto "Configurar columnas" en móviles, mantener solo el ícono */
+    .data-grid-header .btn-outline-primary .btn-text {
+        display: none !important;
+    }
+    
+    .data-grid-header .btn-outline-primary {
+        padding: 0.25rem !important;
+        min-width: auto !important;
+    }
+    
+    .data-grid-header .btn-outline-primary i {
+        font-size: 0.875rem !important;
+    }
+    
+    /* Ocultar texto "ENVIAR INVENTARIO" en móviles, mantener solo el ícono */
+    .data-grid-header .btn-success .btn-text {
+        display: none !important;
+    }
+    
+    .data-grid-header .btn-success {
+        padding: 0.25rem !important;
+        min-width: auto !important;
+    }
+    
+    .data-grid-header .btn-success i {
+        font-size: 0.875rem !important;
+    }
+    
+    /* Ocultar elementos en modal de inventario en móviles */
+    @media (max-width: 768px) {
+        /* Ocultar texto descriptivo */
+        .inventory-description,
+        .inventory-content p.text-muted {
+            display: none !important;
+        }
+        
+        /* Ocultar botones específicos en footer de modal */
+        .modal-footer button.clear-button,
+        .modal-footer button.close-button,
+        button.clear-button,
+        button.close-button {
+            display: none !important;
+        }
+    }
+    
+    /* Eliminar espacio blanco debajo del grid en móviles */
+    .data-grid-container {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    .data-grid-content {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    .grid-content {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    /* Eliminar TODOS los espacios blancos sobrantes en móviles */
+    .depositos-container {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    .depositos-content {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    .right-panel {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    .main-panel {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    /* Eliminar espacio del body y html en móviles */
+    body {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    html {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    /* Reglas adicionales para eliminar espacio blanco */
+    .container-fluid {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    .row {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    .col, .col-12, .col-md-6, .col-lg-4, .col-lg-8 {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    /* Forzar altura mínima del viewport y eliminar espacio blanco */
+    .depositos-container {
+        min-height: 100vh !important;
+        height: 100vh !important;
+        max-height: 100vh !important;
+        overflow: hidden !important;
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+    }
+    
+    /* Eliminar cualquier espacio sobrante */
+    .depositos-content {
+        height: calc(100vh - 80px) !important;
+        max-height: calc(100vh - 80px) !important;
+        overflow: hidden !important;
+        flex: 1 !important;
+    }
+    
+    .main-panel {
+        height: 100% !important;
+        max-height: 100% !important;
+        overflow: hidden !important;
+        flex: 1 !important;
+    }
+    
+    .right-panel {
+        height: 100% !important;
+        max-height: 100% !important;
+        overflow: hidden !important;
+        flex: 1 !important;
+    }
+    
+    .data-grid-container {
+        height: 100% !important;
+        max-height: 100% !important;
+        overflow: hidden !important;
+    }
+    
+    .data-grid-content {
+        height: calc(100% - 60px) !important;
+        max-height: calc(100% - 60px) !important;
+        overflow-y: auto !important;
     }
     
     .data-grid-section {
@@ -2984,14 +3171,215 @@
         min-height: 300px !important;
     }
     
-    .pagination-controls {
-        flex-direction: column !important;
-        gap: 0.5rem !important;
-        text-align: center !important;
+    /* Ocultar texto de registros de paginación en móviles */
+    .pagination-controls text {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        height: 0 !important;
+        width: 0 !important;
+        overflow: hidden !important;
     }
     
-    .pagination-buttons {
+    /* Ocultar texto "Ver todos" en móviles, mantener solo el ícono */
+    .pagination-controls .btn-outline-primary {
+        padding: 0.25rem !important;
+        min-width: auto !important;
+        font-size: 0 !important;
+    }
+    
+    .pagination-controls .btn-outline-primary i {
+        font-size: 0.875rem !important;
+    }
+    
+    .pagination-controls {
+        flex-direction: row !important;
+        gap: 0.5rem !important;
+        text-align: center !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+    }
+    
+    /* Primer div con botones de inventario y ver todos */
+    .pagination-controls > div:first-child {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 0.5rem !important;
+        justify-content: flex-start !important;
+    }
+    
+    /* Segundo div con botones de paginación */
+    .pagination-controls > div:last-child {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 0.5rem !important;
+        justify-content: flex-end !important;
+    }
+    
+    .pagination-controls .pagination-buttons {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 0.5rem !important;
         justify-content: center !important;
+    }
+    
+    /* Ocultar texto "Configurar columnas" en móviles, mantener solo el ícono */
+    .data-grid-header .btn-outline-primary .btn-text {
+        display: none !important;
+    }
+    
+    .data-grid-header .btn-outline-primary {
+        padding: 0.25rem !important;
+        min-width: auto !important;
+    }
+    
+    .data-grid-header .btn-outline-primary i {
+        font-size: 0.875rem !important;
+    }
+    
+    /* Ocultar texto "ENVIAR INVENTARIO" en móviles, mantener solo el ícono */
+    .data-grid-header .btn-success .btn-text {
+        display: none !important;
+    }
+    
+    .data-grid-header .btn-success {
+        padding: 0.25rem !important;
+        min-width: auto !important;
+    }
+    
+    .data-grid-header .btn-success i {
+        font-size: 0.875rem !important;
+    }
+    
+    /* Ocultar elementos en modal de inventario en móviles */
+    @media (max-width: 768px) {
+        /* Ocultar texto descriptivo */
+        .inventory-description,
+        .inventory-content p.text-muted {
+            display: none !important;
+        }
+        
+        /* Ocultar botones específicos en footer de modal */
+        .modal-footer button.clear-button,
+        .modal-footer button.close-button,
+        button.clear-button,
+        button.close-button {
+            display: none !important;
+        }
+    }
+    
+    /* Eliminar espacio blanco debajo del grid en móviles */
+    .data-grid-container {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    .data-grid-content {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    .grid-content {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    /* Eliminar TODOS los espacios blancos sobrantes en móviles */
+    .depositos-container {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    .depositos-content {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    .right-panel {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    .main-panel {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    /* Eliminar espacio del body y html en móviles */
+    body {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    html {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    /* Reglas adicionales para eliminar espacio blanco */
+    .container-fluid {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    .row {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    .col, .col-12, .col-md-6, .col-lg-4, .col-lg-8 {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    
+    /* Forzar altura mínima del viewport y eliminar espacio blanco */
+    .depositos-container {
+        min-height: 100vh !important;
+        height: 100vh !important;
+        max-height: 100vh !important;
+        overflow: hidden !important;
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+    }
+    
+    /* Eliminar cualquier espacio sobrante */
+    .depositos-content {
+        height: calc(100vh - 80px) !important;
+        max-height: calc(100vh - 80px) !important;
+        overflow: hidden !important;
+        flex: 1 !important;
+    }
+    
+    .main-panel {
+        height: 100% !important;
+        max-height: 100% !important;
+        overflow: hidden !important;
+        flex: 1 !important;
+    }
+    
+    .right-panel {
+        height: 100% !important;
+        max-height: 100% !important;
+        overflow: hidden !important;
+        flex: 1 !important;
+    }
+    
+    .data-grid-container {
+        height: 100% !important;
+        max-height: 100% !important;
+        overflow: hidden !important;
+    }
+    
+    .data-grid-content {
+        height: calc(100% - 60px) !important;
+        max-height: calc(100% - 60px) !important;
+        overflow-y: auto !important;
     }
     
 }
@@ -3178,5 +3566,110 @@
         width: 100vw !important;
         max-width: 100vw !important;
         min-width: 100vw !important;
+    }
+}
+
+/* REGLAS ESPECÍFICAS PARA OCULTAR ELEMENTOS EN MÓVILES - MÁXIMA PRIORIDAD */
+@media (max-width: 768px) {
+    /* Ocultar texto descriptivo del modal de inventario */
+    .inventory-description,
+    .inventory-content p.text-muted,
+    p.inventory-description,
+    .modal-body p.text-muted,
+    .inventory-content p {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        height: 0 !important;
+        width: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    /* Ocultar botones Limpiar Lista y Cerrar - REGLAS ULTRA ESPECÍFICAS */
+    .modal-footer button.clear-button,
+    .modal-footer button.close-button,
+    button.clear-button,
+    button.close-button,
+    .btn.clear-button,
+    .btn.close-button,
+    .modal-footer .btn-outline-secondary:first-child,
+    .modal-footer .btn-outline-secondary:last-child,
+    .modal-footer .btn-outline-secondary[class*="clear"],
+    .modal-footer .btn-outline-secondary[class*="close"],
+    .modal-footer .btn[class*="clear"],
+    .modal-footer .btn[class*="close"],
+    .modal-footer button[class*="clear"],
+    .modal-footer button[class*="close"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        height: 0 !important;
+        width: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        position: absolute !important;
+        left: -9999px !important;
+        top: -9999px !important;
+    }
+    
+    /* Ocultar TODOS los botones grises en el footer del modal de inventario */
+    .modal-footer .btn-outline-secondary {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        height: 0 !important;
+        width: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        position: absolute !important;
+        left: -9999px !important;
+        top: -9999px !important;
+    }
+}
+
+/* REGLA ULTRA ESPECÍFICA - MÁXIMA PRIORIDAD ABSOLUTA */
+@media (max-width: 768px) {
+    /* Forzar ocultar botones con máxima especificidad */
+    div[class*="modal-footer"] button[class*="clear-button"],
+    div[class*="modal-footer"] button[class*="close-button"],
+    div[class*="modal-footer"] .btn[class*="clear"],
+    div[class*="modal-footer"] .btn[class*="close"],
+    div[class*="modal-footer"] .btn-outline-secondary:first-child,
+    div[class*="modal-footer"] .btn-outline-secondary:last-child,
+    .modal-footer button:first-child,
+    .modal-footer button:last-child {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        height: 0 !important;
+        width: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        position: absolute !important;
+        left: -9999px !important;
+        top: -9999px !important;
+        font-size: 0 !important;
+        line-height: 0 !important;
+    }
+    
+    /* Ocultar texto descriptivo con máxima especificidad */
+    .inventory-content p,
+    .modal-body p.text-muted,
+    p[class*="inventory-description"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        height: 0 !important;
+        width: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        font-size: 0 !important;
+        line-height: 0 !important;
     }
 }
