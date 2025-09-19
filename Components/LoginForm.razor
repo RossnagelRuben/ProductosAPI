@@ -121,8 +121,8 @@
             
             debugInfo += $"📤 PETICIÓN ENVIADA:\n";
             debugInfo += $"URL: https://drrsystemas4.azurewebsites.net/Auth/GetTokenDeveloper\n";
-            debugInfo += $"JSON: {{\"user\":\"{loginModel.User}\",\"pwd\":\"{loginModel.Pwd}\",\"usePublicLogin\":false}}\n";
-            debugInfo += $"Header: Authorization = Bearer 4a7183cf-9515-4d87-a9f1-a9e1f952cc7c\n";
+            debugInfo += $"JSON: {{\"user\":\"DRRSysRuben\",\"pwd\":\"alma.1234\",\"usePublicLogin\":false}}\n"; /* Token developer ruben */
+            debugInfo += $"Header: Authorization = Bearer 4a7183cf-9515-4d87-a9f1-a9e1f952cc7c\n"; /* empresa demisiones */
             debugInfo += $"Content-Type: application/json\n\n";
 
             var response = await AuthService.LoginAsync(loginModel.User, loginModel.Pwd);

@@ -61,6 +61,7 @@
                     StateHasChanged();
                 }
                 await JS.InvokeVoidAsync("registerSidebarAutoCollapse", DotNetObjectReference.Create(this));
+                await JS.InvokeVoidAsync("registerAuthChangeListener", DotNetObjectReference.Create(this));
             }
             catch { }
             _initialized = true;
@@ -72,7 +73,11 @@
     {
         try
         {
-            isAuthenticated = await AuthService.IsLoggedInAsync();
+            // Verificar tanto el token básico como el token final
+            var basicAuth = await AuthService.IsLoggedInAsync();
+            var finalToken = await AuthService.GetTokenFINALAsync();
+            
+            isAuthenticated = basicAuth || !string.IsNullOrEmpty(finalToken);
         }
         catch
         {
@@ -90,6 +95,13 @@
     public void SetSidebarCollapsedFromJs(bool collapsed)
     {
         _sidebarCollapsed = collapsed;
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public async Task OnAuthChanged()
+    {
+        await CheckAuthentication();
         StateHasChanged();
     }
 }
@@ -115,5 +127,26 @@
         }
         window.addEventListener('resize', apply);
         apply();
+    }
+    window.registerAuthChangeListener = function(dotnetHelper){
+        // Escuchar cambios en localStorage
+        window.addEventListener('storage', function(e) {
+            if (e.key === 'auth_token_final' || e.key === 'auth_token') {
+                try { 
+                    if (dotnetHelper) dotnetHelper.invokeMethodAsync('OnAuthChanged'); 
+                } catch {}
+            }
+        });
+        
+        // También escuchar cambios en el mismo tab (storage event no se dispara en el mismo tab)
+        const originalSetItem = localStorage.setItem;
+        localStorage.setItem = function(key, value) {
+            originalSetItem.apply(this, arguments);
+            if (key === 'auth_token_final' || key === 'auth_token') {
+                try { 
+                    if (dotnetHelper) dotnetHelper.invokeMethodAsync('OnAuthChanged'); 
+                } catch {}
+            }
+        };
     }
 </script>

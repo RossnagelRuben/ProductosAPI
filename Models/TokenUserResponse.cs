@@ -28,7 +28,7 @@ namespace BlazorApp_ProductosAPI.Models
     {
         public string? RazonSocial { get; set; }
         public int EntidadSucID { get; set; }
-        public int NroIdentificacion { get; set; }
+        public long NroIdentificacion { get; set; }
         public Empleado? Empleado { get; set; }
         public object? Cliente { get; set; }
         public object? Proveedor { get; set; }

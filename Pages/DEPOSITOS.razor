@@ -58,6 +58,7 @@ input[class*="fast-number"] {
     -webkit-mask: none !important;
 }
 </style>
+
 @inject IJSRuntime JSRuntime
 @inject ProductoService ProductoService
 @inject IAuthService AuthService
@@ -1493,43 +1494,47 @@ input[class*="fast-number"] {
 <AuthorizeView>
 <div class="depositos-container">
     <!-- Header -->
-    <div class="depositos-header" style="background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important; border-radius: 0 !important; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1) !important; margin: 0 !important; padding: 1rem !important; display: flex !important; align-items: center !important; justify-content: space-between !important; flex-wrap: wrap !important; gap: 1rem !important; position: sticky; top: 0; z-index: 1001;">
-        <!-- Título -->
-        <h2 class="page-title" style="margin: 0 !important; display: flex !important; align-items: center !important; gap: 0.5rem !important;">
-            <span class="title-text">Stock por ubicación:</span>
+        <div class="depositos-header"
+             style="background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+            border-radius: 0;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            margin: 0;
+            padding: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1rem;
+            position: sticky;
+            top: 0;
+            z-index: 1001;">
+
+            <!-- Título -->
+            <h2 class="page-title" style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                <span class="title-text">Stock por ubicación:</span>
             </h2>
-        
-        <!-- Controles del lado derecho -->
-        <div class="header-right">
-            
-            @* <!-- Botón Cargar -->
-            <button @onclick="LoadUbicaciones" 
-                    disabled="@isLoading"
-                    class="load-btn">
-                @if (isLoading)
-                {
-                    <span class="spinner-border spinner-border-sm me-2"></span>
-                }
-                <i class="oi oi-reload"></i>
-                <span class="btn-text">Cargar ubicaciones</span>
-            </button>
-            
-            <!-- Botón Ocultar Ubicaciones -->
-            <button @onclick="ToggleLeftPanel" 
-                    class="panel-toggle" 
-                    style="background: #28a745 !important;">
-                <i class="oi @(leftPanelHidden ? "oi-eye" : "oi-eye")"></i>
-                <span class="toggle-text">@(leftPanelHidden ? "Mostrar" : "Ocultar") Ubicaciones</span>
-            </button>
-            
-            <!-- Botón Ocultar Productos -->
-            <button @onclick="ToggleRightPanel" 
-                    class="panel-toggle">
-                <i class="oi @(rightPanelHidden ? "oi-eye" : "oi-eye")"></i>
-                <span class="toggle-text">@(rightPanelHidden ? "Mostrar" : "Ocultar") Productos</span>
-            </button> *@
+
+            <!-- Contenedor para input + botón -->
+            <div style="display: flex; align-items: center; width: 100%; gap: 0.5rem;">
+                <!-- Textbox de código de barras -->
+                <input id="barcodeInput"
+                       class="form-control"
+                       style="flex: 1; height: 38px;"
+                       placeholder="Escanear código de barras..."
+                       @bind="barcodeInput"
+                       @bind:event="oninput"
+                       @onkeypress="OnBarcodeKeyPress" />
+
+                <!-- Botón QR -->
+                <button class="btn btn-outline-success"
+                        @onclick="AbrirQRScanner"
+                        title="Escanear QR de ubicación"
+                        style="width: 48px; height: 38px; display: flex; align-items: center; justify-content: center; padding: 0;">
+                    <i class="oi oi-camera-slr"></i>
+                </button>
+            </div>
         </div>
-    </div>
+
 
         <!-- Main Content -->
         <div class="depositos-content">
@@ -1537,38 +1542,15 @@ input[class*="fast-number"] {
             <div class="main-panel">
                 <!-- Left Panel - Tree -->
                 <div class="left-panel @(leftPanelHidden ? "panel-hidden" : "")">
-            <div class="panel-header">
-                <div class="search-section">
-                    <label for="search-input">Buscar ubicación:</label>
-                    <div class="search-input-group" style="display:flex; gap: .5rem; align-items:center;">
-                        <input type="text" 
-                               id="search-input"
-                               @bind="searchTerm" 
-                               @oninput="OnSearchInput"
-                               placeholder="Filtrar por descripción..."
-                               class="form-control search-input"
-                               style="border-radius: 10px !important; border: 2px solid #e9ecef !important; padding: 0.75rem 1rem !important; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important; transition: all 0.3s ease !important;" />
-                        <button class="btn btn-outline-primary" @onclick="OnAddUbicacionClick" title="Agregar">
-                            +
-                        </button>
-                    </div>
-                </div>
-            </div>
+
             
             <div class="tree-panel">
                 <div class="tree-container">
-                    <div class="tree-header">
+@*                     <div class="tree-header">
                         <div class="tree-controls">
-                            <button @onclick="ExpandAll" class="btn btn-sm btn-outline-primary" disabled="@isLoading" style="border-radius: 10px !important; padding: 1rem !important; font-weight: 600 !important; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important; transition: all 0.3s ease !important;">
-                                <i class="oi oi-expand-down"></i> Expandir Todo
-                            </button>
-                            <!-- Botón central "+" eliminado a pedido del usuario -->
-                            <button @onclick="CollapseAll" class="btn btn-sm btn-outline-secondary" disabled="@isLoading" style="border-radius: 10px !important; padding: 1rem !important; font-weight: 600 !important; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important; transition: all 0.3s ease !important;">
-                                <i class="oi oi-collapse-up"></i> Colapsar Todo
-                            </button>
                             <span class="node-count">Nodos: @VisibleNodeCount</span>
                         </div>
-                    </div>
+                    </div> *@
                     
                     <div class="tree-content">
                         @if (isLoading)
@@ -1604,12 +1586,12 @@ input[class*="fast-number"] {
                         <!-- Contenedor unificado de productos con alineación vertical -->
                         <div class="products-container">
                             <!-- Botón Volver - Solo visible en móviles -->
-                            <div class="d-block d-md-none mb-3">
+@*                             <div class="d-block d-md-none mb-3">
                                 <button @onclick="VolverAUbicaciones" 
                                         class="btn btn-outline-secondary btn-sm">
                                     <i class="oi oi-arrow-left"></i> Volver a ubicaciones
                                 </button>
-                            </div>
+                            </div> *@
                             
                             <!-- Ubicación seleccionada -->
                             <div class="selected-location @(ubicacionCollapsed ? "collapsed" : "")">
@@ -1663,42 +1645,13 @@ input[class*="fast-number"] {
                             </div>
                             
                             <!-- Botones de control -->
-                            <div class="control-buttons">
-@*                     <button class="btn btn-sm btn-info" @onclick="ToggleLocationsPanel">
-                        <i class="oi oi-location"></i> @(leftPanelHidden ? "Mostrar ubicaciones" : "Ocultar ubicaciones")
-                    </button>
-                    <button class="btn btn-sm btn-warning" @onclick="ToggleProductsPanel">
-                        <i class="oi oi-table"></i> @(rightPanelHidden ? "Mostrar productos" : "Ocultar productos")
-                    </button> *@
-                    <button id="inventarioButton" class="btn btn-sm btn-success" disabled="@isTogglingInventory" @onclick="ToggleInventario">
-                        @if (isTogglingInventory)
-                        {
-                            <span class="spinner-border spinner-border-sm me-1"></span>
-                        }
-                        <i class="oi oi-check"></i> @(inventarioEditable ? "Finalizar inventario" : "Realizar inventario")
-                    </button>
-                    <button id="filtersToggleButton" @onclick="ToggleFilters" class="btn btn-sm btn-outline-secondary">
+                            
+
+@*                     <button id="filtersToggleButton" @onclick="ToggleFilters" class="btn btn-sm btn-outline-secondary">
                         <i class="oi @(filtersExpanded ? "oi-chevron-up" : "oi-chevron-down")"></i>
                         @(filtersExpanded ? "Contraer filtros" : "Expandir filtros")
-                    </button>
-                    <div class="ms-auto" style="display:flex;align-items:center;gap:.5rem;width:100%;max-width:400px;">
-                        <!-- Textbox de código de barras - 90% del ancho -->
-                        <input id="barcodeInput" 
-                               class="form-control" 
-                               style="width: 90%; height: 38px;" 
-                               placeholder="Escanear código de barras..." 
-                               @bind="barcodeInput" 
-                               @bind:event="oninput" 
-                               @onkeypress="OnBarcodeKeyPress" />
-                        
-                        <!-- Botón QR para escanear ubicaciones - 10% del ancho -->
-                        <button class="btn btn-outline-success" 
-                                @onclick="AbrirQRScanner" 
-                                title="Escanear QR de ubicación" 
-                                style="width: 10%; height: 38px; display: flex; align-items: center; justify-content: center; min-width: 40px; padding: 0;">
-                            <i class="oi oi-camera-slr"></i>
-                        </button>
-                    </div>
+                    </button> *@
+
                     
                     <!-- Indicador de filtro activo con controles -->
                     @if (!string.IsNullOrWhiteSpace(filtroRubro))
@@ -1724,10 +1677,7 @@ input[class*="fast-number"] {
                         </div>
                     }
                     
-                    <div class="ms-auto">
-                        <span class="badge bg-primary">Registros: @selectedProductsCount</span>
-                    </div>
-                            </div>
+                            
 
                             <!-- Filtros internos -->
                             @if (filtersExpanded)
@@ -1786,6 +1736,13 @@ input[class*="fast-number"] {
                             {
                                 <div class="pagination-controls" style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; background: #f8f9fa; border-bottom: 1px solid #dee2e6;">
                                     <div>
+                                                    <button id="inventarioButton" class="btn btn-sm btn-success" disabled="@isTogglingInventory" @onclick="ToggleInventario">
+                                                        @if (isTogglingInventory)
+                                                        {
+                                                            <span class="spinner-border spinner-border-sm me-1"></span>
+                                                        }
+                                                        <i class="oi oi-check"></i> @(inventarioEditable ? "Finalizar inventario" : "Realizar inventario")
+                                                    </button>
                                         <button class="btn btn-sm btn-outline-primary" @onclick="ToggleVirtualization">
                                             <i class="oi @(_useVirtualization ? "oi-eye" : "oi-eye")"></i>
                                             @(_useVirtualization ? "Ver todos" : "Paginación")
@@ -1835,7 +1792,7 @@ input[class*="fast-number"] {
                             <span class="record-count">Registros: @selectedProductsCount</span>
                         </div>
                             </div>
-                        }
+                        
                     </div>
                 </div>
                 }
@@ -1959,45 +1916,11 @@ input[class*="fast-number"] {
                 <video id="qr-video" style="width: 100%; height: 300px; border: 2px solid #dee2e6; border-radius: 8px; background: #f8f9fa;"></video>
             </div>
             
-            <!-- Resultado del QR detectado -->
-            <div id="qr-result" class="mt-3" style="display: none;">
-                <div class="alert alert-success">
-                    <i class="oi oi-check"></i> <strong>QR detectado:</strong> <span id="qr-detected-text"></span>
-                </div>
-            </div>
-            
-            <!-- Error del QR -->
-            <div id="qr-error" class="mt-3" style="display: none;">
-                <div class="alert alert-danger">
-                    <i class="oi oi-warning"></i> <span id="qr-error-text"></span>
-                </div>
-            </div>
-            
-            <!-- Input manual como fallback -->
+            <!-- Botón para solicitar permisos manualmente -->
             <div class="mt-3">
-                <p class="text-muted mb-2">O ingresa manualmente el ID:</p>
-                <input type="number" 
-                       class="form-control" 
-                       @bind="qrDetectedValue" 
-                       @bind:event="oninput"
-                       placeholder="ProductoUbicacionID" 
-                       style="max-width: 300px; margin: 0 auto;" />
-            </div>
-            
-            <!-- Botones de control -->
-            <div class="mt-3">
-                <button class="btn btn-outline-info btn-sm me-2" @onclick="SimularQR">
-                    <i class="oi oi-wrench"></i> Simular QR
+                <button class="btn btn-primary" @onclick="SolicitarPermisosManualmente">
+                    <i class="oi oi-camera-slr"></i> Activar Cámara
                 </button>
-                <button class="btn btn-outline-warning btn-sm" @onclick="ToggleCamera">
-                    <i class="oi oi-camera-slr"></i> <span id="camera-toggle-text">Activar Cámara</span>
-                </button>
-            </div>
-            
-            <div class="mt-2">
-                <small class="text-muted">
-                    El QR debe contener un JSON con ProductoUbicacionID o un número entero. La modal se cerrará automáticamente al detectar un QR válido.
-                </small>
             </div>
         </div>
     </ChildContent>
@@ -2005,6 +1928,7 @@ input[class*="fast-number"] {
 </AppModal>
 
 @code {
+
     private string token = string.Empty;
     private string searchTerm = string.Empty;
     private bool isLoading = false;
@@ -2095,7 +2019,6 @@ input[class*="fast-number"] {
         var previous = barcodeInput;
         barcodeInput = "No encontrado";
         await InvokeAsync(StateHasChanged);
-        try { await Task.Delay(1000); } catch { }
         barcodeInput = string.Empty;
         await InvokeAsync(StateHasChanged);
         try { await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput"); } catch { }
@@ -2161,9 +2084,47 @@ input[class*="fast-number"] {
         {
             try
             {
+                Console.WriteLine("🚀 OnAfterRenderAsync - Iniciando carga inicial...");
+                
                 // Comentado temporalmente para evitar errores
                 // await JSRuntime.InvokeVoidAsync("forceMobileStyles");
-                await LoadTokenFromStorage();
+                var tokenLoaded = await LoadTokenFromStorage();
+                
+                // Cargar ubicaciones y expandir automáticamente si el token se cargó correctamente
+                if (tokenLoaded)
+                {
+                    Console.WriteLine("📍 Cargando ubicaciones...");
+                    await LoadUbicaciones();
+                    
+                    // Expandir todos los nodos después de cargar las ubicaciones
+                    if (rootNodes != null && rootNodes.Any())
+                    {
+                        Console.WriteLine($"✅ Ubicaciones cargadas: {rootNodes.Count} nodos raíz");
+                        SetExpandedState(rootNodes, true);
+                        await InvokeAsync(StateHasChanged);
+                    }
+                    else
+                    {
+                        Console.WriteLine("❌ No se cargaron ubicaciones o rootNodes está vacío");
+                    }
+                    
+                    // El menú debería aparecer automáticamente con el token cargado
+                }
+                else
+                {
+                    Console.WriteLine("❌ Token no cargado, no se cargarán ubicaciones");
+                }
+                
+                // Registrar el componente Blazor para las llamadas JavaScript (después de cargar ubicaciones)
+                try
+                {
+                    await JSRuntime.InvokeVoidAsync("registerBlazorComponent", DotNetObjectReference.Create(this));
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error registrando componente Blazor: {ex.Message}");
+                }
+                
                 // Aplicar el estado inicial de ambos paneles
                 // await JSRuntime.InvokeVoidAsync("toggleProductsPanel", rightPanelHidden);
                 
@@ -2210,23 +2171,30 @@ input[class*="fast-number"] {
         }
     }
 
-    private async Task LoadTokenFromStorage()
+    private async Task<bool> LoadTokenFromStorage()
     {
         try
         {
+            Console.WriteLine("🔑 Cargando token desde storage...");
             // Usar el TOKEN FINAL del AuthService
             var tokenFinal = await AuthService.GetTokenFINALAsync();
             if (!string.IsNullOrEmpty(tokenFinal))
             {
                 token = tokenFinal;
+                Console.WriteLine("✅ Token cargado correctamente");
                 StateHasChanged();
+                return true;
             }
+            Console.WriteLine("❌ No se encontró token en storage");
+            return false;
         }
         catch (Exception ex)
         {
-            // Error loading token
+            Console.WriteLine($"❌ Error cargando token: {ex.Message}");
+            return false;
         }
     }
+
 
 
     private async Task LoadUbicaciones()
@@ -3430,9 +3398,13 @@ input[class*="fast-number"] {
             isCameraActive = false;
             StateHasChanged();
             
-            // Iniciar la cámara después de que se renderice el modal
-            await Task.Delay(100);
+            // Esperar a que se renderice el modal
+            await Task.Delay(200);
+            
+            // Solo inicializar, no activar la cámara automáticamente
             await JSRuntime.InvokeVoidAsync("initQRScanner");
+            
+            Console.WriteLine("✅ Modal QR abierto. El usuario debe hacer clic en 'Activar Cámara'");
         }
         catch (Exception ex)
         {
@@ -3505,6 +3477,62 @@ input[class*="fast-number"] {
         catch (Exception ex)
         {
             Console.WriteLine($"Error toggling camera: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Solicita permisos de cámara explícitamente
+    /// </summary>
+    private async Task SolicitarPermisosCamara()
+    {
+        try
+        {
+            Console.WriteLine("Solicitando permisos de cámara...");
+            var success = await JSRuntime.InvokeAsync<bool>("requestCameraPermissions");
+            
+            if (success)
+            {
+                Console.WriteLine("Permisos de cámara concedidos");
+                await JSRuntime.InvokeVoidAsync("showQRResult", "Permisos concedidos. Ahora puedes activar la cámara.");
+                await JSRuntime.InvokeVoidAsync("hidePermissionRequest");
+            }
+            else
+            {
+                Console.WriteLine("Permisos de cámara denegados");
+                await JSRuntime.InvokeVoidAsync("showQRError", 
+                    "Permisos denegados. Por favor, permite el acceso a la cámara en la configuración del navegador.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error solicitando permisos: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("showQRError", 
+                $"Error solicitando permisos: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Solicita permisos de cámara manualmente con método más agresivo
+    /// </summary>
+    private async Task SolicitarPermisosManualmente()
+    {
+        try
+        {
+            Console.WriteLine("🎯 Solicitando permisos de cámara manualmente...");
+            
+            // Resetear permisos primero
+            await JSRuntime.InvokeVoidAsync("resetCameraPermissions");
+            
+            // Esperar un momento
+            await Task.Delay(500);
+            
+            // Intentar activar la cámara con método más directo
+            await JSRuntime.InvokeVoidAsync("forceCameraActivation");
+            
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error solicitando permisos manualmente: {ex.Message}");
         }
     }
     
@@ -4619,54 +4647,235 @@ input[class*="fast-number"] {
     let qrCodeReader = null;
     let isQRScannerActive = false;
 
+    // Verificar permisos de cámara
+    window.checkCameraPermissions = async function() {
+        try {
+            if (!navigator.permissions) {
+                console.log('API de permisos no disponible');
+                return 'unknown';
+            }
+            
+            const permission = await navigator.permissions.query({ name: 'camera' });
+            console.log('Estado de permisos de cámara:', permission.state);
+            return permission.state;
+        } catch (error) {
+            console.log('Error verificando permisos:', error);
+            return 'unknown';
+        }
+    };
+
+    // Solicitar permisos de cámara explícitamente
+    window.requestCameraPermissions = async function() {
+        try {
+            // Intentar una solicitud simple para activar el prompt de permisos
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            stream.getTracks().forEach(track => track.stop());
+            return true;
+        } catch (error) {
+            console.log('Error solicitando permisos:', error);
+            return false;
+        }
+    };
+
+    // Registrar el componente Blazor
+    window.registerBlazorComponent = function(component) {
+        window.blazorComponent = component;
+        console.log('✅ Componente Blazor registrado para OnQRDetected');
+    };
+
+    // Limpiar permisos de cámara y forzar nueva solicitud
+    window.resetCameraPermissions = async function() {
+        try {
+            console.log('🔄 Reseteando permisos de cámara...');
+            
+            // Detener cualquier stream activo
+            if (qrStream) {
+                qrStream.getTracks().forEach(track => track.stop());
+                qrStream = null;
+            }
+            
+            // Limpiar el video
+            const video = document.getElementById('qr-video');
+            if (video) {
+                video.srcObject = null;
+            }
+            
+            // Esperar un momento antes de solicitar permisos nuevamente
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            console.log('✅ Permisos reseteados, listo para nueva solicitud');
+        } catch (error) {
+            console.error('❌ Error reseteando permisos:', error);
+        }
+    };
+
     // Inicializar el QR Scanner
     window.initQRScanner = function() {
         console.log('Inicializando QR Scanner...');
-        // No hacer nada automáticamente, esperar a que el usuario active la cámara
+        // Preparar el escáner para activación automática
+        isQRScannerActive = false;
+        
+        // Verificar que el componente Blazor esté disponible
+        if (typeof window.blazorComponent === 'undefined') {
+            console.warn('⚠️ blazorComponent no está disponible, las llamadas a OnQRDetected fallarán');
+        } else {
+            console.log('✅ blazorComponent disponible para OnQRDetected');
+        }
     };
 
-    // Iniciar el escáner QR con cámara
-    window.startQRScanner = async function() {
+    // Forzar activación de cámara con método más agresivo
+    window.forceCameraActivation = async function() {
         try {
+            console.log('🔥 FORZANDO activación de cámara...');
+            
             const video = document.getElementById('qr-video');
             if (!video) {
-                console.error('Elemento de video no encontrado');
+                console.error('❌ Elemento de video no encontrado');
                 return;
             }
 
-            // Obtener acceso a la cámara
-            qrStream = await navigator.mediaDevices.getUserMedia({ 
-                video: { 
-                    facingMode: 'environment' // Usar cámara trasera en móviles
-                } 
-            });
+            // Verificar soporte básico
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                console.error('❌ Navegador no soporta acceso a la cámara');
+                alert('Tu navegador no soporta acceso a la cámara. Usa Chrome, Firefox o Safari.');
+                return;
+            }
+
+            console.log('📷 SOLICITANDO acceso a la cámara (método forzado)...');
+
+            // Configuraciones múltiples para forzar la solicitud
+            const configs = [
+                { video: true },
+                { video: { facingMode: 'user' } },
+                { video: { facingMode: 'environment' } },
+                { video: { width: 640, height: 480 } },
+                { video: { width: 1280, height: 720 } }
+            ];
+
+            let success = false;
+            for (let i = 0; i < configs.length; i++) {
+                try {
+                    console.log(`🎯 Intentando configuración ${i + 1}/${configs.length}...`);
+                    qrStream = await navigator.mediaDevices.getUserMedia(configs[i]);
+                    console.log(`✅ Cámara activada con configuración ${i + 1}`);
+                    success = true;
+                    break;
+                } catch (configError) {
+                    console.log(`❌ Configuración ${i + 1} falló:`, configError.name);
+                    if (i === configs.length - 1) {
+                        throw configError;
+                    }
+                }
+            }
+
+            if (success && qrStream) {
+                video.srcObject = qrStream;
+                video.play();
+                
+                console.log('✅ Cámara activada correctamente');
+
+                // Usar QrScanner.js si está disponible
+                if (typeof QrScanner !== 'undefined') {
+                    console.log('🔍 Inicializando QrScanner.js...');
+                    qrCodeReader = new QrScanner(video, result => {
+                        console.log('✅ QR detectado:', result);
+                        if (window.blazorComponent) {
+                            window.blazorComponent.invokeMethodAsync('OnQRDetected', result);
+                        }
+                    });
+                    
+                    await qrCodeReader.start();
+                    isQRScannerActive = true;
+                    
+                } else {
+                    console.log('⚠️ QrScanner no disponible, usando detección manual...');
+                    isQRScannerActive = true;
+                    startCanvasQRDetection(video);
+                }
+            }
+
+        } catch (error) {
+            console.error('❌ Error forzando activación de cámara:', error);
+            
+            if (error.name === 'NotAllowedError') {
+                console.log('❌ PERMISOS DENEGADOS - El navegador no mostrará la notificación');
+                alert('Permisos de cámara denegados. Por favor:\n1. Haz clic en el ícono de cámara en la barra de direcciones\n2. O ve a Configuración del sitio → Permisos → Cámara → Permitir\n3. O recarga la página y permite cuando aparezca la notificación');
+            } else if (error.name === 'NotFoundError') {
+                console.log('❌ No se encontró cámara en el dispositivo');
+                alert('No se encontró ninguna cámara en este dispositivo.');
+            } else {
+                console.log(`❌ Error de cámara: ${error.message}`);
+                alert(`Error de cámara: ${error.message}`);
+            }
+        }
+    };
+
+    // Iniciar el escáner QR con cámara - VERSIÓN SIMPLIFICADA
+    window.startQRScanner = async function() {
+        try {
+            console.log('🚀 Iniciando escáner QR...');
+            
+            const video = document.getElementById('qr-video');
+            if (!video) {
+                console.error('❌ Elemento de video no encontrado');
+                return;
+            }
+
+            // Verificar soporte básico
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                console.error('❌ Navegador no soporta acceso a la cámara');
+                return;
+            }
+
+            console.log('📷 Solicitando acceso a la cámara...');
+
+            // Configuración simple de cámara
+            const constraints = {
+                video: {
+                    facingMode: 'environment',
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                }
+            };
+
+            // Intentar obtener acceso a la cámara
+            qrStream = await navigator.mediaDevices.getUserMedia(constraints);
             
             video.srcObject = qrStream;
             video.play();
+            
+            console.log('✅ Cámara activada correctamente');
 
-            // Inicializar el lector de códigos QR
+            // Usar QrScanner.js si está disponible
             if (typeof QrScanner !== 'undefined') {
+                console.log('🔍 Inicializando QrScanner.js...');
                 qrCodeReader = new QrScanner(video, result => {
-                    console.log('QR detectado:', result);
+                    console.log('✅ QR detectado:', result);
                     if (window.blazorComponent) {
                         window.blazorComponent.invokeMethodAsync('OnQRDetected', result);
                     }
                 });
-                qrCodeReader.start();
+                
+                await qrCodeReader.start();
                 isQRScannerActive = true;
                 
-                // Actualizar el texto del botón
-                updateCameraToggleText(true);
-                showQRResult('Cámara activa - Apunta hacia un código QR');
             } else {
-                // Fallback: usar QuaggaJS si QrScanner no está disponible
-                console.log('QrScanner no disponible, usando QuaggaJS...');
-                await initQuaggaJS(video);
+                console.log('⚠️ QrScanner no disponible, usando detección manual...');
+                isQRScannerActive = true;
+                startCanvasQRDetection(video);
             }
 
         } catch (error) {
-            console.error('Error iniciando cámara:', error);
-            showQRError('No se pudo acceder a la cámara. Verifica los permisos.');
+            console.error('❌ Error iniciando cámara:', error);
+            
+            if (error.name === 'NotAllowedError') {
+                console.log('❌ Permisos denegados - el usuario debe permitir acceso a la cámara');
+                // No mostrar error en la UI, solo en consola
+            } else if (error.name === 'NotFoundError') {
+                console.log('❌ No se encontró cámara en el dispositivo');
+            } else {
+                console.log(`❌ Error de cámara: ${error.message}`);
+            }
         }
     };
 
@@ -4689,6 +4898,16 @@ input[class*="fast-number"] {
                 video.srcObject = null;
             }
             
+            // Detener QuaggaJS si está activo
+            if (typeof Quagga !== 'undefined' && isQRScannerActive) {
+                Quagga.stop();
+            }
+            
+            // Limpiar intervalos de detección alternativos
+            const intervals = window.qrDetectionIntervals || [];
+            intervals.forEach(interval => clearInterval(interval));
+            window.qrDetectionIntervals = [];
+            
             isQRScannerActive = false;
             updateCameraToggleText(false);
             
@@ -4706,11 +4925,14 @@ input[class*="fast-number"] {
         if (resultDiv && textSpan) {
             textSpan.textContent = text;
             resultDiv.style.display = 'block';
+            resultDiv.className = 'alert alert-success mt-3';
         }
         
         if (errorDiv) {
             errorDiv.style.display = 'none';
         }
+        
+        console.log('QR Status:', text);
     };
 
     // Mostrar error del QR
@@ -4722,11 +4944,14 @@ input[class*="fast-number"] {
         if (errorDiv && errorSpan) {
             errorSpan.textContent = message;
             errorDiv.style.display = 'block';
+            errorDiv.className = 'alert alert-danger mt-3';
         }
         
         if (resultDiv) {
             resultDiv.style.display = 'none';
         }
+        
+        console.error('QR Error:', message);
     };
 
     // Habilitar el botón de búsqueda
@@ -4745,6 +4970,68 @@ input[class*="fast-number"] {
         }
     }
 
+    // Mostrar/ocultar botón de permisos
+    window.showPermissionRequest = function() {
+        const permissionDiv = document.getElementById('qr-permission-request');
+        if (permissionDiv) {
+            permissionDiv.style.display = 'block';
+        }
+    };
+
+    window.hidePermissionRequest = function() {
+        const permissionDiv = document.getElementById('qr-permission-request');
+        if (permissionDiv) {
+            permissionDiv.style.display = 'none';
+        }
+    };
+
+    // Función alternativa de detección QR usando canvas - SIMPLIFICADA
+    function startCanvasQRDetection(video) {
+        console.log('🔍 Iniciando detección QR con canvas...');
+        
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        let isDetecting = false;
+        
+        function detectQR() {
+            if (isDetecting || !isQRScannerActive || video.videoWidth === 0) return;
+            
+            isDetecting = true;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // Usar jsQR (más confiable)
+            if (typeof jsQR !== 'undefined') {
+                try {
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height);
+                    if (code) {
+                        console.log('✅ QR detectado con jsQR:', code.data);
+                        if (window.blazorComponent) {
+                            window.blazorComponent.invokeMethodAsync('OnQRDetected', code.data);
+                        }
+                    }
+                } catch (error) {
+                    console.log('Error con jsQR:', error.message);
+                }
+            }
+            
+            isDetecting = false;
+        }
+        
+        // Detectar QR cada 300ms (más frecuente)
+        const detectionInterval = setInterval(detectQR, 300);
+        
+        // Registrar el intervalo para limpieza posterior
+        if (!window.qrDetectionIntervals) {
+            window.qrDetectionIntervals = [];
+        }
+        window.qrDetectionIntervals.push(detectionInterval);
+        
+        showQRResult('Cámara activa - Apunta hacia un código QR');
+    }
+
     // Función de fallback con QuaggaJS
     async function initQuaggaJS(video) {
         try {
@@ -4760,6 +5047,7 @@ input[class*="fast-number"] {
                 });
             }
 
+            // Configuración mejorada para QuaggaJS con soporte para QR
             Quagga.init({
                 inputStream: {
                     name: "Live",
@@ -4772,7 +5060,32 @@ input[class*="fast-number"] {
                     }
                 },
                 decoder: {
-                    readers: ["code_128_reader", "ean_reader", "ean_8_reader", "code_39_reader", "code_39_vin_reader", "codabar_reader", "upc_reader", "upc_e_reader", "i2of5_reader"]
+                    readers: [
+                        "code_128_reader", 
+                        "ean_reader", 
+                        "ean_8_reader", 
+                        "code_39_reader", 
+                        "code_39_vin_reader", 
+                        "codabar_reader", 
+                        "upc_reader", 
+                        "upc_e_reader", 
+                        "i2of5_reader"
+                    ],
+                    debug: {
+                        showCanvas: false,
+                        showPatches: false,
+                        showFoundPatches: false,
+                        showSkeleton: false,
+                        showLabels: false,
+                        showPatchLabels: false,
+                        showBoundingBox: false,
+                        showBoundingBoxes: false
+                    }
+                },
+                locate: true,
+                locator: {
+                    patchSize: "medium",
+                    halfSample: true
                 }
             }, function(err) {
                 if (err) {
@@ -4784,7 +5097,7 @@ input[class*="fast-number"] {
                 Quagga.start();
                 isQRScannerActive = true;
                 updateCameraToggleText(true);
-                showQRResult('Cámara activa - Apunta hacia un código QR');
+                showQRResult('Cámara activa - Apunta hacia un código QR o código de barras');
             });
 
             Quagga.onDetected(function(data) {
