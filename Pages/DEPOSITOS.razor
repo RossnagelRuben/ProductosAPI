@@ -4743,13 +4743,13 @@ input[class*="fast-number"] {
 
             console.log('📷 SOLICITANDO acceso a la cámara (método forzado)...');
 
-            // Configuraciones múltiples para forzar la solicitud
+            // Configuraciones múltiples para forzar la solicitud (priorizando cámara trasera)
             const configs = [
-                { video: true },
-                { video: { facingMode: 'user' } },
                 { video: { facingMode: 'environment' } },
-                { video: { width: 640, height: 480 } },
-                { video: { width: 1280, height: 720 } }
+                { video: { facingMode: 'environment', width: 640, height: 480 } },
+                { video: { facingMode: 'environment', width: 1280, height: 720 } },
+                { video: true },
+                { video: { facingMode: 'user' } }
             ];
 
             let success = false;
