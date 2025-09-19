@@ -4261,21 +4261,28 @@ input[class*="fast-number"] {
             // Asegurar que el elemento esté visible
             modalStockInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
             
-            // Enfocar y seleccionar todo el texto
+            // PRIMERO: Solo hacer focus para abrir el teclado
             modalStockInput.focus();
-            modalStockInput.select();
+            
+            // SEGUNDO: Después de un breve delay, seleccionar el texto
+            setTimeout(() => {
+                modalStockInput.select();
+                console.log('✅ Teclado abierto y texto seleccionado en la modal de producto');
+            }, 100);
             
             // Verificar que el focus se aplicó correctamente
             if (document.activeElement === modalStockInput) {
-                console.log('✅ Focus y selección aplicados correctamente en la modal de producto');
+                console.log('✅ Focus aplicado correctamente, teclado debería abrirse');
                 return true;
             } else {
                 console.log('⚠️ Focus no se aplicó correctamente, reintentando...');
                 // Reintentar después de un breve delay
                 setTimeout(() => {
                     modalStockInput.focus();
-                    modalStockInput.select();
-                    console.log('🔄 Reintento de focus completado');
+                    setTimeout(() => {
+                        modalStockInput.select();
+                        console.log('🔄 Reintento de focus y selección completado');
+                    }, 100);
                 }, 150);
                 return false;
             }
