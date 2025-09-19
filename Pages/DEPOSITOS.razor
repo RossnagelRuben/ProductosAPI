@@ -1885,7 +1885,7 @@ input[class*="fast-number"] {
                 <div>@(productoModal.Producto?.CodigoBarra ?? "-")</div>
                 <div><strong>Stock actual:</strong></div>
                 <div>
-                    <input id="modalStockActual" class="form-control" type="number" step="0.01" @bind-value="productoModal.StockActual" @bind-value:event="oninput" />
+                    <input id="modalStockActual" class="form-control" type="number" step="0.01" @bind-value="productoModal.StockActual" @bind-value:event="oninput" inputmode="numeric" />
                 </div>
                 <div><strong>Mínimo:</strong></div>
                 <div>@(productoModal.StockMinimo?.ToString("0.##") ?? "-")</div>
@@ -4235,10 +4235,24 @@ input[class*="fast-number"] {
     window.selectTextInModal = function() {
         const modalStockInput = document.getElementById('modalStockActual');
         if (modalStockInput) {
+            // Asegurar que el elemento esté visible
+            modalStockInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
             // Enfocar y seleccionar todo el texto
             modalStockInput.focus();
             modalStockInput.select();
-            console.log('🎯 Texto seleccionado en la modal de producto');
+            
+            // Verificar que el focus se aplicó correctamente
+            if (document.activeElement === modalStockInput) {
+                console.log('✅ Focus y selección aplicados correctamente en la modal de producto');
+            } else {
+                console.log('⚠️ Focus no se aplicó correctamente, reintentando...');
+                // Reintentar después de un breve delay
+                setTimeout(() => {
+                    modalStockInput.focus();
+                    modalStockInput.select();
+                }, 100);
+            }
         } else {
             console.log('❌ No se encontró el input de stock en la modal');
         }
