@@ -2924,8 +2924,6 @@ input[class*="fast-number"] {
                 {
                     try { 
                         await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput"); 
-                        // Asegurar focus en móviles también
-                        await JSRuntime.InvokeVoidAsync("ensureBarcodeFocus");
                         Console.WriteLine("✅ Focus aplicado al textbox de código de barras después de cargar productos");
                     } catch (Exception ex) {
                         Console.WriteLine($"Error aplicando focus: {ex.Message}");
@@ -4551,7 +4549,22 @@ input[class*="fast-number"] {
                    parseInt(style.zIndex) > 1000;
         });
         
-        return hasVisibleModal || hasActiveModal;
+        // Verificación adicional: buscar elementos de modal que estén realmente visibles
+        const allModals = document.querySelectorAll('.app-modal, .modal, [class*="modal"]');
+        const hasVisibleModalElement = Array.from(allModals).some(modal => {
+            const rect = modal.getBoundingClientRect();
+            const style = window.getComputedStyle(modal);
+            return rect.width > 0 && 
+                   rect.height > 0 && 
+                   style.display !== 'none' && 
+                   style.visibility !== 'hidden' &&
+                   style.opacity !== '0';
+        });
+        
+        const result = hasVisibleModal || hasActiveModal || hasVisibleModalElement;
+        console.log('🔍 hasOpenModal - hasVisibleModal:', hasVisibleModal, 'hasActiveModal:', hasActiveModal, 'hasVisibleModalElement:', hasVisibleModalElement, 'result:', result);
+        
+        return result;
     };
 
     // Función para asegurar focus en el textbox de código de barras
@@ -4962,9 +4975,13 @@ input[class*="fast-number"] {
             setTimeout(() => {
                 window.forceMobileVisibility();
             }, 100);
-            // Hacer focus al textbox cuando se redimensiona a pantalla pequeña
+            // Hacer focus al textbox cuando se redimensiona a pantalla pequeña (solo si no hay modales abiertas)
             setTimeout(() => {
-                window.ensureBarcodeFocus();
+                if (!window.hasOpenModal()) {
+                    window.ensureBarcodeFocus();
+                } else {
+                    console.log('🚫 Modal abierta detectada durante redimensionamiento, no aplicando focus');
+                }
             }, 300);
         }
     });
