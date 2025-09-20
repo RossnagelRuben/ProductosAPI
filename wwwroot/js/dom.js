@@ -5,6 +5,97 @@ window.isMobileDevice = function() {
     return window.innerWidth <= 768;
 };
 
+// Función para actualizar el estado de móvil en Blazor
+window.updateMobileState = function(dotNetRef) {
+    const isMobile = window.innerWidth <= 768;
+    console.log(`📱 Actualizando estado móvil: ${isMobile} (ancho: ${window.innerWidth})`);
+    
+    // Guardar referencia de Blazor para uso posterior
+    window.blazorRef = dotNetRef;
+    
+    dotNetRef.invokeMethodAsync('SetMobileState', isMobile);
+};
+
+// Función para configurar el listener de resize
+window.setupResizeListener = function(dotNetRef) {
+    console.log('🔧 Configurando listener de resize...');
+    
+    // Guardar referencia de Blazor
+    window.blazorRef = dotNetRef;
+    
+    // Remover listener anterior si existe
+    if (window.resizeListener) {
+        window.removeEventListener('resize', window.resizeListener);
+    }
+    
+    // Crear nuevo listener
+    window.resizeListener = function() {
+        clearTimeout(window.resizeTimeout);
+        window.resizeTimeout = setTimeout(() => {
+            const currentWidth = window.innerWidth;
+            const isMobile = currentWidth <= 768;
+            const wasMobile = window.lastWidth <= 768;
+            
+            console.log(`📱 Resize detectado - ancho: ${currentWidth}, es móvil: ${isMobile}, era móvil: ${wasMobile}`);
+            
+            // Actualizar estado móvil
+            if (window.blazorRef) {
+                window.updateMobileState(window.blazorRef);
+                
+                // Si cambió a móvil, forzar desactivación de virtualización
+                if (isMobile && !wasMobile) {
+                    console.log("📱 Cambio a móvil detectado - Forzando desactivación de virtualización");
+                    setTimeout(() => {
+                        if (window.blazorRef) {
+                            window.blazorRef.invokeMethodAsync('ForceDisableVirtualization');
+                            // Forzar recarga de productos si hay productos cargados
+                            setTimeout(() => {
+                                if (window.blazorRef) {
+                                    window.blazorRef.invokeMethodAsync('ForceReloadAllProducts');
+                                }
+                            }, 500);
+                        }
+                    }, 200);
+                }
+            }
+            
+            window.lastWidth = currentWidth;
+        }, 150);
+    };
+    
+    // Agregar listener
+    window.addEventListener('resize', window.resizeListener);
+    
+    // Inicializar ancho anterior
+    window.lastWidth = window.innerWidth;
+    
+    console.log('✅ Listener de resize configurado correctamente');
+};
+
+// Función para detectar el estado móvil inicial
+window.detectInitialMobileState = function(dotNetRef) {
+    console.log('🔍 Detectando estado móvil inicial...');
+    
+    const isMobile = window.innerWidth <= 768;
+    console.log(`📱 Estado móvil inicial: ${isMobile} (ancho: ${window.innerWidth})`);
+    
+    // Guardar referencia de Blazor
+    window.blazorRef = dotNetRef;
+    
+    // Actualizar estado inmediatamente
+    window.updateMobileState(dotNetRef);
+    
+    // Si es móvil desde el inicio, forzar desactivación de virtualización
+    if (isMobile) {
+        console.log("📱 Pantalla móvil detectada desde el inicio - Forzando desactivación de virtualización");
+        setTimeout(() => {
+            if (window.blazorRef) {
+                window.blazorRef.invokeMethodAsync('ForceDisableVirtualization');
+            }
+        }, 500);
+    }
+};
+
 // Función para enfocar elementos por ID
 window.blazorFocusById = function(id) {
     const element = document.getElementById(id);
@@ -18,6 +109,15 @@ window.ensureBarcodeFocus = function() {
     const barcodeInput = document.getElementById('barcodeInput');
     if (barcodeInput) {
         barcodeInput.focus();
+    }
+};
+
+// Función para seleccionar texto en la modal de stock (especialmente para móviles)
+window.selectTextInModal = function() {
+    const stockInput = document.getElementById('modalStockActual');
+    if (stockInput) {
+        stockInput.focus();
+        stockInput.select(); // Seleccionar todo el texto
     }
 };
 
@@ -116,5 +216,7 @@ window.addEventListener('resize', function() {
         adjustResponsiveLayout();
     }, 100);
 });
+
+// Listener de resize ya está configurado en setupResizeListener
 
 console.log('JavaScript simplificado cargado correctamente');

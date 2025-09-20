@@ -94,8 +94,8 @@ input[class*="fast-number"] {
         flex-direction: column;
         overflow: hidden;
         position: relative;
-        gap: 1rem;
-        padding: 1rem;
+        gap: 0; /* Eliminar gap completamente */
+        padding: 0; /* Eliminar padding completamente */
     }
 
     .main-panel {
@@ -1724,7 +1724,7 @@ input[class*="fast-number"] {
 
 
                     <!-- Grilla -->
-                    <div class="grid-content" style="overflow: visible;">
+                    <div class="grid-content" style="overflow-y: auto; overflow-x: hidden;">
                         @if (selectedProductsCount == 0 && !isLoading)
                         {
                             <div class="empty-grid">
@@ -1734,18 +1734,19 @@ input[class*="fast-number"] {
                         }
                         else
                         {
-                            <!-- Controles de paginación para grandes cantidades -->
+                            <!-- CONTROLES DE PAGINACIÓN COMPLETAMENTE ELIMINADOS EN MÓVILES -->
                             @if (selectedProductsCount > 100)
                             {
-                                <div class="pagination-controls" style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; background: #f8f9fa; border-bottom: 1px solid #dee2e6;">
+                                <!-- PAGINACIÓN SOLO EN PANTALLAS GRANDES - COMPLETAMENTE OCULTA EN MÓVILES -->
+                                <div class="d-none d-md-flex" style="justify-content: space-between; align-items: center; padding: 0.5rem; background: #f8f9fa; border-bottom: 1px solid #dee2e6;">
                                     <div>
-                                                    <button id="inventarioButton" class="btn btn-sm btn-success" disabled="@isTogglingInventory" @onclick="ToggleInventario">
-                                                        @if (isTogglingInventory)
-                                                        {
-                                                            <span class="spinner-border spinner-border-sm me-1"></span>
-                                                        }
-                                                        <i class="oi oi-check"></i> @(inventarioEditable ? "Finalizar inventario" : "Realizar inventario")
-                                                    </button>
+                                        <button id="inventarioButton" class="btn btn-sm btn-success" disabled="@isTogglingInventory" @onclick="ToggleInventario">
+                                            @if (isTogglingInventory)
+                                            {
+                                                <span class="spinner-border spinner-border-sm me-1"></span>
+                                            }
+                                            <i class="oi oi-check"></i> @(inventarioEditable ? "Finalizar inventario" : "Realizar inventario")
+                                        </button>
                                         <button class="btn btn-sm btn-outline-primary" @onclick="ToggleVirtualization">
                                             <i class="oi @(_useVirtualization ? "oi-eye" : "oi-eye")"></i>
                                             @(_useVirtualization ? "Ver todos" : "Paginación")
@@ -1785,15 +1786,13 @@ input[class*="fast-number"] {
                                 LoadingText="Cargando productos..."
                                 EmptyText="No hay productos para esta ubicación"
                                 ShowRefreshButton="false"
-                                GetValueFunction="@GetProductoValue" />
+                                GetValueFunction="@GetProductoValue"
+                                OnRowClick="@OnProductoSelected" />
                             
                             }
                         </div>
                         
-                        <!-- Footer de la grilla -->
-                        <div class="grid-footer">
-                            <span class="record-count">Registros: @selectedProductsCount</span>
-                        </div>
+                        <!-- Footer eliminado - ahora está dentro del DataGrid -->
                             </div>
                         
                     </div>
@@ -2053,7 +2052,7 @@ input[class*="fast-number"] {
                 );
             }
             
-            AbrirProductoEnModal(match);
+            await AbrirProductoEnModal(match);
             barcodeInput = string.Empty;
             StateHasChanged();
             return;
@@ -2064,29 +2063,13 @@ input[class*="fast-number"] {
         await InvokeAsync(StateHasChanged);
         barcodeInput = string.Empty;
         await InvokeAsync(StateHasChanged);
-        try { await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput"); } catch { }
+        // Solo hacer focus si no hay modal abierta
+        if (!showProductoModal)
+        {
+            try { await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput"); } catch { }
+        }
     }
 
-    private void AbrirProductoEnModal(ProductoStock producto)
-    {
-        productoModal = new ProductoStock
-        {
-            Producto = producto.Producto,
-            StockActual = producto.StockActual,
-            StockMinimo = producto.StockMinimo,
-            StockSugerido = producto.StockSugerido
-        };
-        showProductoModal = true;
-        _focusStockInModal = true;
-        
-        // Asegurar que se seleccione el texto después de que se renderice la modal
-        InvokeAsync(async () => {
-            await Task.Delay(200); // Delay para que se renderice completamente la modal
-            try {
-                await JSRuntime.InvokeVoidAsync("selectTextInModal");
-            } catch { }
-        });
-    }
 
     private void CerrarProductoModal()
     {
@@ -2141,6 +2124,7 @@ input[class*="fast-number"] {
     private int _currentPage = 0;
     private int _totalPages = 0;
     private bool _useVirtualization = false;
+    private bool _isMobileScreen = false;
     
     // Variables para configuración de columnas
     private bool showColumnConfigModal = false;
@@ -2225,6 +2209,36 @@ input[class*="fast-number"] {
                 // Inicializar configuración de columnas
                 await LoadColumnConfig();
                 await LoadGridColumnConfig();
+                
+                // Configurar listener de resize para detectar cambios de tamaño
+                try {
+                    await JSRuntime.InvokeVoidAsync("setupResizeListener", DotNetObjectReference.Create(this));
+                } catch (Exception ex) {
+                    Console.WriteLine($"Error configurando listener de resize: {ex.Message}");
+                }
+                
+                // Detectar estado móvil inicial inmediatamente
+                try {
+                    await JSRuntime.InvokeVoidAsync("detectInitialMobileState", DotNetObjectReference.Create(this));
+                } catch (Exception ex) {
+                    Console.WriteLine($"Error detectando estado móvil inicial: {ex.Message}");
+                }
+                
+                // Forzar desactivación de virtualización si es móvil desde el inicio
+                try {
+                    var isMobile = await JSRuntime.InvokeAsync<bool>("isMobileDevice");
+                    if (isMobile) {
+                        Console.WriteLine("📱 Pantalla móvil detectada desde el inicio - Desactivando virtualización");
+                        _isMobileScreen = true;
+                        _useVirtualization = false;
+                        _currentPage = 0;
+                        
+                        // Forzar actualización inmediata
+                        StateHasChanged();
+                    }
+                } catch (Exception ex) {
+                    Console.WriteLine($"Error detectando dispositivo móvil: {ex.Message}");
+                }
             }
             catch (Exception ex)
             {
@@ -2798,15 +2812,34 @@ input[class*="fast-number"] {
                 }
                 selectedProductsCount = productosSeleccionados.Count;
                 Console.WriteLine($"📦 LoadProductsForNode - Total productos cargados: {selectedProductsCount}");
-                // Activar paginación automática si la cantidad es alta
-                _useVirtualization = selectedProductsCount > 200;
+                // Activar paginación automática si la cantidad es alta SOLO EN PANTALLAS GRANDES
+                // En móviles siempre mostrar todos los productos
+                // En pantallas pequeñas SIEMPRE mostrar todos los registros
+                if (IsMobileScreen())
+                {
+                    _useVirtualization = false; // Forzar mostrar todos los registros en móviles
+                    Console.WriteLine("📱 Pantalla móvil detectada - Virtualización DESACTIVADA - Mostrando TODOS los registros");
+                }
+                else
+                {
+                    _useVirtualization = selectedProductsCount > 200;
+                    Console.WriteLine($"🖥️ Pantalla desktop - Virtualización: {_useVirtualization} (Productos: {selectedProductsCount})");
+                }
                 _currentPage = 0;
                 
                 // Al finalizar la carga y mostrar todos, enfocar textbox de código de barras
-                try { 
-                    await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput"); 
-                    // Asegurar focus en móviles también
-                    await JSRuntime.InvokeVoidAsync("ensureBarcodeFocus");
+                // Solo hacer focus si no hay modal abierta
+                if (!showProductoModal)
+                {
+                    try { 
+                        await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput"); 
+                        // Asegurar focus en móviles también
+                        await JSRuntime.InvokeVoidAsync("ensureBarcodeFocus");
+                    } catch { }
+                }
+                // Actualizar estado de móvil siempre
+                try {
+                    await JSRuntime.InvokeVoidAsync("updateMobileState", DotNetObjectReference.Create(this));
                 } catch { }
             }
             else
@@ -3098,6 +3131,115 @@ input[class*="fast-number"] {
         StateHasChanged();
     }
 
+    // Función para detectar si estamos en una pantalla móvil
+    private bool IsMobileScreen()
+    {
+        return _isMobileScreen;
+    }
+
+    // Método para actualizar el estado de móvil desde JavaScript
+    [JSInvokable]
+    public async Task SetMobileState(bool isMobile)
+    {
+        bool wasMobile = _isMobileScreen;
+        _isMobileScreen = isMobile;
+        
+        Console.WriteLine($"📱 SetMobileState - isMobile: {isMobile}, wasMobile: {wasMobile}");
+        
+        // Si es móvil (cambió o ya era móvil), SIEMPRE desactivar virtualización
+        if (isMobile)
+        {
+            Console.WriteLine("📱 Pantalla móvil detectada - FORZANDO desactivación de virtualización");
+            _useVirtualization = false;
+            _currentPage = 0;
+            
+            Console.WriteLine("📱 Virtualización desactivada - Los productos se recargarán automáticamente");
+        }
+        // Si cambió de móvil a desktop, reactivar virtualización si es necesario
+        else if (!isMobile && wasMobile && productosSeleccionados != null && productosSeleccionados.Count > 200)
+        {
+            Console.WriteLine("🖥️ Cambio a pantalla desktop detectado - Reactivando paginación");
+            _useVirtualization = true;
+            _currentPage = 0;
+            await LoadProductsForNode(selectedNode);
+        }
+        
+        Console.WriteLine($"📱 Estado final - Virtualización: {_useVirtualization}, Página: {_currentPage}, Móvil: {_isMobileScreen}");
+        StateHasChanged();
+    }
+
+    // Función para forzar la recarga de todos los productos en móviles
+    [JSInvokable]
+    public async Task ForceReloadAllProducts()
+    {
+        if (IsMobileScreen() && productosSeleccionados != null && productosSeleccionados.Any())
+        {
+            Console.WriteLine($"📱 Forzando recarga de todos los {productosSeleccionados.Count} productos para móvil");
+            _useVirtualization = false;
+            _currentPage = 0;
+            await LoadProductsForNode(selectedNode);
+        }
+    }
+
+    // Función para forzar la desactivación de virtualización en móviles
+    [JSInvokable]
+    public void ForceDisableVirtualization()
+    {
+        Console.WriteLine("📱 Forzando desactivación de virtualización para móviles");
+        _useVirtualization = false;
+        _currentPage = 0;
+        _isMobileScreen = true;
+        
+        Console.WriteLine($"📱 Estado actual - Virtualización: {_useVirtualization}, Página: {_currentPage}, Móvil: {_isMobileScreen}");
+        
+        StateHasChanged();
+    }
+
+    // Función para manejar la selección de productos desde la grilla
+    // COMENTARIO: Esta función se ejecuta cuando se hace clic en una fila de la grilla o en el botón de selección
+    private async Task OnProductoSelected(object item)
+    {
+        if (item is ProductoStock producto)
+        {
+            // Solo abrir la modal si el producto tiene código de barras
+            if (!string.IsNullOrEmpty(producto.Producto?.CodigoBarra))
+            {
+                await AbrirProductoEnModal(producto);
+            }
+            else
+            {
+                // Mostrar mensaje si no tiene código de barras
+                await JSRuntime.InvokeVoidAsync("alert", "Este producto no tiene código de barras configurado.");
+            }
+        }
+    }
+
+    // Función para abrir la modal del producto (reutilizada desde el escaneo de códigos de barras)
+    private async Task AbrirProductoEnModal(ProductoStock producto)
+    {
+        productoModal = new ProductoStock
+        {
+            Producto = producto.Producto,
+            StockActual = producto.StockActual,
+            CantidadInventario = producto.CantidadInventario ?? producto.StockActual ?? 0
+        };
+        
+        showProductoModal = true;
+        _focusStockInModal = true; // Marcar para enfocar el campo de stock
+        StateHasChanged();
+        
+        // En móviles, seleccionar el texto del stock actual
+        if (IsMobileScreen())
+        {
+            await Task.Delay(100); // Pequeño delay para asegurar que la modal esté renderizada
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("selectTextInModal");
+            }
+            catch { }
+        }
+    }
+
     // Calcular el nivel de jerarquía basado en el campo orden
     private int GetNivelFamilia(string orden)
     {
@@ -3248,23 +3390,48 @@ input[class*="fast-number"] {
     {
         if (item is ProductoStock producto)
         {
-            return columnKey switch
+            // En móviles, mostrar información combinada para una mejor experiencia
+            if (IsMobileScreen())
             {
-                "rubro" => producto.Producto?.RubroCodigo ?? string.Empty,
-                "producto" => producto.Producto?.DescripcionLarga ?? string.Empty,
-                "stock" => inventarioEditable ? 
-                    (object)new StockInputModel 
-                    { 
-                        Producto = producto, 
-                        Value = (producto.CantidadInventario ?? producto.StockActual ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture),
-                        OnInput = OnCantidadInput
-                    } : 
-                    producto.StockActual?.ToString("N3") ?? "0",
-                "minimo" => producto.StockMinimo?.ToString("N3") ?? "0",
-                "sugerido" => producto.StockSugerido?.ToString("N3") ?? "0",
-                "codigoBarra" => producto.Producto?.CodigoBarra ?? string.Empty,
-                _ => string.Empty
-            };
+                return columnKey switch
+                {
+                    "rubro" => producto.Producto?.RubroCodigo ?? string.Empty,
+                    "producto" => producto.Producto?.DescripcionLarga ?? string.Empty, // Solo descripción, el rubro se muestra por separado
+                    "stock" => inventarioEditable ? 
+                        (object)new StockInputModel 
+                        { 
+                            Producto = producto, 
+                            Value = (producto.CantidadInventario ?? producto.StockActual ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                            OnInput = OnCantidadInput
+                        } : 
+                        $"Stock: {producto.StockActual?.ToString("N0") ?? "0"}",
+                    "minimo" => producto.StockMinimo?.ToString("N3") ?? "0",
+                    "sugerido" => producto.StockSugerido?.ToString("N3") ?? "0",
+                    "codigoBarra" => producto.Producto?.CodigoBarra ?? string.Empty,
+                    _ => string.Empty
+                };
+            }
+            else
+            {
+                // En pantallas grandes, mostrar información normal
+                return columnKey switch
+                {
+                    "rubro" => producto.Producto?.RubroCodigo ?? string.Empty,
+                    "producto" => producto.Producto?.DescripcionLarga ?? string.Empty,
+                    "stock" => inventarioEditable ? 
+                        (object)new StockInputModel 
+                        { 
+                            Producto = producto, 
+                            Value = (producto.CantidadInventario ?? producto.StockActual ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                            OnInput = OnCantidadInput
+                        } : 
+                        producto.StockActual?.ToString("N3") ?? "0",
+                    "minimo" => producto.StockMinimo?.ToString("N3") ?? "0",
+                    "sugerido" => producto.StockSugerido?.ToString("N3") ?? "0",
+                    "codigoBarra" => producto.Producto?.CodigoBarra ?? string.Empty,
+                    _ => string.Empty
+                };
+            }
         }
         return string.Empty;
     }

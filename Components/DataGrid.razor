@@ -25,7 +25,7 @@
     }
 
     .data-grid-content {
-        overflow: visible; /* dejar que la página maneje el scroll total */
+        overflow: hidden; /* controlar el scroll dentro del contenedor */
         position: relative;
     }
 
@@ -114,21 +114,80 @@
         overflow-y: auto;
         border: 1px solid #dee2e6;
         border-radius: 8px;
-        padding: 0.5rem;
+        padding: 0.75rem;
+        background: #f8f9fa;
     }
 
     .column-item {
-        padding: 0.75rem;
-        border-bottom: 1px solid #f8f9fa;
-        transition: background-color 0.2s ease;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
+        margin-bottom: 0.5rem;
+        padding: 0.5rem;
+        background: white;
+        border-radius: 6px;
+        border: 1px solid #e9ecef;
+        transition: all 0.2s ease;
     }
 
     .column-item:hover {
-        background-color: #f8f9fa;
+        background: #f8f9fa;
+        border-color: #007bff;
     }
+
+    .column-item .form-check-input {
+        margin-right: 1.25rem !important;
+        margin-top: 0.25rem;
+        width: 1rem !important;
+        height: 1rem !important;
+        min-width: 1rem !important;
+        min-height: 1rem !important;
+        max-width: 1rem !important;
+        max-height: 1rem !important;
+        flex-shrink: 0 !important;
+        appearance: checkbox !important;
+        -webkit-appearance: checkbox !important;
+        -moz-appearance: checkbox !important;
+        border: 1px solid #6c757d !important;
+        border-radius: 0.25rem !important;
+        background-color: #fff !important;
+        background-image: none !important;
+        background-size: 0 !important;
+        background-position: 0 !important;
+        background-repeat: no-repeat !important;
+    }
+
+    .column-item .form-check-input:checked {
+        background-color: #007bff !important;
+        border-color: #007bff !important;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='m6 10 3 3 6-6'/%3e%3c/svg%3e") !important;
+        background-size: 0.75rem !important;
+        background-position: center !important;
+        background-repeat: no-repeat !important;
+    }
+
+    .column-item .form-check-label {
+        font-weight: 500;
+        color: #495057;
+        cursor: pointer;
+        margin-bottom: 0;
+        margin-left: 0 !important;
+        padding-left: 0 !important;
+        display: flex;
+        align-items: center;
+        flex: 1;
+    }
+
+    .column-item .form-check {
+        display: flex !important;
+        align-items: center !important;
+        margin-bottom: 0 !important;
+        padding: 0.5rem !important;
+    }
+
+    .column-item .form-check-input:focus {
+        border-color: #007bff !important;
+        outline: 0 !important;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25) !important;
+    }
+
 
     .column-item:last-child {
         border-bottom: none;
@@ -167,46 +226,176 @@
             border: 1px solid #dee2e6;
             border-radius: 8px;
             background: #f8f9fa;
+            padding: 0.75rem; /* padding general para toda la fila */
         }
 
-        /* Etiqueta arriba, contenido ocupa 100% */
+        /* Mostrar toda la información en formato compacto para móviles */
         .data-grid-td {
-            display: block;
+            display: inline; /* Cambiar a inline para que todo esté en una línea */
             border: none;
-            border-bottom: 1px solid #dee2e6;
-            padding: 0.5rem 0.75rem; /* más compacto en móvil */
-            position: relative;
-            padding-left: 0; /* sin reserva lateral */
-            white-space: normal; /* altura se adapta al texto */
-            line-height: 1.25;
+            padding: 0;
+            margin-right: 0.25rem; /* Reducir margen para más compacto */
+            white-space: normal;
+            line-height: 1.2; /* Reducir altura de línea para más compacto */
         }
 
+        /* Ocultar las etiquetas de datos individuales */
         .data-grid-td:before {
-            content: attr(data-label) ": ";
-            position: static; /* deja de ser absoluta */
-            display: block;
-            margin: 0 0 0.2rem 0;
-            font-weight: 600;
-            color: #6c757d;
-            width: auto;
+            display: none;
         }
 
-        .data-grid-td:last-child { border-bottom: none; }
+        /* Estilos específicos para cada tipo de información - MÁS COMPACTO */
+        .data-grid-td[data-label="Rub/Cód"] {
+            font-weight: bold;
+            color: #6c757d;
+            font-size: 0.8rem; /* Más pequeño */
+            margin-right: 0.5rem; /* Espacio después del rubro */
+        }
 
-        /* Ignorar anchos fijos definidos en columnas cuando es móvil */
-        .data-grid-th,
-        .data-grid-td {
-            width: 100% !important;
-            max-width: 100% !important;
+        .data-grid-td[data-label="Producto"] {
+            font-weight: 500;
+            color: #333;
+            display: inline; /* En la misma línea que el rubro */
+            font-size: 0.85rem; /* Más pequeño */
+            margin-right: 0.5rem;
+        }
+
+        .data-grid-td[data-label="Stock Actual"] {
+            color: #dc3545; /* rojo para el stock */
+            font-weight: 600;
+            font-size: 0.8rem; /* Más pequeño */
+            margin-right: 0.5rem;
+        }
+
+        .data-grid-td[data-label="Código de barras"] {
+            font-weight: bold;
+            color: #495057;
+            font-size: 0.75rem; /* Más pequeño */
+            display: block; /* Código de barras en su propia línea */
+            margin-top: 0.15rem; /* Reducir margen superior */
+        }
+
+        /* Layout compacto para las filas */
+        .data-grid-tr {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 0.5rem; /* Reducir padding general */
+        }
+
+        /* Primera línea: Rubro + Producto + Stock */
+        .data-grid-tr .data-grid-td[data-label="Rub/Cód"],
+        .data-grid-tr .data-grid-td[data-label="Producto"],
+        .data-grid-tr .data-grid-td[data-label="Stock Actual"] {
+            display: inline;
+        }
+
+        /* Segunda línea: Código de barras */
+        .data-grid-tr .data-grid-td[data-label="Código de barras"] {
+            display: block;
+            width: 100%;
+        }
+
+        /* ELIMINAR BOTÓN DE SELECCIÓN EN MÓVILES - COMPLETAMENTE OCULTO */
+        .data-grid-action-cell {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            width: 0 !important;
+            min-width: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            overflow: hidden !important;
+        }
+
+        .data-grid-select-btn {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
         }
 
         /* Inputs ocupan todo el ancho disponible */
         .data-grid-td .form-control {
             width: 100% !important;
             min-width: 0 !important;
-            height: auto !important; /* que tome la altura del contenido */
-            padding: 0.5rem 0.6rem !important; /* compacto pero usable */
+            height: auto !important;
+            padding: 0.5rem 0.6rem !important;
             line-height: 1.25 !important;
+        }
+        
+        /* ELIMINAR CUALQUIER ESPACIO SOBRANTE EN MÓVILES */
+        .data-grid-container {
+            margin-bottom: 0 !important;
+            padding-bottom: 0 !important;
+        }
+        
+        .data-grid-content {
+            margin-bottom: 0 !important;
+            padding-bottom: 0 !important;
+        }
+        
+        .data-grid-table {
+            margin-bottom: 0 !important;
+        }
+        
+        .data-grid-tbody {
+            margin-bottom: 0 !important;
+        }
+        
+        .data-grid-tr:last-child {
+            margin-bottom: 0 !important;
+        }
+        
+        /* FORZAR QUE EL FOOTER QUEDE PEGADO AL FONDO EN MÓVILES */
+        .data-grid-container {
+            position: fixed !important;
+            top: 60px !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100vw !important;
+            height: calc(100vh - 60px) !important;
+            max-height: calc(100vh - 60px) !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-sizing: border-box !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+        }
+        
+        .data-grid-content {
+            flex: 1 !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-sizing: border-box !important;
+            height: calc(100% - 50px) !important;
+            max-height: calc(100% - 50px) !important;
+        }
+        
+        .data-grid-footer {
+            position: fixed !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            width: 100vw !important;
+            height: 50px !important;
+            max-height: 50px !important;
+            min-height: 50px !important;
+            margin: 0 !important;
+            padding: 0.5rem !important;
+            box-sizing: border-box !important;
+            background: #f8f9fa !important;
+            border-top: 2px solid #dee2e6 !important;
+            text-align: center !important;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            z-index: 9999 !important;
+            transform: translateZ(0) !important;
+            -webkit-transform: translateZ(0) !important;
         }
     }
 
@@ -327,14 +516,29 @@
                                 }
                             </td>
                         }
+                        <!-- Botón de selección para móviles - SOLO VISIBLE EN PANTALLAS PEQUEÑAS -->
+                        <td class="data-grid-td data-grid-action-cell d-md-none" data-label="Acción">
+                            <button class="btn btn-sm btn-outline-primary data-grid-select-btn" 
+                                    @onclick="() => OnRowClick.InvokeAsync(item)"
+                                    @onclick:stopPropagation="true"
+                                    title="Seleccionar producto">
+                                <i class="oi oi-check"></i>
+                            </button>
+                        </td>
                         </tr>
                     }
                 </tbody>
             </table>
             
-            <!-- Separador mínimo dentro de la grilla -->
-            <div class="data-grid-footer-spacer" style="height: 16px; background: transparent;"></div>
+            <!-- Separador eliminado para móviles -->
         }
+        
+        <!-- FOOTER SIEMPRE VISIBLE - DENTRO DEL DATAGRID -->
+        <div class="data-grid-footer" style="display: block !important; visibility: visible !important; opacity: 1 !important; background: #f8f9fa; border-top: 1px solid #dee2e6; padding: 0.5rem; text-align: center; position: sticky; bottom: 0; z-index: 1000;">
+            <span class="data-grid-record-count" style="display: block !important; visibility: visible !important; opacity: 1 !important; font-size: 0.9rem; font-weight: 600; color: #495057;">
+                Total: @(Data?.Count() ?? 0) registros
+            </span>
+        </div>
     </div>
 </div>
 
@@ -342,12 +546,16 @@
 <AppModal IsOpen="showColumnConfigModal" Title="Configurar Columnas" OnClose="() => showColumnConfigModal = false">
     <ChildContent>
         <div class="column-config-content">
-            <p class="text-muted mb-3">Arrastra para reordenar y selecciona qué columnas mostrar:</p>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <p class="text-muted mb-0">Selecciona qué columnas mostrar en la grilla de productos. Los cambios se guardan automáticamente:</p>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="ResetColumnConfig" title="Restaurar configuración por defecto">
+                    <i class="oi oi-reload"></i> Restaurar por defecto
+                </button>
+            </div>
             <div class="column-list" id="column-list">
                 @foreach (var column in Columns.OrderBy(c => c.Order))
                 {
-                    <div class="column-item" draggable="true" data-column="@column.Key">
-                        <i class="oi oi-move drag-handle"></i>
+                    <div class="form-check column-item">
                         <input class="form-check-input" 
                                type="checkbox" 
                                @bind="column.IsVisible" 
@@ -360,11 +568,7 @@
             </div>
         </div>
     </ChildContent>
-    <FooterContent>
-        <button class="btn btn-secondary" @onclick="ResetColumnConfig">Restaurar por defecto</button>
-        <button class="btn btn-primary" @onclick="SaveColumnConfig">Guardar configuración</button>
-        <button class="btn btn-outline-secondary" @onclick="() => showColumnConfigModal = false">Cerrar</button>
-    </FooterContent>
+    <!-- NO HAY FOOTER - Los cambios se guardan automáticamente al marcar/desmarcar checkboxes -->
 </AppModal>
 
 <!-- Modal de Envío de Inventario -->
