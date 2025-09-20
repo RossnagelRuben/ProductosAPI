@@ -1779,7 +1779,7 @@ input[class*="fast-number"] {
 
                             <!-- Usar el componente DataGrid reutilizable -->
                             <DataGrid @ref="dataGridRef"
-                                Title="Productos en Stock"
+                                Title="Productos:"
                                 Data="@GetProductosForGrid()"
                                 Columns="@GetProductoColumns()"
                                 IsLoading="@isLoading"
@@ -2314,14 +2314,20 @@ input[class*="fast-number"] {
                 // Forzar desactivación de virtualización si es móvil desde el inicio
                 try {
                     var isMobile = await JSRuntime.InvokeAsync<bool>("isMobileDevice");
+                    Console.WriteLine($"📱 Detección inicial de móvil: {isMobile}");
                     if (isMobile) {
                         Console.WriteLine("📱 Pantalla móvil detectada desde el inicio - Desactivando virtualización");
                         _isMobileScreen = true;
+                        _isMobileScreenCacheValid = false; // Invalidar cache
                         _useVirtualization = false;
                         _currentPage = 0;
                         
                         // Forzar actualización inmediata
                         StateHasChanged();
+                    } else {
+                        // Asegurar que no sea móvil
+                        _isMobileScreen = false;
+                        _isMobileScreenCacheValid = false; // Invalidar cache
                     }
                 } catch (Exception ex) {
                     Console.WriteLine($"Error detectando dispositivo móvil: {ex.Message}");
@@ -2935,8 +2941,19 @@ input[class*="fast-number"] {
                 }
                 // Actualizar estado de móvil siempre
                 try {
+                    // Forzar detección de móvil
+                    await JSRuntime.InvokeVoidAsync("forceMobileDetection");
                     await JSRuntime.InvokeVoidAsync("updateMobileState", DotNetObjectReference.Create(this));
-                } catch { }
+                    
+                    // Verificación adicional para asegurar que se detecte correctamente
+                    var isMobile = await JSRuntime.InvokeAsync<bool>("isMobileDevice");
+                    if (isMobile != _isMobileScreen) {
+                        Console.WriteLine($"📱 Corrección de estado móvil - Detectado: {isMobile}, Actual: {_isMobileScreen}");
+                        await SetMobileState(isMobile);
+                    }
+                } catch (Exception ex) {
+                    Console.WriteLine($"Error actualizando estado móvil: {ex.Message}");
+                }
             }
             else
             {
@@ -3448,9 +3465,7 @@ input[class*="fast-number"] {
                 new() { Key = "stock", Label = "Stock Actual", IsVisible = true, Width = "120px", Order = 3, IsResizable = true },
                 new() { Key = "minimo", Label = "Mínimo", IsVisible = false, Width = "100px", Order = 4, IsResizable = true },
                 new() { Key = "sugerido", Label = "Sugerido", IsVisible = false, Width = "100px", Order = 5, IsResizable = true },
-                new() { Key = "codigoBarra", Label = "Código de barras", IsVisible = true, Width = "220px", Order = 6, IsResizable = true },
-                // NUEVA COLUMNA: Solo visible en móviles para mostrar "Stock Controlado: x"
-                new() { Key = "stockControlado", Label = "Stock Controlado", IsVisible = _isMobileScreen, Width = "150px", Order = 7, IsResizable = false }
+                new() { Key = "codigoBarra", Label = "Código de barras", IsVisible = true, Width = "220px", Order = 6, IsResizable = true }
             };
         }
         return gridColumns;
@@ -3533,10 +3548,6 @@ input[class*="fast-number"] {
                     "minimo" => producto.StockMinimo?.ToString("N3") ?? "0",
                     "sugerido" => producto.StockSugerido?.ToString("N3") ?? "0",
                     "codigoBarra" => producto.Producto?.CodigoBarra ?? string.Empty,
-                    // NUEVA COLUMNA: Mostrar "Stock Controlado: x" en amarillo a la derecha en móviles (solo si tiene stock controlado)
-                    "stockControlado" => (producto.CantidadInventario.HasValue && producto.CantidadInventario != producto.StockActual) ?
-                        $"<span style='background-color: #ffc107; color: #000; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 0.8rem;'>Stock Controlado: {producto.CantidadInventario?.ToString("N0") ?? "0"}</span> <span style='color: #666; font-size: 0.8rem;'>({producto.StockActual?.ToString("N0") ?? "0"})</span>" :
-                        "",
                     _ => string.Empty
                 };
             }
@@ -3633,9 +3644,7 @@ input[class*="fast-number"] {
                 new() { Key = "stock", Label = "Stock Actual", IsVisible = true },
                 new() { Key = "minimo", Label = "Mínimo", IsVisible = false },
                 new() { Key = "sugerido", Label = "Sugerido", IsVisible = false },
-                new() { Key = "codigoBarra", Label = "Código de barras", IsVisible = true },
-                // NUEVA COLUMNA: Solo visible en móviles para mostrar "Stock Controlado: x"
-                new() { Key = "stockControlado", Label = "Stock Controlado", IsVisible = _isMobileScreen }
+                new() { Key = "codigoBarra", Label = "Código de barras", IsVisible = true }
             };
         }
 
@@ -3734,9 +3743,7 @@ input[class*="fast-number"] {
                     new() { Key = "stock", Label = "Stock Actual", IsVisible = true, Width = "120px", Order = 3, IsResizable = true },
                     new() { Key = "minimo", Label = "Mínimo", IsVisible = false, Width = "100px", Order = 4, IsResizable = true },
                     new() { Key = "sugerido", Label = "Sugerido", IsVisible = false, Width = "100px", Order = 5, IsResizable = true },
-                    new() { Key = "codigoBarra", Label = "Código de barras", IsVisible = true, Width = "220px", Order = 6, IsResizable = true },
-                    // NUEVA COLUMNA: Solo visible en móviles para mostrar "Stock Controlado: x"
-                    new() { Key = "stockControlado", Label = "Stock Controlado", IsVisible = _isMobileScreen, Width = "150px", Order = 7, IsResizable = false }
+                    new() { Key = "codigoBarra", Label = "Código de barras", IsVisible = true, Width = "220px", Order = 6, IsResizable = true }
                 };
             }
 
@@ -4918,6 +4925,19 @@ input[class*="fast-number"] {
         console.log('✅ Desktop layout FORZADO - PANELES VISIBLES');
     };
 
+    // Función para forzar la detección de móvil al cargar
+    window.forceMobileDetection = function() {
+        const isMobile = window.isMobileDevice();
+        console.log('🔍 forceMobileDetection - isMobile:', isMobile);
+        
+        // Actualizar el estado en Blazor si está disponible
+        if (window.blazorComponent) {
+            window.updateMobileState(window.blazorComponent);
+        }
+        
+        return isMobile;
+    };
+
     // Ejecutar al cargar la página
     document.addEventListener('DOMContentLoaded', function() {
         // Verificar si es pantalla completa primero
@@ -5000,6 +5020,17 @@ input[class*="fast-number"] {
         }
     });
 
+    // Listener para detectar cambios de tamaño de pantalla
+    window.addEventListener('resize', function() {
+        // Debounce para evitar llamadas excesivas
+        clearTimeout(window.resizeTimeout);
+        window.resizeTimeout = setTimeout(() => {
+            if (window.blazorComponent) {
+                window.updateMobileState(window.blazorComponent);
+            }
+        }, 250);
+    });
+
     // Detectar cuando se presiona F12 (Developer Tools)
     window.addEventListener('keydown', function(e) {
         // F12 o Ctrl+Shift+I (Developer Tools)
@@ -5031,9 +5062,25 @@ input[class*="fast-number"] {
         }, 300);
     });
 
-    // Detectar si es dispositivo móvil
+    // Detectar si es dispositivo móvil (mejorado)
     window.isMobileDevice = function() {
-        return window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const isMobileWidth = window.innerWidth <= 768;
+        const isMobileUserAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        
+        const result = isMobileWidth || isMobileUserAgent || isTouchDevice;
+        console.log('🔍 isMobileDevice - Width:', window.innerWidth, 'isMobileWidth:', isMobileWidth, 'isMobileUserAgent:', isMobileUserAgent, 'isTouchDevice:', isTouchDevice, 'result:', result);
+        
+        return result;
+    }
+
+    // Función para actualizar el estado de móvil en Blazor
+    window.updateMobileState = function(blazorComponent) {
+        if (blazorComponent) {
+            const isMobile = window.isMobileDevice();
+            console.log('📱 updateMobileState - isMobile:', isMobile);
+            blazorComponent.invokeMethodAsync('SetMobileState', isMobile);
+        }
     }
 
     // Funciones para ocultar elementos
