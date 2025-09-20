@@ -1882,6 +1882,8 @@ input[class*="fast-number"] {
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;align-items:center;">
                 <div><strong>Descripción:</strong></div>
                 <div>@(productoModal.Producto?.DescripcionLarga ?? "-")</div>
+                <div><strong>Rubro:</strong></div>
+                <div>@(productoModal.Producto?.RubroCodigo ?? "-")</div>
                 <div><strong>Código de barras:</strong></div>
                 <div>@(productoModal.Producto?.CodigoBarra ?? "-")</div>
                 <div><strong>Stock actual:</strong></div>
@@ -2064,17 +2066,25 @@ input[class*="fast-number"] {
         barcodeInput = string.Empty;
         await InvokeAsync(StateHasChanged);
         // Solo hacer focus si no hay modal abierta
-        if (!showProductoModal)
+        if (!showProductoModal && !showQRModal)
         {
             try { await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput"); } catch { }
         }
     }
 
 
-    private void CerrarProductoModal()
+    private async Task CerrarProductoModal()
     {
         showProductoModal = false;
         productoModal = null;
+        
+        // Restaurar focus al textbox de código de barras después de cerrar la modal
+        await Task.Delay(100); // Pequeño delay para asegurar que la modal se cierre completamente
+        try 
+        { 
+            await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput"); 
+        } 
+        catch { }
     }
 
     private async Task OnModalStockKeyPress(KeyboardEventArgs e)
@@ -3669,6 +3679,14 @@ input[class*="fast-number"] {
             qrDetectedValue = string.Empty;
             isCameraActive = false;
             StateHasChanged();
+            
+            // Restaurar focus al textbox de código de barras después de cerrar la modal
+            await Task.Delay(100); // Pequeño delay para asegurar que la modal se cierre completamente
+            try 
+            { 
+                await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput"); 
+            } 
+            catch { }
         }
         catch (Exception ex)
         {
@@ -4381,6 +4399,13 @@ input[class*="fast-number"] {
         const isMobile = window.innerWidth <= 768;
         console.log('🔍 ensureBarcodeFocus - isMobile:', isMobile, 'width:', window.innerWidth);
         
+        // Verificar si hay alguna modal abierta
+        const hasOpenModal = document.querySelector('.app-modal.show') !== null;
+        if (hasOpenModal) {
+            console.log('🚫 Modal abierta detectada, no aplicando focus al textbox de código de barras');
+            return;
+        }
+        
         // Aplicar focus en todas las pantallas, no solo móviles
         const barcodeInput = document.getElementById('barcodeInput');
         if (barcodeInput) {
@@ -4437,6 +4462,14 @@ input[class*="fast-number"] {
     // Función mejorada para focus del textbox de código de barras
     window.focusBarcodeInput = function() {
         console.log('🎯 focusBarcodeInput - Aplicando focus al textbox de código de barras');
+        
+        // Verificar si hay alguna modal abierta
+        const hasOpenModal = document.querySelector('.app-modal.show') !== null;
+        if (hasOpenModal) {
+            console.log('🚫 Modal abierta detectada, no aplicando focus al textbox de código de barras');
+            return false;
+        }
+        
         const barcodeInput = document.getElementById('barcodeInput');
         if (barcodeInput) {
             try {
@@ -4813,6 +4846,13 @@ input[class*="fast-number"] {
     // Función para aplicar focus automáticamente al textbox de código de barras
     window.autoFocusBarcode = function() {
         console.log('🎯 autoFocusBarcode - Aplicando focus automático al textbox de código de barras');
+        
+        // Verificar si hay alguna modal abierta antes de aplicar focus
+        const hasOpenModal = document.querySelector('.app-modal.show') !== null;
+        if (hasOpenModal) {
+            console.log('🚫 Modal abierta detectada, no aplicando focus automático al textbox de código de barras');
+            return;
+        }
         
         // Aplicar focus inmediatamente
         window.focusBarcodeInput();
