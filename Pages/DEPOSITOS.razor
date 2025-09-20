@@ -2906,7 +2906,7 @@ input[class*="fast-number"] {
                 // Activar paginación automática si la cantidad es alta SOLO EN PANTALLAS GRANDES
                 // En móviles siempre mostrar todos los productos
                 // En pantallas pequeñas SIEMPRE mostrar todos los registros
-                if (IsMobileScreen())
+                if (_isMobileScreen)
                 {
                     _useVirtualization = false; // Forzar mostrar todos los registros en móviles
                     Console.WriteLine("📱 Pantalla móvil detectada - Virtualización DESACTIVADA - Mostrando TODOS los registros");
@@ -3227,11 +3227,15 @@ input[class*="fast-number"] {
         StateHasChanged();
     }
 
-    // Función para detectar si estamos en una pantalla móvil
+    // Función para detectar si estamos en una pantalla móvil (optimizada)
     private bool IsMobileScreen()
     {
         return _isMobileScreen;
     }
+    
+    // Cache para evitar llamadas repetidas a IsMobileScreen()
+    private bool _isMobileScreenCached = false;
+    private bool _isMobileScreenCacheValid = false;
 
     // Método para actualizar el estado de móvil desde JavaScript
     [JSInvokable]
@@ -3239,6 +3243,9 @@ input[class*="fast-number"] {
     {
         bool wasMobile = _isMobileScreen;
         _isMobileScreen = isMobile;
+        
+        // Invalidar cache cuando cambie el estado de móvil
+        _isMobileScreenCacheValid = false;
         
         Console.WriteLine($"📱 SetMobileState - isMobile: {isMobile}, wasMobile: {wasMobile}");
         
@@ -3268,7 +3275,7 @@ input[class*="fast-number"] {
     [JSInvokable]
     public async Task ForceReloadAllProducts()
     {
-        if (IsMobileScreen() && productosSeleccionados != null && productosSeleccionados.Any())
+        if (_isMobileScreen && productosSeleccionados != null && productosSeleccionados.Any())
         {
             Console.WriteLine($"📱 Forzando recarga de todos los {productosSeleccionados.Count} productos para móvil");
             _useVirtualization = false;
@@ -3443,7 +3450,7 @@ input[class*="fast-number"] {
                 new() { Key = "sugerido", Label = "Sugerido", IsVisible = false, Width = "100px", Order = 5, IsResizable = true },
                 new() { Key = "codigoBarra", Label = "Código de barras", IsVisible = true, Width = "220px", Order = 6, IsResizable = true },
                 // NUEVA COLUMNA: Solo visible en móviles para mostrar "Stock Controlado: x"
-                new() { Key = "stockControlado", Label = "Stock Controlado", IsVisible = IsMobileScreen(), Width = "150px", Order = 7, IsResizable = false }
+                new() { Key = "stockControlado", Label = "Stock Controlado", IsVisible = _isMobileScreen, Width = "150px", Order = 7, IsResizable = false }
             };
         }
         return gridColumns;
@@ -3501,8 +3508,15 @@ input[class*="fast-number"] {
     {
         if (item is ProductoStock producto)
         {
+            // Cache para evitar llamadas repetidas a IsMobileScreen()
+            if (!_isMobileScreenCacheValid)
+            {
+                _isMobileScreenCached = IsMobileScreen();
+                _isMobileScreenCacheValid = true;
+            }
+            
             // En móviles, mostrar información combinada para una mejor experiencia
-            if (IsMobileScreen())
+            if (_isMobileScreenCached)
             {
                 return columnKey switch
                 {
@@ -3621,7 +3635,7 @@ input[class*="fast-number"] {
                 new() { Key = "sugerido", Label = "Sugerido", IsVisible = false },
                 new() { Key = "codigoBarra", Label = "Código de barras", IsVisible = true },
                 // NUEVA COLUMNA: Solo visible en móviles para mostrar "Stock Controlado: x"
-                new() { Key = "stockControlado", Label = "Stock Controlado", IsVisible = IsMobileScreen() }
+                new() { Key = "stockControlado", Label = "Stock Controlado", IsVisible = _isMobileScreen }
             };
         }
 
@@ -3722,7 +3736,7 @@ input[class*="fast-number"] {
                     new() { Key = "sugerido", Label = "Sugerido", IsVisible = false, Width = "100px", Order = 5, IsResizable = true },
                     new() { Key = "codigoBarra", Label = "Código de barras", IsVisible = true, Width = "220px", Order = 6, IsResizable = true },
                     // NUEVA COLUMNA: Solo visible en móviles para mostrar "Stock Controlado: x"
-                    new() { Key = "stockControlado", Label = "Stock Controlado", IsVisible = IsMobileScreen(), Width = "150px", Order = 7, IsResizable = false }
+                    new() { Key = "stockControlado", Label = "Stock Controlado", IsVisible = _isMobileScreen, Width = "150px", Order = 7, IsResizable = false }
                 };
             }
 
