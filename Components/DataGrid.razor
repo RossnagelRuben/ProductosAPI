@@ -2,6 +2,7 @@
 @using BlazorApp_ProductosAPI.Components
 @using BlazorApp_ProductosAPI.Services
 @using System.Text.Json
+@using Microsoft.AspNetCore.Components
 @inject IJSRuntime JSRuntime
 @inject HttpClient Http
 @inject IAuthService AuthService
@@ -511,7 +512,10 @@
                                     }
                                     else
                                     {
-                                        @value
+                                        @if (value != null)
+                                        {
+                                            @((MarkupString)value.ToString())
+                                        }
                                     }
                                 }
                             </td>
@@ -589,7 +593,7 @@
                                 <div style="font-size: 0.9rem; color: #666;">Código: @item.Barcode</div>
                             </div>
                             <div style="text-align: right;">
-                                <div style="font-weight: 600; color: #28a745;">Stock: @item.InventoryStock.ToString("N0")</div>
+                                <div style="font-weight: 600; color: #28a745;">Stock: @item.InventoryStock.ToString("N0") <span style="color: #666; font-weight: normal;">(@item.CurrentStock.ToString("N0"))</span></div>
                                 <div style="display: flex; gap: 0.25rem; justify-content: flex-end; margin-top: 0.25rem;">
                                     <button class="btn btn-sm btn-outline-primary" @onclick="() => EditInventoryItem(item)" title="Editar cantidad">
                                         <i class="oi oi-pencil"></i>
@@ -646,14 +650,14 @@
         {
             <div class="edit-quantity-content">
                 <div style="margin-bottom: 1rem;">
-                    <div style="font-weight: 600; color: #333; margin-bottom: 0.5rem;">
-                        <span style="color: #6c757d; font-size: 0.9rem;">@editingItem.RubroCodigo</span> @editingItem.ProductName
+                    <div style="font-weight: 600; color: #000 !important; margin-bottom: 0.5rem;">
+                        <span style="color: #6c757d !important; font-size: 0.9rem;">@editingItem.RubroCodigo</span> @editingItem.ProductName
                     </div>
-                    <div style="font-size: 0.9rem; color: #666;">Código: @editingItem.Barcode</div>
+                    <div style="font-size: 0.9rem; color: #000 !important;">Código: @editingItem.Barcode</div>
                 </div>
                 
                 <div class="form-group">
-                    <label for="editQuantity" style="font-weight: 600; margin-bottom: 0.5rem; display: block;">Nueva cantidad:</label>
+                    <label for="editQuantity" style="font-weight: 600; margin-bottom: 0.5rem; display: block; color: #000 !important;">Nueva cantidad:</label>
                     <input id="editQuantity" 
                            class="form-control" 
                            type="number" 
@@ -661,12 +665,12 @@
                            @bind="editingQuantity" 
                            @bind:event="oninput"
                            @onkeypress="OnEditQuantityKeyPress"
-                           style="font-size: 1.1rem; padding: 0.75rem;"
+                           style="font-size: 1.1rem; padding: 0.75rem; color: #000 !important;"
                            inputmode="numeric" />
                 </div>
                 
                 <div style="margin-top: 1rem; padding: 0.75rem; background-color: #f8f9fa; border-radius: 0.375rem;">
-                    <div style="font-size: 0.9rem; color: #6c757d;">
+                    <div style="font-size: 0.9rem; color: #000 !important;">
                         <strong>Stock actual del sistema:</strong> @editingItem.CurrentStock.ToString("N0")
                     </div>
                 </div>
@@ -674,8 +678,10 @@
         }
     </ChildContent>
     <FooterContent>
-        <button class="btn btn-outline-secondary" @onclick="() => showEditQuantityModal = false">Cancelar</button>
-        <button class="btn btn-primary" @onclick="SaveEditedQuantity">Guardar</button>
+        <div style="display: flex; gap: 0.5rem; justify-content: flex-start; align-items: center;">
+            <button class="btn btn-outline-secondary" @onclick="() => showEditQuantityModal = false">Cancelar</button>
+            <button class="btn btn-primary" @onclick="SaveEditedQuantity">Guardar</button>
+        </div>
     </FooterContent>
 </AppModal>
 
@@ -689,6 +695,7 @@
     [Parameter] public bool ShowRefreshButton { get; set; } = true;
     [Parameter] public EventCallback<object> OnRowClick { get; set; }
     [Parameter] public EventCallback OnRefresh { get; set; }
+    [Parameter] public EventCallback<(string barcode, decimal newStock)> OnInventoryStockChanged { get; set; }
     [Parameter] public Func<object, string, object>? GetValueFunction { get; set; }
 
     private bool showColumnConfigModal = false;
@@ -826,13 +833,19 @@
         StateHasChanged();
     }
 
-    public void AddInventoryItem(string barcode, string productName, string rubroCodigo, decimal currentStock, decimal inventoryStock)
+    public async Task AddInventoryItem(string barcode, string productName, string rubroCodigo, decimal currentStock, decimal inventoryStock)
     {
         var existingItem = inventoryItems.FirstOrDefault(x => x.Barcode == barcode);
         if (existingItem != null)
         {
             existingItem.CurrentStock = currentStock; // Actualizar stock si ya existe
             existingItem.InventoryStock = inventoryStock; // Actualizar stock de inventario
+            
+            // Notificar cambio si el stock cambió
+            if (existingItem.InventoryStock != inventoryStock)
+            {
+                await OnInventoryStockChanged.InvokeAsync((barcode, inventoryStock));
+            }
         }
         else
         {
@@ -844,6 +857,9 @@
                 CurrentStock = currentStock,
                 InventoryStock = inventoryStock
             });
+            
+            // Notificar nuevo item
+            await OnInventoryStockChanged.InvokeAsync((barcode, inventoryStock));
         }
         StateHasChanged();
     }
@@ -860,13 +876,21 @@
         StateHasChanged();
     }
 
-    private void EditInventoryItem(InventoryItem item)
+    private async Task EditInventoryItem(InventoryItem item)
     {
         editingItem = item;
         editingQuantity = item.InventoryStock;
         showEditQuantityModal = true;
         Console.WriteLine($"Editando item: {item.Barcode}, Stock actual: {item.CurrentStock}, Stock inventario: {item.InventoryStock}");
         StateHasChanged();
+        
+        // Hacer focus y seleccionar texto en el input de nueva cantidad
+        await Task.Delay(100); // Pequeño delay para asegurar que la modal se renderice
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("blazorFocusById", "editQuantity");
+        }
+        catch { }
     }
 
     private async Task OnEditQuantityKeyPress(KeyboardEventArgs e)
@@ -882,6 +906,10 @@
         if (editingItem != null)
         {
             editingItem.InventoryStock = editingQuantity;
+            
+            // Notificar al componente padre sobre el cambio de stock
+            await OnInventoryStockChanged.InvokeAsync((editingItem.Barcode, editingQuantity));
+            
             showEditQuantityModal = false;
             editingItem = null;
             StateHasChanged();

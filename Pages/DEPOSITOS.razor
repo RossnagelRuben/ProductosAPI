@@ -1787,7 +1787,8 @@ input[class*="fast-number"] {
                                 EmptyText="No hay productos para esta ubicación"
                                 ShowRefreshButton="false"
                                 GetValueFunction="@GetProductoValue"
-                                OnRowClick="@OnProductoSelected" />
+                                OnRowClick="@OnProductoSelected"
+                                OnInventoryStockChanged="@OnInventoryStockChanged" />
                             
                             }
                         </div>
@@ -1888,7 +1889,7 @@ input[class*="fast-number"] {
                 <div>@(productoModal.Producto?.CodigoBarra ?? "-")</div>
                 <div><strong>Stock actual:</strong></div>
                 <div>
-                    <input id="modalStockActual" class="form-control" type="number" step="0.01" @bind-value="productoModal.StockActual" @bind-value:event="oninput" @onkeypress="OnModalStockKeyPress" inputmode="numeric" />
+                    <input id="modalStockActual" class="form-control" type="number" step="0.01" @bind-value="productoModal.StockActual" @bind-value:event="oninput" @onkeypress="OnModalStockKeyPress" inputmode="numeric" pattern="[0-9]*" />
                 </div>
                 <div><strong>Mínimo:</strong></div>
                 <div>@(productoModal.StockMinimo?.ToString("0.##") ?? "-")</div>
@@ -1903,8 +1904,8 @@ input[class*="fast-number"] {
     </ChildContent>
     <FooterContent>
         <div style="display: flex; gap: 0.5rem; justify-content: center; align-items: center; width: 100%;">
-            <button class="btn btn-primary" @onclick="GuardarProductoModal" style="flex: 1; max-width: 120px;">Guardar</button>
-            <button class="btn btn-outline-secondary" @onclick="CerrarProductoModal" style="flex: 1; max-width: 120px;">Cerrar</button>
+            <button class="btn btn-primary" @onclick="GuardarProductoModal" style="width: 120px; height: 50px; padding: 0.75rem 1rem; font-size: 1rem;">Guardar</button>
+            <button class="btn btn-outline-secondary" @onclick="CerrarProductoModal" style="width: 120px; height: 50px; padding: 0.75rem 1rem; font-size: 1rem;">Cerrar</button>
         </div>
     </FooterContent>
     </AppModal>
@@ -1976,6 +1977,20 @@ input[class*="fast-number"] {
     
     // Referencia al DataGrid para manejo de inventario
     private DataGrid? dataGridRef;
+    
+    // Función para manejar cambios de stock desde el inventario
+    private async Task OnInventoryStockChanged((string barcode, decimal newStock) stockChange)
+    {
+        // Buscar el producto en la lista y actualizar su CantidadInventario
+        var producto = productosSeleccionados.FirstOrDefault(p => 
+            p.Producto?.CodigoBarra == stockChange.barcode);
+        
+        if (producto != null)
+        {
+            producto.CantidadInventario = stockChange.newStock;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
     
     // Variables para QR Scanner
     private bool showQRModal = false;
@@ -2109,7 +2124,7 @@ input[class*="fast-number"] {
                 // También actualizar en el inventario del DataGrid si existe
                 if (dataGridRef != null)
                 {
-                    dataGridRef.AddInventoryItem(
+                    await dataGridRef.AddInventoryItem(
                         productoModal.Producto?.CodigoBarra ?? "",
                         productoModal.Producto?.DescripcionLarga ?? "Producto sin descripción",
                         productoModal.Producto?.RubroCodigo ?? "",
@@ -3227,10 +3242,14 @@ input[class*="fast-number"] {
     // Función para abrir la modal del producto (reutilizada desde el escaneo de códigos de barras)
     private async Task AbrirProductoEnModal(ProductoStock producto)
     {
+        // Si el producto ya tiene stock modificado (está en inventario), usar ese valor
+        // Si no, usar el stock del sistema
+        var stockParaMostrar = producto.CantidadInventario ?? producto.StockActual ?? 0;
+        
         productoModal = new ProductoStock
         {
             Producto = producto.Producto,
-            StockActual = producto.StockActual,
+            StockActual = stockParaMostrar, // Mostrar el stock modificado si existe, sino el del sistema
             CantidadInventario = producto.CantidadInventario ?? producto.StockActual ?? 0
         };
         
@@ -3238,16 +3257,13 @@ input[class*="fast-number"] {
         _focusStockInModal = true; // Marcar para enfocar el campo de stock
         StateHasChanged();
         
-        // En móviles, seleccionar el texto del stock actual
-        if (IsMobileScreen())
+        // Seleccionar el texto del stock actual (tanto en móviles como desktop)
+        await Task.Delay(100); // Pequeño delay para asegurar que la modal esté renderizada
+        try
         {
-            await Task.Delay(100); // Pequeño delay para asegurar que la modal esté renderizada
-            try
-            {
-                await JSRuntime.InvokeVoidAsync("selectTextInModal");
-            }
-            catch { }
+            await JSRuntime.InvokeVoidAsync("selectTextInModal");
         }
+        catch { }
     }
 
     // Calcular el nivel de jerarquía basado en el campo orden
@@ -3342,7 +3358,9 @@ input[class*="fast-number"] {
                 new() { Key = "stock", Label = "Stock Actual", IsVisible = true, Width = "120px", Order = 3, IsResizable = true },
                 new() { Key = "minimo", Label = "Mínimo", IsVisible = false, Width = "100px", Order = 4, IsResizable = true },
                 new() { Key = "sugerido", Label = "Sugerido", IsVisible = false, Width = "100px", Order = 5, IsResizable = true },
-                new() { Key = "codigoBarra", Label = "Código de barras", IsVisible = true, Width = "220px", Order = 6, IsResizable = true }
+                new() { Key = "codigoBarra", Label = "Código de barras", IsVisible = true, Width = "220px", Order = 6, IsResizable = true },
+                // NUEVA COLUMNA: Solo visible en móviles para mostrar "Stock Controlado: x"
+                new() { Key = "stockControlado", Label = "Stock Controlado", IsVisible = IsMobileScreen(), Width = "150px", Order = 7, IsResizable = false }
             };
         }
         return gridColumns;
@@ -3418,6 +3436,10 @@ input[class*="fast-number"] {
                     "minimo" => producto.StockMinimo?.ToString("N3") ?? "0",
                     "sugerido" => producto.StockSugerido?.ToString("N3") ?? "0",
                     "codigoBarra" => producto.Producto?.CodigoBarra ?? string.Empty,
+                    // NUEVA COLUMNA: Mostrar "Stock Controlado: x" en amarillo a la derecha en móviles (solo si tiene stock controlado)
+                    "stockControlado" => (producto.CantidadInventario.HasValue && producto.CantidadInventario != producto.StockActual) ?
+                        $"<span style='background-color: #ffc107; color: #000; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 0.8rem;'>Stock Controlado: {producto.CantidadInventario?.ToString("N0") ?? "0"}</span> <span style='color: #666; font-size: 0.8rem;'>({producto.StockActual?.ToString("N0") ?? "0"})</span>" :
+                        "",
                     _ => string.Empty
                 };
             }
@@ -3435,7 +3457,10 @@ input[class*="fast-number"] {
                             Value = (producto.CantidadInventario ?? producto.StockActual ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture),
                             OnInput = OnCantidadInput
                         } : 
-                        producto.StockActual?.ToString("N3") ?? "0",
+                        // SOLO REMARCAR EN AMARILLO si el producto tiene stock controlado (está en inventario)
+                        (producto.CantidadInventario.HasValue && producto.CantidadInventario != producto.StockActual) ?
+                            $"<span style='background-color: #ffc107; color: #000; padding: 2px 6px; border-radius: 3px; font-weight: bold;'>{producto.CantidadInventario?.ToString("N3") ?? "0"}</span> <span style='color: #666;'>({producto.StockActual?.ToString("N3") ?? "0"})</span>" :
+                            producto.StockActual?.ToString("N3") ?? "0",
                     "minimo" => producto.StockMinimo?.ToString("N3") ?? "0",
                     "sugerido" => producto.StockSugerido?.ToString("N3") ?? "0",
                     "codigoBarra" => producto.Producto?.CodigoBarra ?? string.Empty,
@@ -3511,7 +3536,9 @@ input[class*="fast-number"] {
                 new() { Key = "stock", Label = "Stock Actual", IsVisible = true },
                 new() { Key = "minimo", Label = "Mínimo", IsVisible = false },
                 new() { Key = "sugerido", Label = "Sugerido", IsVisible = false },
-                new() { Key = "codigoBarra", Label = "Código de barras", IsVisible = true }
+                new() { Key = "codigoBarra", Label = "Código de barras", IsVisible = true },
+                // NUEVA COLUMNA: Solo visible en móviles para mostrar "Stock Controlado: x"
+                new() { Key = "stockControlado", Label = "Stock Controlado", IsVisible = IsMobileScreen() }
             };
         }
 
@@ -3610,7 +3637,9 @@ input[class*="fast-number"] {
                     new() { Key = "stock", Label = "Stock Actual", IsVisible = true, Width = "120px", Order = 3, IsResizable = true },
                     new() { Key = "minimo", Label = "Mínimo", IsVisible = false, Width = "100px", Order = 4, IsResizable = true },
                     new() { Key = "sugerido", Label = "Sugerido", IsVisible = false, Width = "100px", Order = 5, IsResizable = true },
-                    new() { Key = "codigoBarra", Label = "Código de barras", IsVisible = true, Width = "220px", Order = 6, IsResizable = true }
+                    new() { Key = "codigoBarra", Label = "Código de barras", IsVisible = true, Width = "220px", Order = 6, IsResizable = true },
+                    // NUEVA COLUMNA: Solo visible en móviles para mostrar "Stock Controlado: x"
+                    new() { Key = "stockControlado", Label = "Stock Controlado", IsVisible = IsMobileScreen(), Width = "150px", Order = 7, IsResizable = false }
                 };
             }
 
@@ -4399,8 +4428,11 @@ input[class*="fast-number"] {
         const isMobile = window.innerWidth <= 768;
         console.log('🔍 ensureBarcodeFocus - isMobile:', isMobile, 'width:', window.innerWidth);
         
-        // Verificar si hay alguna modal abierta
-        const hasOpenModal = document.querySelector('.app-modal.show') !== null;
+        // Verificar si hay alguna modal abierta (múltiples selectores para mayor compatibilidad)
+        const hasOpenModal = document.querySelector('.app-modal.show') !== null || 
+                            document.querySelector('.modal.show') !== null ||
+                            document.querySelector('[data-bs-modal="true"]') !== null ||
+                            document.querySelector('.modal[style*="display: block"]') !== null;
         if (hasOpenModal) {
             console.log('🚫 Modal abierta detectada, no aplicando focus al textbox de código de barras');
             return;
@@ -4439,6 +4471,19 @@ input[class*="fast-number"] {
     // Función genérica para hacer focus por ID
     window.blazorFocusById = function(elementId) {
         console.log('🎯 blazorFocusById - Buscando elemento:', elementId);
+        
+        // Si es el textbox de código de barras, verificar si hay modales abiertas
+        if (elementId === 'barcodeInput') {
+            const hasOpenModal = document.querySelector('.app-modal.show') !== null || 
+                                document.querySelector('.modal.show') !== null ||
+                                document.querySelector('[data-bs-modal="true"]') !== null ||
+                                document.querySelector('.modal[style*="display: block"]') !== null;
+            if (hasOpenModal) {
+                console.log('🚫 Modal abierta detectada, no aplicando focus al textbox de código de barras');
+                return false;
+            }
+        }
+        
         const element = document.getElementById(elementId);
         if (element) {
             try {
@@ -4463,8 +4508,11 @@ input[class*="fast-number"] {
     window.focusBarcodeInput = function() {
         console.log('🎯 focusBarcodeInput - Aplicando focus al textbox de código de barras');
         
-        // Verificar si hay alguna modal abierta
-        const hasOpenModal = document.querySelector('.app-modal.show') !== null;
+        // Verificar si hay alguna modal abierta (múltiples selectores para mayor compatibilidad)
+        const hasOpenModal = document.querySelector('.app-modal.show') !== null || 
+                            document.querySelector('.modal.show') !== null ||
+                            document.querySelector('[data-bs-modal="true"]') !== null ||
+                            document.querySelector('.modal[style*="display: block"]') !== null;
         if (hasOpenModal) {
             console.log('🚫 Modal abierta detectada, no aplicando focus al textbox de código de barras');
             return false;
@@ -4847,8 +4895,11 @@ input[class*="fast-number"] {
     window.autoFocusBarcode = function() {
         console.log('🎯 autoFocusBarcode - Aplicando focus automático al textbox de código de barras');
         
-        // Verificar si hay alguna modal abierta antes de aplicar focus
-        const hasOpenModal = document.querySelector('.app-modal.show') !== null;
+        // Verificar si hay alguna modal abierta antes de aplicar focus (múltiples selectores para mayor compatibilidad)
+        const hasOpenModal = document.querySelector('.app-modal.show') !== null || 
+                            document.querySelector('.modal.show') !== null ||
+                            document.querySelector('[data-bs-modal="true"]') !== null ||
+                            document.querySelector('.modal[style*="display: block"]') !== null;
         if (hasOpenModal) {
             console.log('🚫 Modal abierta detectada, no aplicando focus automático al textbox de código de barras');
             return;
