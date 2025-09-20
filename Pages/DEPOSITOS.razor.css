@@ -3620,6 +3620,11 @@
     .btn-text {
         display: none;
     }
+    
+    /* Mostrar texto del botón de inventario en móviles */
+    #inventarioButton .btn-text {
+        display: inline !important;
+    }
 
     .load-btn i {
         font-size: 1.2rem;

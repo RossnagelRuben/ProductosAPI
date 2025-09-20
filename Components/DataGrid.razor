@@ -324,11 +324,16 @@
             line-height: 1.25 !important;
         }
         
-        /* ELIMINAR CUALQUIER ESPACIO SOBRANTE EN MÓVILES */
-        .data-grid-container {
-            margin-bottom: 0 !important;
-            padding-bottom: 0 !important;
-        }
+    /* Mostrar texto del botón ENVIAR INVENTARIO en móviles */
+    .data-grid-header .btn-success .btn-text {
+        display: inline !important;
+    }
+    
+    /* ELIMINAR CUALQUIER ESPACIO SOBRANTE EN MÓVILES */
+    .data-grid-container {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
+    }
         
         .data-grid-content {
             margin-bottom: 0 !important;
@@ -447,7 +452,12 @@
             <h6 class="mb-0">@Title</h6>
             <div class="d-flex gap-2">
                 <button class="btn btn-sm btn-success" @onclick="OpenInventoryModal">
-                    <i class="oi oi-paperclip"></i> <span class="btn-text">ENVIAR INVENTARIO</span>
+                    <i class="oi oi-paperclip"></i> 
+                    <span class="btn-text">ENVIAR INVENTARIO</span>
+                    @if (inventoryItems.Count > 0)
+                    {
+                        <span class="ms-1">(@inventoryItems.Count)</span>
+                    }
                 </button>
                 <button class="btn btn-sm btn-outline-primary" @onclick="OpenColumnConfig">
                     <i class="oi oi-cog"></i> <span class="btn-text">Configurar columnas</span>
@@ -576,7 +586,7 @@
 </AppModal>
 
 <!-- Modal de Envío de Inventario -->
-<AppModal IsOpen="showInventoryModal" Title="Enviar Inventario" OnClose="() => showInventoryModal = false">
+<AppModal IsOpen="showInventoryModal" Title="Enviar Inventario" OnClose="CloseInventoryModal">
     <ChildContent>
         <div class="inventory-content">
             <p class="text-muted mb-3 inventory-description">Productos escaneados con sus cantidades actuales:</p>
@@ -821,7 +831,16 @@
     {
         if (firstRender)
         {
-            await JSRuntime.InvokeVoidAsync("initDataGridResponsive");
+            try
+            {
+                // Pequeño delay para asegurar que el DOM esté completamente renderizado
+                await Task.Delay(100);
+                await JSRuntime.InvokeVoidAsync("initDataGridResponsive");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error inicializando DataGrid responsive: {ex.Message}");
+            }
         }
     }
 
@@ -831,6 +850,26 @@
         showInventoryModal = true;
         inventorySentSuccessfully = false; // Resetear estado de éxito
         StateHasChanged();
+    }
+
+    private async Task CloseInventoryModal()
+    {
+        showInventoryModal = false;
+        inventorySentSuccessfully = false;
+        StateHasChanged();
+        
+        // Hacer focus al textbox de código de barras después de cerrar la modal
+        await Task.Delay(300); // Delay para asegurar que la modal se cierre completamente
+        
+        try 
+        { 
+            await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput");
+            Console.WriteLine("✅ Focus restaurado al textbox de código de barras después de cerrar modal de inventario");
+        } 
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error restaurando focus después de cerrar modal de inventario: {ex.Message}");
+        }
     }
 
     public async Task AddInventoryItem(string barcode, string productName, string rubroCodigo, decimal currentStock, decimal inventoryStock)
@@ -1000,8 +1039,7 @@
                 
                 // Cerrar modal después de 2 segundos
                 await Task.Delay(2000);
-                showInventoryModal = false;
-                inventorySentSuccessfully = false;
+                await CloseInventoryModal();
             }
             else
             {

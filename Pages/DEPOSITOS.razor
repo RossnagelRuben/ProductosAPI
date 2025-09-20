@@ -1526,7 +1526,7 @@ input[class*="fast-number"] {
                        @onkeypress="OnBarcodeKeyPress"
                        @onfocus="OnBarcodeFocus"
                        @onblur="OnBarcodeBlur"
-                       inputmode="none" />
+                       inputmode="numeric" />
 
                 <!-- Botón QR -->
                 <button class="btn btn-outline-success"
@@ -1740,13 +1740,13 @@ input[class*="fast-number"] {
                                 <!-- PAGINACIÓN SOLO EN PANTALLAS GRANDES - COMPLETAMENTE OCULTA EN MÓVILES -->
                                 <div class="d-none d-md-flex" style="justify-content: space-between; align-items: center; padding: 0.5rem; background: #f8f9fa; border-bottom: 1px solid #dee2e6;">
                                     <div>
-                                        <button id="inventarioButton" class="btn btn-sm btn-success" disabled="@isTogglingInventory" @onclick="ToggleInventario">
+@*                                         <button id="inventarioButton" class="btn btn-sm btn-success" disabled="@isTogglingInventory" @onclick="ToggleInventario">
                                             @if (isTogglingInventory)
                                             {
                                                 <span class="spinner-border spinner-border-sm me-1"></span>
                                             }
                                             <i class="oi oi-check"></i> @(inventarioEditable ? "Finalizar inventario" : "Realizar inventario")
-                                        </button>
+                                        </button> *@
                                         <button class="btn btn-sm btn-outline-primary" @onclick="ToggleVirtualization">
                                             <i class="oi @(_useVirtualization ? "oi-eye" : "oi-eye")"></i>
                                             @(_useVirtualization ? "Ver todos" : "Paginación")
@@ -2025,12 +2025,35 @@ input[class*="fast-number"] {
 
     private async Task OnBarcodeFocus(FocusEventArgs e)
     {
-        // Cuando el usuario hace focus, permitir el teclado temporalmente
+        // Verificar si hay modales abiertas usando JavaScript para mayor precisión
         try
         {
-            await JSRuntime.InvokeVoidAsync("enableBarcodeKeyboard");
+            var hasModal = await JSRuntime.InvokeAsync<bool>("hasOpenModal");
+            if (!hasModal)
+            {
+                await JSRuntime.InvokeVoidAsync("enableBarcodeKeyboard");
+            }
+            else
+            {
+                Console.WriteLine("🚫 Modal abierta detectada, no habilitando teclado de código de barras");
+            }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error verificando estado de modales: {ex.Message}");
+            // Fallback: usar la verificación C# si JavaScript falla
+            if (!showProductoModal && !showQRModal)
+            {
+                try
+                {
+                    await JSRuntime.InvokeVoidAsync("enableBarcodeKeyboard");
+                }
+                catch (Exception ex2)
+                {
+                    Console.WriteLine($"Error habilitando teclado: {ex2.Message}");
+                }
+            }
+        }
     }
 
     private async Task OnBarcodeBlur(FocusEventArgs e)
@@ -2081,9 +2104,26 @@ input[class*="fast-number"] {
         barcodeInput = string.Empty;
         await InvokeAsync(StateHasChanged);
         // Solo hacer focus si no hay modal abierta
-        if (!showProductoModal && !showQRModal)
+        try
         {
-            try { await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput"); } catch { }
+            var hasModal = await JSRuntime.InvokeAsync<bool>("hasOpenModal");
+            if (!hasModal)
+            {
+                await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput");
+            }
+            else
+            {
+                Console.WriteLine("🚫 Modal abierta detectada, no aplicando focus al textbox de código de barras");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error verificando estado de modales: {ex.Message}");
+            // Fallback: usar la verificación C# si JavaScript falla
+            if (!showProductoModal && !showQRModal)
+            {
+                try { await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput"); } catch { }
+            }
         }
     }
 
@@ -2094,18 +2134,26 @@ input[class*="fast-number"] {
         productoModal = null;
         
         // Restaurar focus al textbox de código de barras después de cerrar la modal
-        await Task.Delay(100); // Pequeño delay para asegurar que la modal se cierre completamente
+        await Task.Delay(300); // Delay más largo para asegurar que la modal se cierre completamente
+        
+        // Hacer focus al textbox de código de barras (verificación simple con C#)
         try 
         { 
-            await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput"); 
+            await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput");
+            Console.WriteLine("✅ Focus restaurado al textbox de código de barras después de cerrar modal de producto");
         } 
-        catch { }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error restaurando focus después de cerrar modal: {ex.Message}");
+        }
     }
 
     private async Task OnModalStockKeyPress(KeyboardEventArgs e)
     {
+        Console.WriteLine($"🔑 OnModalStockKeyPress - Tecla presionada: {e.Key}");
         if (e.Key == "Enter")
         {
+            Console.WriteLine("🔑 Enter presionado en modal de stock - Guardando producto...");
             await GuardarProductoModal();
         }
     }
@@ -2137,6 +2185,20 @@ input[class*="fast-number"] {
         
         showProductoModal = false;
         await InvokeAsync(StateHasChanged);
+        
+        // Hacer focus al textbox de código de barras después de cerrar la modal
+        await Task.Delay(300); // Delay más largo para asegurar que la modal se cierre completamente
+        
+        // Hacer focus al textbox de código de barras (verificación simple con C#)
+        try 
+        { 
+            await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput");
+            Console.WriteLine("✅ Focus restaurado al textbox de código de barras después de guardar producto");
+        } 
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error restaurando focus después de guardar producto: {ex.Message}");
+        }
     }
 
 
@@ -2664,6 +2726,10 @@ input[class*="fast-number"] {
 
     private int VisibleNodeCount => rootNodes?.Count(n => n.IsVisible) ?? 0;
     private IEnumerable<ProductoStock> productosFiltrados => FilterProductos();
+    
+    // Contar productos que están en inventario (con CantidadInventario modificada)
+    private int ProductosEnInventarioCount => productosSeleccionados.Count(p => 
+        p.CantidadInventario.HasValue && p.CantidadInventario != p.StockActual);
 
     private async Task ExpandAll()
     {
@@ -2853,14 +2919,21 @@ input[class*="fast-number"] {
                 _currentPage = 0;
                 
                 // Al finalizar la carga y mostrar todos, enfocar textbox de código de barras
-                // Solo hacer focus si no hay modal abierta
-                if (!showProductoModal)
+                // Solo hacer focus si no hay modal abierta (verificación simple)
+                if (!showProductoModal && !showQRModal)
                 {
                     try { 
                         await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput"); 
                         // Asegurar focus en móviles también
                         await JSRuntime.InvokeVoidAsync("ensureBarcodeFocus");
-                    } catch { }
+                        Console.WriteLine("✅ Focus aplicado al textbox de código de barras después de cargar productos");
+                    } catch (Exception ex) {
+                        Console.WriteLine($"Error aplicando focus: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("🚫 Modal abierta detectada, no aplicando focus al textbox de código de barras");
                 }
                 // Actualizar estado de móvil siempre
                 try {
@@ -3235,6 +3308,18 @@ input[class*="fast-number"] {
             {
                 // Mostrar mensaje si no tiene código de barras
                 await JSRuntime.InvokeVoidAsync("alert", "Este producto no tiene código de barras configurado.");
+                
+                // Hacer focus al textbox de código de barras después del alert
+                await Task.Delay(100); // Pequeño delay para asegurar que el alert se cierre
+                try 
+                { 
+                    await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput");
+                    Console.WriteLine("✅ Focus restaurado al textbox de código de barras después de mensaje de producto sin código de barras");
+                } 
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error restaurando focus después de mensaje de producto sin código de barras: {ex.Message}");
+                }
             }
         }
     }
@@ -3710,12 +3795,26 @@ input[class*="fast-number"] {
             StateHasChanged();
             
             // Restaurar focus al textbox de código de barras después de cerrar la modal
-            await Task.Delay(100); // Pequeño delay para asegurar que la modal se cierre completamente
+            await Task.Delay(300); // Delay más largo para asegurar que la modal se cierre completamente
+            
+            // Verificar que la modal realmente se cerró antes de hacer focus
             try 
             { 
-                await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput"); 
+                var hasModal = await JSRuntime.InvokeAsync<bool>("hasOpenModal");
+                if (!hasModal)
+                {
+                    await JSRuntime.InvokeVoidAsync("blazorFocusById", "barcodeInput");
+                    Console.WriteLine("✅ Focus restaurado al textbox de código de barras después de cerrar modal QR");
+                }
+                else
+                {
+                    Console.WriteLine("⚠️ Modal aún abierta, no aplicando focus al textbox de código de barras");
+                }
             } 
-            catch { }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error restaurando focus después de cerrar modal QR: {ex.Message}");
+            }
         }
         catch (Exception ex)
         {
@@ -4423,19 +4522,47 @@ input[class*="fast-number"] {
         }
     };
 
+    // Función mejorada para detectar modales abiertas
+    window.hasOpenModal = function() {
+        // Verificar múltiples tipos de modales y estados
+        const modalSelectors = [
+            '.app-modal-backdrop', // Modal personalizada
+            '.app-modal.show',
+            '.modal.show',
+            '.modal[style*="display: block"]',
+            '[data-bs-modal="true"]',
+            '.modal-backdrop.show',
+            // Verificar si el body tiene overflow hidden (indicador de modal abierta)
+            document.body.style.overflow === 'hidden'
+        ];
+        
+        // Verificar si hay elementos de modal visibles
+        const hasVisibleModal = modalSelectors.some(selector => {
+            if (typeof selector === 'boolean') return selector;
+            return document.querySelector(selector) !== null;
+        });
+        
+        // Verificar también si hay algún modal con z-index alto (modal activa)
+        const modals = document.querySelectorAll('.app-modal, .modal');
+        const hasActiveModal = Array.from(modals).some(modal => {
+            const style = window.getComputedStyle(modal);
+            return style.display !== 'none' && 
+                   style.visibility !== 'hidden' && 
+                   parseInt(style.zIndex) > 1000;
+        });
+        
+        return hasVisibleModal || hasActiveModal;
+    };
+
     // Función para asegurar focus en el textbox de código de barras
     window.ensureBarcodeFocus = function() {
         const isMobile = window.innerWidth <= 768;
         console.log('🔍 ensureBarcodeFocus - isMobile:', isMobile, 'width:', window.innerWidth);
         
-        // Verificar si hay alguna modal abierta (múltiples selectores para mayor compatibilidad)
-        const hasOpenModal = document.querySelector('.app-modal.show') !== null || 
-                            document.querySelector('.modal.show') !== null ||
-                            document.querySelector('[data-bs-modal="true"]') !== null ||
-                            document.querySelector('.modal[style*="display: block"]') !== null;
-        if (hasOpenModal) {
+        // Verificar si hay alguna modal abierta usando la función mejorada
+        if (window.hasOpenModal()) {
             console.log('🚫 Modal abierta detectada, no aplicando focus al textbox de código de barras');
-            return;
+            return false;
         }
         
         // Aplicar focus en todas las pantallas, no solo móviles
@@ -4452,19 +4579,25 @@ input[class*="fast-number"] {
                 // Verificar que el focus se aplicó correctamente
                 if (document.activeElement === barcodeInput) {
                     console.log('✅ Focus aplicado correctamente al textbox de código de barras');
+                    return true;
                 } else {
                     console.log('⚠️ Focus no se aplicó correctamente, reintentando...');
                     // Reintentar después de un breve delay
                     setTimeout(() => {
-                        barcodeInput.focus();
-                        barcodeInput.select();
+                        if (!window.hasOpenModal()) {
+                            barcodeInput.focus();
+                            barcodeInput.select();
+                        }
                     }, 100);
+                    return false;
                 }
             } catch (error) {
                 console.log('❌ Error aplicando focus al textbox de código de barras:', error);
+                return false;
             }
         } else {
             console.log('❌ No se encontró el textbox de código de barras');
+            return false;
         }
     };
 
@@ -4474,11 +4607,7 @@ input[class*="fast-number"] {
         
         // Si es el textbox de código de barras, verificar si hay modales abiertas
         if (elementId === 'barcodeInput') {
-            const hasOpenModal = document.querySelector('.app-modal.show') !== null || 
-                                document.querySelector('.modal.show') !== null ||
-                                document.querySelector('[data-bs-modal="true"]') !== null ||
-                                document.querySelector('.modal[style*="display: block"]') !== null;
-            if (hasOpenModal) {
+            if (window.hasOpenModal()) {
                 console.log('🚫 Modal abierta detectada, no aplicando focus al textbox de código de barras');
                 return false;
             }
@@ -4594,8 +4723,8 @@ input[class*="fast-number"] {
     window.enableBarcodeKeyboard = function() {
         const barcodeInput = document.getElementById('barcodeInput');
         if (barcodeInput) {
-            barcodeInput.setAttribute('inputmode', 'text');
-            console.log('⌨️ Teclado habilitado para el textbox de código de barras');
+            barcodeInput.setAttribute('inputmode', 'numeric');
+            console.log('⌨️ Teclado numérico habilitado para el textbox de código de barras');
         }
     };
 
@@ -4984,34 +5113,68 @@ input[class*="fast-number"] {
 
     // Función para hacer responsive la grilla de datos
     window.initDataGridResponsive = function() {
-        const dataGridContainers = document.querySelectorAll('.data-grid-container');
-        
-        function updateDataGridResponsive() {
-            const isSmallScreen = window.innerWidth <= 1024;
+        try {
+            console.log('🔧 Inicializando DataGrid responsive...');
             
-            dataGridContainers.forEach(container => {
-                if (isSmallScreen) {
-                    container.classList.add('responsive');
-                } else {
-                    container.classList.remove('responsive');
+            // Verificar que el DOM esté listo
+            if (document.readyState !== 'complete') {
+                console.log('⏳ DOM no está completo, esperando...');
+                setTimeout(() => window.initDataGridResponsive(), 100);
+                return;
+            }
+            
+            const dataGridContainers = document.querySelectorAll('.data-grid-container');
+            console.log(`🔧 Encontrados ${dataGridContainers.length} contenedores de DataGrid`);
+            
+            if (dataGridContainers.length === 0) {
+                console.log('⚠️ No se encontraron contenedores de DataGrid, reintentando en 200ms...');
+                setTimeout(() => window.initDataGridResponsive(), 200);
+                return;
+            }
+            
+            function updateDataGridResponsive() {
+                try {
+                    const isSmallScreen = window.innerWidth <= 1024;
+                    console.log(`🔧 Actualizando DataGrid responsive - Pantalla pequeña: ${isSmallScreen}`);
+                    
+                    dataGridContainers.forEach((container, index) => {
+                        if (container && container.classList) {
+                            if (isSmallScreen) {
+                                container.classList.add('responsive');
+                            } else {
+                                container.classList.remove('responsive');
+                            }
+                            console.log(`🔧 Contenedor ${index + 1} actualizado`);
+                        }
+                    });
+                } catch (error) {
+                    console.error('❌ Error en updateDataGridResponsive:', error);
                 }
-            });
-        }
-        
-        // Aplicar al cargar
-        updateDataGridResponsive();
-        
-        // Aplicar al redimensionar
-        window.addEventListener('resize', updateDataGridResponsive);
-        
-        // Aplicar cuando se abre/cierra el modo developer
-        const observer = new ResizeObserver(entries => {
+            }
+            
+            // Aplicar al cargar
             updateDataGridResponsive();
-        });
-        
-        dataGridContainers.forEach(container => {
-            observer.observe(container);
-        });
+            
+            // Aplicar al redimensionar
+            window.addEventListener('resize', updateDataGridResponsive);
+            
+            // Aplicar cuando se abre/cierra el modo developer
+            if (window.ResizeObserver) {
+                const observer = new ResizeObserver(entries => {
+                    updateDataGridResponsive();
+                });
+                
+                dataGridContainers.forEach(container => {
+                    if (container) {
+                        observer.observe(container);
+                    }
+                });
+            }
+            
+            console.log('✅ DataGrid responsive inicializado correctamente');
+        } catch (error) {
+            console.error('❌ Error inicializando DataGrid responsive:', error);
+        }
     };
 
     // ========================================
