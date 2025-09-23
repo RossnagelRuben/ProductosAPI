@@ -32,7 +32,9 @@ namespace BlazorApp_ProductosAPI.Services
         private readonly IJSRuntime _jsRuntime;
         private const string TOKEN_USER_API_URL = "https://drrsystemas4.azurewebsites.net/Auth/GetTokenUser";
         private const string TOKEN_DRR = "4a7183cf-9515-4d87-a9f1-a9e1f952cc7c";
-        private const string TOKEN_DEV_FIXED = "E1F018DA-3ECD-424D-B13E-AB3BD6950C83";
+        //private const string TOKEN_DEV_FIXED = "E1F018DA-3ECD-424D-B13E-AB3BD6950C83"; //Empresa DEMINISONES
+        private const string TOKEN_DEV_FIXED = "4FE21E79-FFF1-4B50-941E-BD3CE2DF84C9"; //Empresa CURSOS
+        
         private string _lastRawResponse = string.Empty;
         private string _lastRequestInfo = string.Empty;
 
@@ -232,17 +234,31 @@ namespace BlazorApp_ProductosAPI.Services
                 _httpClient.DefaultRequestHeaders.Clear();
                 _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {tokenDev}");
 
-                Console.WriteLine($"🔐 Validando credenciales con TOKEN DEV fijo: {tokenDev}");
-                Console.WriteLine($"👤 Usuario: {user}");
-                Console.WriteLine($"📤 JSON enviado a GetTokenUser: {json}");
+                // Logs de inicio del proceso
+                await _jsRuntime.InvokeVoidAsync("console.log", "🔐 === INICIO PROCESO LOGIN ===");
+                await _jsRuntime.InvokeVoidAsync("console.log", $"🔐 Validando credenciales con TOKEN DEV fijo: {tokenDev}");
+                await _jsRuntime.InvokeVoidAsync("console.log", $"👤 Usuario: {user}");
+                await _jsRuntime.InvokeVoidAsync("console.log", $"📤 JSON enviado a GetTokenUser: {json}");
+                await _jsRuntime.InvokeVoidAsync("console.log", $"🌐 URL API: {TOKEN_USER_API_URL}");
 
                 var response = await _httpClient.PostAsync(TOKEN_USER_API_URL, content);
 
+                // Guardar información de la respuesta para debug
+                _lastRawResponse = $"Status Code: {response.StatusCode}\n";
+                _lastRawResponse += $"Headers: {string.Join(", ", response.Headers.Select(h => $"{h.Key}: {string.Join(", ", h.Value)}"))}\n";
+                
+                var responseContent = await response.Content.ReadAsStringAsync();
+                _lastRawResponse += $"Content: {responseContent}";
+                
+                // Logs detallados en consola del navegador
+                await _jsRuntime.InvokeVoidAsync("console.log", "🔍 === RESPUESTA API GetTokenUser ===");
+                await _jsRuntime.InvokeVoidAsync("console.log", $"📊 Status Code: {response.StatusCode}");
+                await _jsRuntime.InvokeVoidAsync("console.log", $"📋 Headers: {string.Join(", ", response.Headers.Select(h => $"{h.Key}: {string.Join(", ", h.Value)}"))}");
+                await _jsRuntime.InvokeVoidAsync("console.log", $"📄 Content: {responseContent}");
+                await _jsRuntime.InvokeVoidAsync("console.log", "🔍 === FIN RESPUESTA API ===");
+
                 if (response.IsSuccessStatusCode)
                 {
-                    var responseContent = await response.Content.ReadAsStringAsync();
-                    Console.WriteLine($"TOKEN USER API Response: {responseContent}");
-
                     var tokenUserResponse = JsonSerializer.Deserialize<TokenUserResponse>(responseContent, new JsonSerializerOptions
                     {
                         PropertyNameCaseInsensitive = true
@@ -281,7 +297,14 @@ namespace BlazorApp_ProductosAPI.Services
                 else
                 {
                     var errorContent = await response.Content.ReadAsStringAsync();
-                    Console.WriteLine($"❌ Error en API GetTokenUser: {response.StatusCode} - {errorContent}");
+                    
+                    // Logs detallados para errores en consola del navegador
+                    await _jsRuntime.InvokeVoidAsync("console.log", "❌ === ERROR API GetTokenUser ===");
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"📊 Status Code: {response.StatusCode}");
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"📋 Headers: {string.Join(", ", response.Headers.Select(h => $"{h.Key}: {string.Join(", ", h.Value)}"))}");
+                    await _jsRuntime.InvokeVoidAsync("console.log", $"📄 Error Content: {errorContent}");
+                    await _jsRuntime.InvokeVoidAsync("console.log", "🔍 === FIN ERROR API ===");
+                    
                     return new TokenUserResult
                     {
                         Success = false,
@@ -291,7 +314,11 @@ namespace BlazorApp_ProductosAPI.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"❌ Excepción obteniendo TOKEN USER: {ex.Message}");
+                await _jsRuntime.InvokeVoidAsync("console.log", "❌ === EXCEPCIÓN API GetTokenUser ===");
+                await _jsRuntime.InvokeVoidAsync("console.log", $"📄 Error Message: {ex.Message}");
+                await _jsRuntime.InvokeVoidAsync("console.log", $"📋 Stack Trace: {ex.StackTrace}");
+                await _jsRuntime.InvokeVoidAsync("console.log", "🔍 === FIN EXCEPCIÓN API ===");
+                
                 return new TokenUserResult
                 {
                     Success = false,

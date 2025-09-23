@@ -2,6 +2,7 @@
 @using BlazorApp_ProductosAPI.Components
 @using BlazorApp_ProductosAPI.Services
 @using System.Text.Json
+@using System.Text.Json.Serialization
 @using Microsoft.AspNetCore.Components
 @inject IJSRuntime JSRuntime
 @inject HttpClient Http
@@ -43,7 +44,7 @@
         color: #495057;
         border-right: 1px solid #dee2e6;
         position: relative;
-        cursor: col-resize;
+        cursor: default;
         user-select: none;
         text-align: left;
     }
@@ -60,7 +61,7 @@
         bottom: 0;
         width: 4px;
         background: transparent;
-        cursor: col-resize;
+        cursor: default;
     }
 
     .data-grid-th:hover::after {
@@ -497,9 +498,7 @@
                         {
                             <th class="data-grid-th" 
                                 style="@(column.Width != null ? $"width: {column.Width}" : "")"
-                                data-column="@column.Key"
-                                @oncontextmenu="(e) => OnColumnContextMenu(e, column)"
-                                @onmousedown="(e) => StartColumnResize(e, column)">
+                                data-column="@column.Key">
                                 @column.Label
                             </th>
                         }
@@ -508,7 +507,7 @@
                 <tbody class="data-grid-tbody">
                     @foreach (var item in Data)
                     {
-                        <tr class="data-grid-tr" @onclick="() => OnRowClick.InvokeAsync(item)">
+                        <tr class="data-grid-tr" @onclick="@(() => { if (OnRowClick.HasDelegate) OnRowClick.InvokeAsync(item); })">
                         @foreach (var column in VisibleColumns)
                         {
                             <td class="data-grid-td" 
@@ -533,7 +532,7 @@
                         <!-- Botón de selección para móviles - SOLO VISIBLE EN PANTALLAS PEQUEÑAS -->
                         <td class="data-grid-td data-grid-action-cell d-md-none" data-label="Acción">
                             <button class="btn btn-sm btn-outline-primary data-grid-select-btn" 
-                                    @onclick="() => OnRowClick.InvokeAsync(item)"
+                                    @onclick="@(() => { if (OnRowClick.HasDelegate) OnRowClick.InvokeAsync(item); })"
                                     @onclick:stopPropagation="true"
                                     title="Seleccionar producto">
                                 <i class="oi oi-check"></i>
@@ -706,6 +705,14 @@
     [Parameter] public EventCallback<object> OnRowClick { get; set; }
     [Parameter] public EventCallback OnRefresh { get; set; }
     [Parameter] public EventCallback<(string barcode, decimal newStock)> OnInventoryStockChanged { get; set; }
+    [Parameter] public EventCallback OnInventorySent { get; set; }
+    
+    /// <summary>
+    /// ID del depósito obtenido de la API de depósitos basado en el orden de la ubicación seleccionada
+    /// Se usa para enviar el inventario con el depositoID correcto en lugar del valor hardcodeado
+    /// </summary>
+    [Parameter] public int? DepositoID { get; set; }
+    
     [Parameter] public Func<object, string, object>? GetValueFunction { get; set; }
 
     private bool showColumnConfigModal = false;
@@ -872,13 +879,14 @@
         }
     }
 
-    public async Task AddInventoryItem(string barcode, string productName, string rubroCodigo, decimal currentStock, decimal inventoryStock)
+    public async Task AddInventoryItem(string barcode, string productName, string rubroCodigo, decimal currentStock, decimal inventoryStock, int codigoID = 0)
     {
         var existingItem = inventoryItems.FirstOrDefault(x => x.Barcode == barcode);
         if (existingItem != null)
         {
             existingItem.CurrentStock = currentStock; // Actualizar stock si ya existe
             existingItem.InventoryStock = inventoryStock; // Actualizar stock de inventario
+            existingItem.CodigoID = codigoID; // Actualizar codigoID
             
             // Notificar cambio si el stock cambió
             if (existingItem.InventoryStock != inventoryStock)
@@ -894,7 +902,8 @@
                 ProductName = productName,
                 RubroCodigo = rubroCodigo,
                 CurrentStock = currentStock,
-                InventoryStock = inventoryStock
+                InventoryStock = inventoryStock,
+                CodigoID = codigoID
             });
             
             // Notificar nuevo item
@@ -970,87 +979,28 @@
                 throw new Exception("No se encontró el token final de autenticación. Por favor, inicie sesión nuevamente.");
             }
 
-            // Preparar los datos para enviar
-            var inventoryRequest = new InventoryRequest
-            {
-                FechaHora = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                ProveedorID = null,
-                DetalleRecepcion = null,
-                DepositoID = 0,
-                TalonarioID = 0,
-                NroComprobante = 0,
-                SectorID = null,
-                SucursalID = null,
-                ProyectoID = null,
-                AlmaUserID = null,
-                Total = null,
-                VehiculoID = null,
-                ConductorID = null,
-                Items = inventoryItems.Select(item => new InventoryItemRequest
-                {
-                    CodigoID = 0, // Este campo debería venir del producto si está disponible
-                    Cantidad = item.InventoryStock,
-                    ImporteUnidad = null,
-                    TotalItem = null,
-                    ItemRecepcionEstadoID = 0,
-                    Detalle = null,
-                    ProductoUbicacionID = null
-                }).ToList(),
-                ItemsNoHallados = new List<ItemNoHalladoRequest>() // Por ahora vacío, se puede implementar lógica para productos no encontrados
-            };
-
-            // Serializar a JSON
-            var json = JsonSerializer.Serialize(inventoryRequest, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-            });
-
-            Console.WriteLine($"📤 JSON a enviar: {json}");
             Console.WriteLine($"🔑 Token Final: {tokenFinal}");
             Console.WriteLine($"📊 Items a enviar: {inventoryItems.Count}");
 
-            // Configurar headers
-            Http.DefaultRequestHeaders.Clear();
-            Http.DefaultRequestHeaders.Add("Authorization", $"Bearer {tokenFinal}");
-            Http.DefaultRequestHeaders.Add("Idempotency-Key", Guid.NewGuid().ToString());
+            // PASO 1: Obtener el inventarioID
+            var inventarioID = await ObtenerInventarioID(tokenFinal);
+            Console.WriteLine($"✅ InventarioID obtenido: {inventarioID}");
 
-            // Crear el contenido con el Content-Type correcto
-            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-
-            // Enviar a la API
-            var apiUrl = "https://drrsystemas4.azurewebsites.net/Operaciones/Recepcion"; // URL de la API
-            Console.WriteLine($"🌐 Enviando a: {apiUrl}");
+            // PASO 2: Enviar la hoja adicional con los items
+            await EnviarHojaAdicional(tokenFinal, inventarioID);
             
-            var response = await Http.PostAsync(apiUrl, content);
+            inventorySentSuccessfully = true;
+            Console.WriteLine("✅ Inventario enviado exitosamente");
             
-            Console.WriteLine($"📡 Respuesta recibida - Status: {response.StatusCode}");
-            Console.WriteLine($"📡 Headers de respuesta: {string.Join(", ", response.Headers.Select(h => $"{h.Key}: {string.Join(", ", h.Value)}"))}");
-
-            if (response.IsSuccessStatusCode)
-            {
-                var responseContent = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"✅ RESPUESTA EXITOSA: {responseContent}");
-                
-                inventorySentSuccessfully = true;
-                Console.WriteLine("✅ Inventario enviado exitosamente");
-                
-                // Limpiar lista después del envío exitoso
-                inventoryItems.Clear();
-                
-                // Cerrar modal después de 2 segundos
-                await Task.Delay(2000);
-                await CloseInventoryModal();
-            }
-            else
-            {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"❌ ERROR DEL SERVIDOR:");
-                Console.WriteLine($"❌ Status Code: {response.StatusCode}");
-                Console.WriteLine($"❌ Error Content: {errorContent}");
-                Console.WriteLine($"❌ Reason Phrase: {response.ReasonPhrase}");
-                
-                throw new Exception($"Error del servidor: {response.StatusCode} - {errorContent}");
-            }
+            // Notificar al componente padre para refrescar la grilla
+            await OnInventorySent.InvokeAsync();
+            
+            // Limpiar lista después del envío exitoso
+            inventoryItems.Clear();
+            
+            // Cerrar modal después de 3 segundos
+            await Task.Delay(3000);
+            await CloseInventoryModal();
         }
         catch (Exception ex)
         {
@@ -1058,6 +1008,8 @@
             Console.WriteLine($"❌ Tipo: {ex.GetType().Name}");
             Console.WriteLine($"❌ Mensaje: {ex.Message}");
             Console.WriteLine($"❌ Stack Trace: {ex.StackTrace}");
+            
+            // Solo mostrar en consola, no en la interfaz
             
             // Mostrar mensaje de error al usuario
             await JSRuntime.InvokeVoidAsync("alert", $"Error enviando inventario: {ex.Message}");
@@ -1069,6 +1021,245 @@
         }
     }
 
+    private async Task<int> ObtenerInventarioID(string tokenFinal)
+    {
+        try
+        {
+            // Configurar headers para la primera API
+            Http.DefaultRequestHeaders.Clear();
+            Http.DefaultRequestHeaders.Add("Authorization", $"Bearer {tokenFinal}");
+            
+            // Generar Idempotency-Key con fecha y hora actual (formato más simple)
+            var idempotencyKey = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "_" + DateTime.Now.Ticks.ToString();
+            Http.DefaultRequestHeaders.Add("Idempotency-Key", idempotencyKey);
+
+            Console.WriteLine($"🔑 Idempotency-Key: {idempotencyKey}");
+            Console.WriteLine($"🔑 Authorization Header: Bearer {tokenFinal?.Substring(0, Math.Min(20, tokenFinal?.Length ?? 0))}...");
+
+            // Llamar a la API de inventario para obtener el inventarioID
+            var apiUrl = "https://drrsystemas4.azurewebsites.net/Operaciones/Inventario";
+            Console.WriteLine($"🌐 ====== LLAMADA API 1: OBTENER INVENTARIO ID ======");
+            Console.WriteLine($"🌐 URL: {apiUrl}");
+            Console.WriteLine($"🌐 MÉTODO: POST");
+            
+            // Crear un JSON con el formato correcto para obtener inventarioID
+            // Usar el DepositoID obtenido de la API de depósitos, o 4 como fallback si no está disponible
+            var depositoIDParaInventario = DepositoID ?? 4;
+            
+            Console.WriteLine($"🏢 ====== CONFIGURACIÓN DE INVENTARIO ======");
+            Console.WriteLine($"🏢 DepositoID recibido del componente padre: {DepositoID}");
+            Console.WriteLine($"🏢 DepositoID que se usará para el inventario: {depositoIDParaInventario}");
+            Console.WriteLine($"🏢 Nota: Si DepositoID es null, se usa 4 como valor por defecto");
+            Console.WriteLine($"🕐 ====== CONFIGURACIÓN DE HORARIOS (API 1) ======");
+            Console.WriteLine($"🕐 Hora local (DateTime.Now): {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            Console.WriteLine($"🕐 Hora UTC (DateTime.UtcNow): {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}");
+            Console.WriteLine($"🕐 Diferencia de zona horaria: {TimeZoneInfo.Local.BaseUtcOffset}");
+            Console.WriteLine($"🕐 FechaHora que se enviará en JSON: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fffZ}");
+            
+            var inventarioRequest = new 
+            {
+                fechaHora = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"), // Usar DateTime.Now para hora local en lugar de UTC
+                depositoID = depositoIDParaInventario, // Usar el DepositoID dinámico en lugar del hardcodeado
+                talonarioID = (int?)null,
+                nroComprobante = (int?)null,
+                detalle = (string?)null,
+                sucursalID = (int?)null,
+                sectorID = (int?)null,
+                estadoID = 0
+            };
+            var json = JsonSerializer.Serialize(inventarioRequest);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            
+            Console.WriteLine($"📤 HEADERS ENVIADOS:");
+            Console.WriteLine($"📤   Authorization: Bearer {tokenFinal?.Substring(0, Math.Min(20, tokenFinal?.Length ?? 0))}...");
+            Console.WriteLine($"📤   Idempotency-Key: {idempotencyKey}");
+            Console.WriteLine($"📤   Content-Type: application/json");
+            Console.WriteLine($"📤 JSON ENVIADO: {json}");
+            Console.WriteLine($"📤 TAMAÑO DEL BODY: {json.Length} caracteres");
+            
+            var response = await Http.PostAsync(apiUrl, content);
+            
+            Console.WriteLine($"📡 ====== RESPUESTA API 1 ======");
+            Console.WriteLine($"📡 Status Code: {response.StatusCode}");
+            Console.WriteLine($"📡 Reason Phrase: {response.ReasonPhrase}");
+            Console.WriteLine($"📡 Headers de respuesta:");
+            foreach (var header in response.Headers)
+            {
+                Console.WriteLine($"📡   {header.Key}: {string.Join(", ", header.Value)}");
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"✅ JSON RECIBIDO: {responseContent}");
+                Console.WriteLine($"✅ TAMAÑO DE RESPUESTA: {responseContent.Length} caracteres");
+                
+                var inventarioResponse = JsonSerializer.Deserialize<InventarioResponse>(responseContent);
+                
+                Console.WriteLine($"🔍 DEBUG DESERIALIZACIÓN:");
+                Console.WriteLine($"🔍 inventarioResponse: {inventarioResponse != null}");
+                Console.WriteLine($"🔍 inventarioResponse.Status: {inventarioResponse?.Status}");
+                Console.WriteLine($"🔍 inventarioResponse.Data: {inventarioResponse?.Data != null}");
+                Console.WriteLine($"🔍 inventarioResponse.Data.InventarioID: {inventarioResponse?.Data?.InventarioID}");
+                
+                // Verificar si la API devolvió un error en el status
+                if (inventarioResponse?.Status?.ToLower() == "error")
+                {
+                    var apiErrorMessage = !string.IsNullOrEmpty(inventarioResponse.Message) ? 
+                        inventarioResponse.Message : 
+                        "Error desconocido de la API";
+                    
+                    Console.WriteLine($"❌ API devolvió error: {inventarioResponse.Status}");
+                    Console.WriteLine($"❌ Mensaje de error: {apiErrorMessage}");
+                    
+                    // Solo mostrar en consola, no en la interfaz
+                    
+                    throw new Exception($"Error de la API: {apiErrorMessage}");
+                }
+                
+                if (inventarioResponse?.Data?.InventarioID > 0)
+                {
+                    return inventarioResponse.Data.InventarioID;
+                }
+                else
+                {
+                    Console.WriteLine($"❌ InventarioID no válido en la respuesta: {inventarioResponse?.Data?.InventarioID}");
+                    throw new Exception("No se pudo obtener el inventarioID de la respuesta");
+                }
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"❌ ====== ERROR API 1 ======");
+                Console.WriteLine($"❌ Status Code: {response.StatusCode}");
+                Console.WriteLine($"❌ Reason Phrase: {response.ReasonPhrase}");
+                Console.WriteLine($"❌ JSON DE ERROR: {errorContent}");
+                Console.WriteLine($"❌ TAMAÑO DE ERROR: {errorContent.Length} caracteres");
+                Console.WriteLine($"❌ Request Headers enviados: Authorization=Bearer..., Idempotency-Key={idempotencyKey}");
+                
+                throw new Exception($"Error obteniendo inventarioID: {response.StatusCode} - {errorContent}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ EXCEPCIÓN EN ObtenerInventarioID:");
+            Console.WriteLine($"❌ Tipo: {ex.GetType().Name}");
+            Console.WriteLine($"❌ Mensaje: {ex.Message}");
+            Console.WriteLine($"❌ Stack Trace: {ex.StackTrace}");
+            throw;
+        }
+    }
+
+    private async Task EnviarHojaAdicional(string tokenFinal, int inventarioID)
+    {
+        try
+        {
+            Console.WriteLine($"🔄 Iniciando envío de hoja adicional con InventarioID: {inventarioID}");
+            Console.WriteLine($"📊 Cantidad de items a enviar: {inventoryItems.Count}");
+            
+            // Preparar los datos para la hoja adicional
+            var hojaAdicionalRequest = new HojaAdicionalRequest
+            {
+                InventarioID = inventarioID,
+                Items = inventoryItems.Select(item => new HojaAdicionalItem
+                {
+                    CodigoID = item.CodigoID, // Usar el codigoID real del producto
+                    Cantidad = item.InventoryStock,
+                    FechaHora = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"), // Usar DateTime.Now para hora local en lugar de UTC
+                    Detalle = null,
+                    ProductoUbicacionID = null
+                }).ToList()
+            };
+
+            // Serializar a JSON
+            var json = JsonSerializer.Serialize(hojaAdicionalRequest, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+
+            Console.WriteLine($"📦 ====== PRODUCTOS A ENVIAR ======");
+            Console.WriteLine($"📦 InventarioID: {inventarioID}");
+            Console.WriteLine($"📦 Cantidad de productos: {inventoryItems.Count}");
+            Console.WriteLine($"🕐 ====== CONFIGURACIÓN DE HORARIOS ======");
+            Console.WriteLine($"🕐 Hora local (DateTime.Now): {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            Console.WriteLine($"🕐 Hora UTC (DateTime.UtcNow): {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}");
+            Console.WriteLine($"🕐 Diferencia de zona horaria: {TimeZoneInfo.Local.BaseUtcOffset}");
+            Console.WriteLine($"🕐 FechaHora que se enviará en JSON: {DateTime.Now:yyyy-MM-ddTHH:mm:ss.fffZ}");
+            Console.WriteLine($"📦 Lista de productos:");
+            foreach (var item in inventoryItems)
+            {
+                Console.WriteLine($"📦   - {item.ProductName} (Código: {item.Barcode}) - CodigoID: {item.CodigoID} - Cantidad: {item.InventoryStock}");
+            }
+            Console.WriteLine($"📤 JSON COMPLETO HOJA ADICIONAL: {json}");
+
+            // Configurar headers para la segunda API
+            Http.DefaultRequestHeaders.Clear();
+            Http.DefaultRequestHeaders.Add("Authorization", $"Bearer {tokenFinal}");
+            
+            // Generar Idempotency-Key con fecha y hora actual (formato más simple)
+            var idempotencyKey = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "_" + DateTime.Now.Ticks.ToString();
+            Http.DefaultRequestHeaders.Add("Idempotency-Key", idempotencyKey);
+
+            Console.WriteLine($"🌐 ====== LLAMADA API 2: ENVIAR HOJA ADICIONAL ======");
+            Console.WriteLine($"🌐 URL: https://drrsystemas4.azurewebsites.net/Operaciones/Inventario");
+            Console.WriteLine($"🌐 MÉTODO: POST");
+            Console.WriteLine($"🔑 HEADERS ENVIADOS:");
+            Console.WriteLine($"🔑   Authorization: Bearer {tokenFinal?.Substring(0, Math.Min(20, tokenFinal?.Length ?? 0))}...");
+            Console.WriteLine($"🔑   Idempotency-Key: {idempotencyKey}");
+            Console.WriteLine($"🔑   Content-Type: application/json");
+
+            // Crear el contenido con el Content-Type correcto
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+            // Enviar a la API de hoja adicional (URL correcta)
+            var apiUrl = "https://drrsystemas4.azurewebsites.net/Operaciones/HojaAdicional";
+            Console.WriteLine($"📤 JSON ENVIADO: {json}");
+            Console.WriteLine($"📤 TAMAÑO DEL BODY: {json.Length} caracteres");
+            
+            var response = await Http.PostAsync(apiUrl, content);
+            
+            Console.WriteLine($"📡 ====== RESPUESTA API 2 ======");
+            Console.WriteLine($"📡 Status Code: {response.StatusCode}");
+            Console.WriteLine($"📡 Reason Phrase: {response.ReasonPhrase}");
+            Console.WriteLine($"📡 Headers de respuesta:");
+            foreach (var header in response.Headers)
+            {
+                Console.WriteLine($"📡   {header.Key}: {string.Join(", ", header.Value)}");
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"✅ JSON RECIBIDO: {responseContent}");
+                Console.WriteLine($"✅ TAMAÑO DE RESPUESTA: {responseContent.Length} caracteres");
+                
+                // Solo mostrar en consola, no en la interfaz
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"❌ ====== ERROR API 2 ======");
+                Console.WriteLine($"❌ Status Code: {response.StatusCode}");
+                Console.WriteLine($"❌ Reason Phrase: {response.ReasonPhrase}");
+                Console.WriteLine($"❌ JSON DE ERROR: {errorContent}");
+                Console.WriteLine($"❌ TAMAÑO DE ERROR: {errorContent.Length} caracteres");
+                Console.WriteLine($"❌ Request Headers enviados: Authorization=Bearer..., Idempotency-Key={idempotencyKey}");
+                
+                // Solo mostrar en consola, no en la interfaz
+                
+                throw new Exception($"Error enviando hoja adicional: {response.StatusCode} - {errorContent}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ EXCEPCIÓN EN EnviarHojaAdicional:");
+            Console.WriteLine($"❌ Tipo: {ex.GetType().Name}");
+            Console.WriteLine($"❌ Mensaje: {ex.Message}");
+            Console.WriteLine($"❌ Stack Trace: {ex.StackTrace}");
+            throw;
+        }
+    }
+
     // Clase para representar un item del inventario
     public class InventoryItem
     {
@@ -1077,9 +1268,46 @@
         public string RubroCodigo { get; set; } = string.Empty;
         public decimal CurrentStock { get; set; }
         public decimal InventoryStock { get; set; }
+        public int CodigoID { get; set; } = 0;
     }
 
     // Clases para el modelo de datos de la API
+    // Modelo para obtener el inventarioID
+    public class InventarioResponse
+    {
+        [JsonPropertyName("status")]
+        public string Status { get; set; } = string.Empty;
+        
+        [JsonPropertyName("message")]
+        public string? Message { get; set; }
+        
+        [JsonPropertyName("data")]
+        public InventarioData? Data { get; set; }
+    }
+
+    public class InventarioData
+    {
+        [JsonPropertyName("inventarioID")]
+        public int InventarioID { get; set; }
+    }
+
+    // Modelo para enviar la hoja adicional
+    public class HojaAdicionalRequest
+    {
+        public int InventarioID { get; set; }
+        public List<HojaAdicionalItem> Items { get; set; } = new();
+    }
+
+    public class HojaAdicionalItem
+    {
+        public int CodigoID { get; set; }
+        public decimal Cantidad { get; set; }
+        public string FechaHora { get; set; } = string.Empty;
+        public string? Detalle { get; set; }
+        public int? ProductoUbicacionID { get; set; }
+    }
+
+    // Clases legacy (mantenidas para compatibilidad)
     public class InventoryRequest
     {
         public string FechaHora { get; set; } = string.Empty;

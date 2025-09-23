@@ -69,9 +69,9 @@ namespace BlazorApp_ProductosAPI.Models
         public string? UserName { get; set; }
         public object? UsuarioPerfilID { get; set; }
         public int PerfilID { get; set; }
-        public int SucursalID { get; set; }
+        public string? SucursalID { get; set; }
         public object? ExeptoSucursal { get; set; }
-        public int SectorID { get; set; }
+        public string? SectorID { get; set; }
         public object? ExeptoSector { get; set; }
         public object? RestringirAccion { get; set; }
     }
@@ -82,9 +82,9 @@ namespace BlazorApp_ProductosAPI.Models
         public string? UserName { get; set; }
         public object? UsuarioPerfilID { get; set; }
         public int PerfilID { get; set; }
-        public int SucursalID { get; set; }
+        public string? SucursalID { get; set; }
         public object? ExeptoSucursal { get; set; }
-        public int SectorID { get; set; }
+        public string? SectorID { get; set; }
         public object? ExeptoSector { get; set; }
         public object? RestringirAccion { get; set; }
     }

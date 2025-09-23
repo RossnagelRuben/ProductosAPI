@@ -2,8 +2,12 @@
 @using BlazorApp_ProductosAPI.Models
 @using BlazorApp_ProductosAPI.Services
 @using BlazorApp_ProductosAPI.Components
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using System.Net.Http
 @inject UbicacionService UbicacionService
 @inject TreeBuilderService TreeBuilderService
+@inject HttpClient Http
  
  
 <style>
@@ -1788,7 +1792,9 @@ input[class*="fast-number"] {
                                 ShowRefreshButton="false"
                                 GetValueFunction="@GetProductoValue"
                                 OnRowClick="@OnProductoSelected"
-                                OnInventoryStockChanged="@OnInventoryStockChanged" />
+                                OnInventoryStockChanged="@OnInventoryStockChanged"
+                                OnInventorySent="@OnInventorySent"
+                                DepositoID="@depositoIDActual" />
                             
                             }
                         </div>
@@ -1921,11 +1927,18 @@ input[class*="fast-number"] {
                 <video id="qr-video" style="width: 100%; height: 300px; border: 2px solid #dee2e6; border-radius: 8px; background: #f8f9fa;"></video>
             </div>
             
-            <!-- Botón para solicitar permisos manualmente -->
+            <!-- Botón para activar la cámara -->
             <div class="mt-3">
-                <button class="btn btn-primary" @onclick="SolicitarPermisosManualmente">
+                <button class="btn btn-primary" @onclick="ActivarCamara">
                     <i class="oi oi-camera-slr"></i> Activar Cámara
                 </button>
+            </div>
+            
+            <!-- Información de estado -->
+            <div class="mt-2">
+                <small class="text-muted">
+                    Estado: @if (isCameraActive) { <span class="text-success">Cámara Activa</span> } else { <span class="text-muted">Cámara Inactiva</span> }
+                </small>
             </div>
         </div>
     </ChildContent>
@@ -1933,13 +1946,126 @@ input[class*="fast-number"] {
 </AppModal>
 
 @code {
+    // ========================================
+    // MODELOS PARA API DE DEPÓSITOS
+    // ========================================
+    public class DepositosResponse
+    {
+        [JsonPropertyName("status")]
+        public string Status { get; set; } = string.Empty;
+        
+        [JsonPropertyName("pageNumber")]
+        public int PageNumber { get; set; }
+        
+        [JsonPropertyName("pageSize")]
+        public int PageSize { get; set; }
+        
+        [JsonPropertyName("totalPages")]
+        public int TotalPages { get; set; }
+        
+        [JsonPropertyName("totalRecords")]
+        public int TotalRecords { get; set; }
+        
+        [JsonPropertyName("data")]
+        public List<DepositoInfo> Data { get; set; } = new();
+    }
 
+    public class DepositoInfo
+    {
+        [JsonPropertyName("depositoID")]
+        public int DepositoID { get; set; }
+        
+        [JsonPropertyName("descripcion")]
+        public string Descripcion { get; set; } = string.Empty;
+        
+        [JsonPropertyName("domicilio")]
+        public string? Domicilio { get; set; }
+        
+        [JsonPropertyName("fechaControlStock")]
+        public DateTime? FechaControlStock { get; set; }
+        
+        [JsonPropertyName("encargadoPrinc")]
+        public EncargadoPrincipal? EncargadoPrinc { get; set; }
+        
+        [JsonPropertyName("ubicacionPrinc")]
+        public UbicacionPrincipal? UbicacionPrinc { get; set; }
+        
+        [JsonPropertyName("sucursal")]
+        public SucursalInfo? Sucursal { get; set; }
+        
+        [JsonPropertyName("sector")]
+        public object? Sector { get; set; }
+        
+        [JsonPropertyName("inhabilitado")]
+        public bool Inhabilitado { get; set; }
+        
+        [JsonPropertyName("detalle")]
+        public string? Detalle { get; set; }
+        
+        [JsonPropertyName("encargados")]
+        public List<EncargadoInfo> Encargados { get; set; } = new();
+    }
+
+    public class EncargadoPrincipal
+    {
+        [JsonPropertyName("encargDepositoID")]
+        public int EncargDepositoID { get; set; }
+        
+        [JsonPropertyName("empleadoID")]
+        public int EmpleadoID { get; set; }
+        
+        [JsonPropertyName("razonSocial")]
+        public string RazonSocial { get; set; } = string.Empty;
+    }
+
+    public class UbicacionPrincipal
+    {
+        [JsonPropertyName("productoUbicacionID")]
+        public int ProductoUbicacionID { get; set; }
+        
+        [JsonPropertyName("descripcion")]
+        public string Descripcion { get; set; } = string.Empty;
+        
+        [JsonPropertyName("orden")]
+        public string Orden { get; set; } = string.Empty;
+    }
+
+    public class SucursalInfo
+    {
+        [JsonPropertyName("sucursalID")]
+        public int SucursalID { get; set; }
+        
+        [JsonPropertyName("descripcion")]
+        public string Descripcion { get; set; } = string.Empty;
+    }
+
+    public class EncargadoInfo
+    {
+        [JsonPropertyName("stockTipo")]
+        public object? StockTipo { get; set; }
+        
+        [JsonPropertyName("encargDepositoID")]
+        public int EncargDepositoID { get; set; }
+        
+        [JsonPropertyName("empleadoID")]
+        public int EmpleadoID { get; set; }
+        
+        [JsonPropertyName("razonSocial")]
+        public string RazonSocial { get; set; } = string.Empty;
+    }
+
+    // ========================================
+    // VARIABLES Y PROPIEDADES
+    // ========================================
     private string token = string.Empty;
     private string searchTerm = string.Empty;
     private bool isLoading = false;
     private bool filtersExpanded = false;
     private string errorMessage = string.Empty;
     private List<TreeNode> rootNodes = new();
+    
+    // Variable para almacenar el depositoID obtenido de la API de depósitos
+    private int? depositoIDActual = null;
     private TreeNode? selectedNode = null;
     private Timer? searchTimer;
     private bool rightPanelHidden = true;
@@ -1989,6 +2115,141 @@ input[class*="fast-number"] {
         {
             producto.CantidadInventario = stockChange.newStock;
             await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // Función para manejar cuando se envía el inventario exitosamente
+    private async Task OnInventorySent()
+    {
+        Console.WriteLine("🔄 Refrescando grilla después del envío de inventario...");
+        
+        // Refrescar la lista de productos para limpiar los stocks modificados
+        if (selectedNode != null)
+        {
+            await LoadProductsForNode(selectedNode);
+        }
+        
+        Console.WriteLine("✅ Grilla refrescada correctamente");
+    }
+
+    /// <summary>
+    /// Obtiene el depositoID basado en el orden de la ubicación seleccionada
+    /// Compara el orden con la API de depósitos para encontrar el depositoID correspondiente
+    /// </summary>
+    /// <param name="ordenUbicacion">El orden de la ubicación seleccionada (ej: "0000000001.0000000002.0000000002.0000000001")</param>
+    private async Task ObtenerDepositoIDPorOrden(string ordenUbicacion)
+    {
+        try
+        {
+            Console.WriteLine($"🏢 ====== OBTENIENDO DEPOSITOID POR ORDEN ======");
+            Console.WriteLine($"🏢 Orden de ubicación: {ordenUbicacion}");
+            
+            // Obtener el token final
+            var tokenFinal = await AuthService.GetTokenFINALAsync();
+            if (string.IsNullOrEmpty(tokenFinal))
+            {
+                Console.WriteLine("❌ No se encontró el token final de autenticación");
+                return;
+            }
+            
+            Console.WriteLine($"🏢 Token final obtenido: {tokenFinal.Substring(0, Math.Min(20, tokenFinal.Length))}...");
+            
+            // Configurar headers
+            Http.DefaultRequestHeaders.Clear();
+            Http.DefaultRequestHeaders.Add("Authorization", $"Bearer {tokenFinal}");
+            
+            // Llamar a la API de depósitos
+            var apiUrl = "https://drrsystemas4.azurewebsites.net/Deposito";
+            Console.WriteLine($"🏢 Llamando a la API: {apiUrl}");
+            
+            var response = await Http.GetAsync(apiUrl);
+            
+            Console.WriteLine($"🏢 Respuesta de la API - Status: {response.StatusCode}");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"🏢 JSON de respuesta recibido: {responseContent}");
+                
+                // Deserializar la respuesta
+                var depositosResponse = JsonSerializer.Deserialize<DepositosResponse>(responseContent);
+                
+                if (depositosResponse?.Data != null)
+                {
+                    Console.WriteLine($"🏢 Total de depósitos en la respuesta: {depositosResponse.Data.Count}");
+                    
+                    // Buscar el depósito que coincida exactamente con el orden
+                    var depositoEncontrado = depositosResponse.Data.FirstOrDefault(d => 
+                        d.UbicacionPrinc?.Orden == ordenUbicacion);
+                    
+                    if (depositoEncontrado != null)
+                    {
+                        Console.WriteLine($"✅ DEPOSITO ENCONTRADO (COINCIDENCIA EXACTA):");
+                        Console.WriteLine($"✅ DepositoID: {depositoEncontrado.DepositoID}");
+                        Console.WriteLine($"✅ Descripción: {depositoEncontrado.Descripcion}");
+                        Console.WriteLine($"✅ Orden: {depositoEncontrado.UbicacionPrinc?.Orden}");
+                        Console.WriteLine($"✅ Sucursal: {depositoEncontrado.Sucursal?.Descripcion}");
+                        Console.WriteLine($"✅ Encargado Principal: {depositoEncontrado.EncargadoPrinc?.RazonSocial}");
+                        
+                        // ALMACENAR EL DEPOSITOID PARA USAR EN EL INVENTARIO
+                        depositoIDActual = depositoEncontrado.DepositoID;
+                        Console.WriteLine($"💾 DepositoID almacenado para inventario: {depositoIDActual}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"❌ NO SE ENCONTRÓ DEPÓSITO con orden exacto: {ordenUbicacion}");
+                        Console.WriteLine($"🔍 Buscando depósito PADRE que contenga este orden...");
+                        
+                        // Buscar el depósito padre que contenga el orden como prefijo
+                        var depositoPadre = depositosResponse.Data.FirstOrDefault(d => 
+                            !string.IsNullOrEmpty(d.UbicacionPrinc?.Orden) && 
+                            ordenUbicacion.StartsWith(d.UbicacionPrinc.Orden));
+                        
+                        if (depositoPadre != null)
+                        {
+                            Console.WriteLine($"✅ DEPOSITO PADRE ENCONTRADO:");
+                            Console.WriteLine($"✅ DepositoID: {depositoPadre.DepositoID}");
+                            Console.WriteLine($"✅ Descripción: {depositoPadre.Descripcion}");
+                            Console.WriteLine($"✅ Orden del depósito: {depositoPadre.UbicacionPrinc?.Orden}");
+                            Console.WriteLine($"✅ Orden de la ubicación: {ordenUbicacion}");
+                            Console.WriteLine($"✅ Sucursal: {depositoPadre.Sucursal?.Descripcion}");
+                            Console.WriteLine($"✅ Encargado Principal: {depositoPadre.EncargadoPrinc?.RazonSocial}");
+                            Console.WriteLine($"ℹ️ La ubicación seleccionada es una SUB-UBICACIÓN dentro de este depósito");
+                            
+                            // ALMACENAR EL DEPOSITOID PARA USAR EN EL INVENTARIO
+                            depositoIDActual = depositoPadre.DepositoID;
+                            Console.WriteLine($"💾 DepositoID almacenado para inventario: {depositoIDActual}");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"❌ NO SE ENCONTRÓ DEPÓSITO PADRE para el orden: {ordenUbicacion}");
+                            Console.WriteLine($"❌ Órdenes disponibles en la respuesta:");
+                            foreach (var dep in depositosResponse.Data)
+                            {
+                                Console.WriteLine($"❌   - {dep.Descripcion}: {dep.UbicacionPrinc?.Orden ?? "SIN ORDEN"}");
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("❌ La respuesta no contiene datos de depósitos");
+                }
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"❌ Error en la API de depósitos:");
+                Console.WriteLine($"❌ Status Code: {response.StatusCode}");
+                Console.WriteLine($"❌ Error Content: {errorContent}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error obteniendo depositoID por orden:");
+            Console.WriteLine($"❌ Tipo: {ex.GetType().Name}");
+            Console.WriteLine($"❌ Mensaje: {ex.Message}");
+            Console.WriteLine($"❌ Stack Trace: {ex.StackTrace}");
         }
     }
     
@@ -2088,7 +2349,8 @@ input[class*="fast-number"] {
                     match.Producto?.DescripcionLarga ?? "Producto sin descripción",
                     match.Producto?.RubroCodigo ?? "",
                     match.StockActual ?? 0, // Stock actual del sistema
-                    cantidadInventario // Cantidad ingresada por el usuario
+                    cantidadInventario, // Cantidad ingresada por el usuario
+                    match.Producto?.CodigoID ?? 0 // CodigoID del producto
                 );
             }
             
@@ -2177,7 +2439,8 @@ input[class*="fast-number"] {
                         productoModal.Producto?.DescripcionLarga ?? "Producto sin descripción",
                         productoModal.Producto?.RubroCodigo ?? "",
                         productoOriginal.StockActual ?? 0,
-                        productoModal.StockActual ?? 0
+                        productoModal.StockActual ?? 0,
+                        productoModal.Producto?.CodigoID ?? 0 // CodigoID del producto
                     );
                 }
             }
@@ -2875,6 +3138,10 @@ input[class*="fast-number"] {
             
             // 1 = incluir stock; usar Orden del nodo para incluir sub-ubicaciones
             Console.WriteLine($"📦 LoadProductsForNode - Llamando API con Orden: {node.Item.Orden}");
+            
+            // OBTENER DEPOSITOID BASADO EN EL ORDEN DE LA UBICACIÓN
+            await ObtenerDepositoIDPorOrden(node.Item.Orden);
+            
             var resp = await UbicacionService.GetUbicacionesAsync(token, node.Item.Orden, 1);
             Console.WriteLine($"📦 LoadProductsForNode - Respuesta API recibida: {resp?.Data?.Count ?? 0} elementos");
             
@@ -3319,15 +3586,22 @@ input[class*="fast-number"] {
     // COMENTARIO: Esta función se ejecuta cuando se hace clic en una fila de la grilla o en el botón de selección
     private async Task OnProductoSelected(object item)
     {
+        Console.WriteLine($"🖱️ OnProductoSelected llamado con: {item?.GetType().Name}");
+        
         if (item is ProductoStock producto)
         {
+            Console.WriteLine($"🖱️ Producto seleccionado: {producto.Producto?.DescripcionLarga}");
+            Console.WriteLine($"🖱️ Código de barras: {producto.Producto?.CodigoBarra}");
+            
             // Solo abrir la modal si el producto tiene código de barras
             if (!string.IsNullOrEmpty(producto.Producto?.CodigoBarra))
             {
+                Console.WriteLine("🖱️ Abriendo modal del producto...");
                 await AbrirProductoEnModal(producto);
             }
             else
             {
+                Console.WriteLine("🖱️ Producto sin código de barras, mostrando alert...");
                 // Mostrar mensaje si no tiene código de barras
                 await JSRuntime.InvokeVoidAsync("alert", "Este producto no tiene código de barras configurado.");
                 
@@ -3343,6 +3617,10 @@ input[class*="fast-number"] {
                     Console.WriteLine($"Error restaurando focus después de mensaje de producto sin código de barras: {ex.Message}");
                 }
             }
+        }
+        else
+        {
+            Console.WriteLine($"🖱️ Item no es ProductoStock: {item?.GetType().Name}");
         }
     }
 
@@ -3862,29 +4140,82 @@ input[class*="fast-number"] {
     }
     
     /// <summary>
-    /// Activa/desactiva la cámara para escanear QR
+    /// Activa la cámara para escanear QR de forma simple
     /// </summary>
-    private async Task ToggleCamera()
+    private async Task ActivarCamara()
     {
         try
         {
+            Console.WriteLine($"📷 ====== ACTIVAR CÁMARA ======");
+            Console.WriteLine($"📷 Estado actual de la cámara: {isCameraActive}");
+            
             if (isCameraActive)
             {
-                // Detener la cámara
-                await JSRuntime.InvokeVoidAsync("stopQRScanner");
-                isCameraActive = false;
+                Console.WriteLine("📷 La cámara ya está activa");
+                return;
             }
-            else
-            {
-                // Activar la cámara
-                await JSRuntime.InvokeVoidAsync("startQRScanner");
-                isCameraActive = true;
-            }
+            
+            Console.WriteLine("📷 Activando la cámara...");
+            
+            // Usar eval para evitar problemas de interop
+            await JSRuntime.InvokeVoidAsync("eval", @"
+                (async function() {
+                    try {
+                        console.log('🚀 Iniciando cámara desde eval...');
+                        
+                        const video = document.getElementById('qr-video');
+                        if (!video) {
+                            console.error('❌ Video no encontrado');
+                            alert('Error: Video no encontrado');
+                            return;
+                        }
+                        
+                        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                            alert('Tu navegador no soporta acceso a la cámara');
+                            return;
+                        }
+                        
+                        console.log('📷 Solicitando acceso a la cámara...');
+                        const stream = await navigator.mediaDevices.getUserMedia({
+                            video: { facingMode: 'environment' }
+                        });
+                        
+                        video.srcObject = stream;
+                        await video.play();
+                        console.log('✅ Cámara activada');
+                        
+                        // Inicializar QrScanner si está disponible
+                        if (typeof QrScanner !== 'undefined') {
+                            const qrCodeReader = new QrScanner(video, result => {
+                                console.log('✅ QR detectado:', result);
+                                if (window.blazorComponent) {
+                                    window.blazorComponent.invokeMethodAsync('OnQRDetected', result);
+                                }
+                            });
+                            await qrCodeReader.start();
+                        }
+                        
+                    } catch (error) {
+                        console.error('❌ Error:', error);
+                        if (error.name === 'NotAllowedError') {
+                            alert('Permisos de cámara denegados. Permite el acceso a la cámara y vuelve a intentar.');
+                        } else {
+                            alert('Error: ' + error.message);
+                        }
+                    }
+                })();
+            ");
+            
+            // Actualizar estado
+            isCameraActive = true;
             StateHasChanged();
+            
+            Console.WriteLine("✅ Cámara activada correctamente");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error toggling camera: {ex.Message}");
+            Console.WriteLine($"❌ Error activando cámara: {ex.Message}");
+            Console.WriteLine($"❌ Stack trace: {ex.StackTrace}");
         }
     }
 
@@ -3926,7 +4257,8 @@ input[class*="fast-number"] {
     {
         try
         {
-            Console.WriteLine("🎯 Solicitando permisos de cámara manualmente...");
+            Console.WriteLine("🎯 ====== SOLICITANDO PERMISOS MANUALMENTE ======");
+            Console.WriteLine("🎯 Estado actual de la cámara: {isCameraActive}");
             
             // Resetear permisos primero
             await JSRuntime.InvokeVoidAsync("resetCameraPermissions");
@@ -3937,10 +4269,16 @@ input[class*="fast-number"] {
             // Intentar activar la cámara con método más directo
             await JSRuntime.InvokeVoidAsync("forceCameraActivation");
             
+            // Actualizar estado de la cámara
+            isCameraActive = true;
+            StateHasChanged();
+            
+            Console.WriteLine("✅ Permisos solicitados y cámara activada");
         }
         catch (Exception ex)
         {
             Console.WriteLine($"❌ Error solicitando permisos manualmente: {ex.Message}");
+            Console.WriteLine($"❌ Stack trace: {ex.StackTrace}");
         }
     }
     
@@ -5258,6 +5596,7 @@ input[class*="fast-number"] {
         }
     };
 
+
     // ========================================
     // FUNCIONES PARA QR SCANNER CON CÁMARA
     // ========================================
@@ -5300,6 +5639,11 @@ input[class*="fast-number"] {
     window.registerBlazorComponent = function(component) {
         window.blazorComponent = component;
         console.log('✅ Componente Blazor registrado para OnQRDetected');
+    };
+
+    // Verificar si el componente Blazor está registrado
+    window.isBlazorComponentRegistered = function() {
+        return typeof window.blazorComponent !== 'undefined' && window.blazorComponent !== null;
     };
 
     // Limpiar permisos de cámara y forzar nueva solicitud
@@ -5432,21 +5776,23 @@ input[class*="fast-number"] {
     // Iniciar el escáner QR con cámara - VERSIÓN SIMPLIFICADA
     window.startQRScanner = async function() {
         try {
-            console.log('🚀 Iniciando escáner QR...');
+            console.log('🚀 ====== INICIANDO ESCÁNER QR ======');
             
             const video = document.getElementById('qr-video');
             if (!video) {
                 console.error('❌ Elemento de video no encontrado');
+                alert('Error: Elemento de video no encontrado');
                 return;
             }
+            console.log('✅ Elemento de video encontrado');
 
             // Verificar soporte básico
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 console.error('❌ Navegador no soporta acceso a la cámara');
+                alert('Tu navegador no soporta acceso a la cámara. Usa Chrome, Firefox o Safari.');
                 return;
             }
-
-            console.log('📷 Solicitando acceso a la cámara...');
+            console.log('✅ Navegador soporta acceso a la cámara');
 
             // Configuración simple de cámara
             const constraints = {
@@ -5457,43 +5803,61 @@ input[class*="fast-number"] {
                 }
             };
 
+            console.log('📷 Solicitando acceso a la cámara...');
+            console.log('📷 El navegador debería pedir permisos ahora...');
+
             // Intentar obtener acceso a la cámara
             qrStream = await navigator.mediaDevices.getUserMedia(constraints);
+            console.log('✅ Stream de cámara obtenido');
             
             video.srcObject = qrStream;
-            video.play();
+            await video.play();
+            console.log('✅ Video iniciado correctamente');
             
             console.log('✅ Cámara activada correctamente');
 
             // Usar QrScanner.js si está disponible
             if (typeof QrScanner !== 'undefined') {
                 console.log('🔍 Inicializando QrScanner.js...');
-                qrCodeReader = new QrScanner(video, result => {
-                    console.log('✅ QR detectado:', result);
-                    if (window.blazorComponent) {
-                        window.blazorComponent.invokeMethodAsync('OnQRDetected', result);
-                    }
-                });
-                
-                await qrCodeReader.start();
-                isQRScannerActive = true;
-                
+                try {
+                    qrCodeReader = new QrScanner(video, result => {
+                        console.log('✅ QR detectado:', result);
+                        if (window.blazorComponent) {
+                            window.blazorComponent.invokeMethodAsync('OnQRDetected', result);
+                        } else {
+                            console.warn('⚠️ blazorComponent no disponible');
+                        }
+                    });
+                    
+                    await qrCodeReader.start();
+                    isQRScannerActive = true;
+                    console.log('✅ QrScanner iniciado correctamente');
+                } catch (qrError) {
+                    console.error('❌ Error inicializando QrScanner:', qrError);
+                    isQRScannerActive = true;
+                }
             } else {
-                console.log('⚠️ QrScanner no disponible, usando detección manual...');
+                console.log('⚠️ QrScanner no disponible');
                 isQRScannerActive = true;
-                startCanvasQRDetection(video);
             }
 
         } catch (error) {
-            console.error('❌ Error iniciando cámara:', error);
+            console.error('❌ ====== ERROR INICIANDO CÁMARA ======');
+            console.error('❌ Tipo de error:', error.name);
+            console.error('❌ Mensaje:', error.message);
             
             if (error.name === 'NotAllowedError') {
-                console.log('❌ Permisos denegados - el usuario debe permitir acceso a la cámara');
-                // No mostrar error en la UI, solo en consola
+                console.log('❌ PERMISOS DENEGADOS');
+                alert('Permisos de cámara denegados. Por favor:\n1. Haz clic en el ícono de cámara en la barra de direcciones\n2. O ve a Configuración del sitio → Permisos → Cámara → Permitir\n3. O recarga la página y permite cuando aparezca la notificación');
             } else if (error.name === 'NotFoundError') {
-                console.log('❌ No se encontró cámara en el dispositivo');
+                console.log('❌ No se encontró cámara');
+                alert('No se encontró ninguna cámara en este dispositivo.');
+            } else if (error.name === 'NotReadableError') {
+                console.log('❌ Cámara en uso');
+                alert('La cámara está siendo usada por otra aplicación. Cierra otras aplicaciones que usen la cámara.');
             } else {
                 console.log(`❌ Error de cámara: ${error.message}`);
+                alert(`Error de cámara: ${error.message}`);
             }
         }
     };
