@@ -4223,9 +4223,41 @@ input[class*="fast-number"] {
             await JSRuntime.InvokeVoidAsync("eval", "window.setBlazorComponent = function(component) { window.blazorComponent = component; console.log('✅ Componente Blazor registrado'); };");
             await JSRuntime.InvokeVoidAsync("setBlazorComponent", DotNetObjectReference.Create(this));
             
-            // Usar método JavaScript simple y directo
-            var jsCode = "console.log('📷 Activando cámara...'); " +
+            // Código JavaScript para activar cámara y leer QR real
+            var jsCode = "console.log('📷 Activando cámara con detección QR...'); " +
                         "const video = document.getElementById('qr-video'); " +
+                        "const canvas = document.createElement('canvas'); " +
+                        "const context = canvas.getContext('2d'); " +
+                        "canvas.width = 640; canvas.height = 480; " +
+                        "let isScanning = false; " +
+                        "function detectQR() { " +
+                        "if (isScanning && video.readyState === video.HAVE_ENOUGH_DATA) { " +
+                        "context.drawImage(video, 0, 0, canvas.width, canvas.height); " +
+                        "const imageData = context.getImageData(0, 0, canvas.width, canvas.height); " +
+                        "if (window.jsQR) { " +
+                        "const code = window.jsQR(imageData.data, imageData.width, imageData.height); " +
+                        "if (code) { " +
+                        "console.log('🎯 QR REAL detectado:', code.data); " +
+                        "isScanning = false; " +
+                        "if (window.blazorComponent) { " +
+                        "window.blazorComponent.invokeMethodAsync('OnQRDetected', code.data).then(() => { " +
+                        "console.log('✅ QR real procesado exitosamente'); " +
+                        "}).catch(e => { console.error('❌ Error procesando QR real:', e); }); " +
+                        "} else { console.error('❌ blazorComponent no disponible'); } " +
+                        "return; " +
+                        "} " +
+                        "} " +
+                        "} " +
+                        "requestAnimationFrame(detectQR); " +
+                        "} " +
+                        "if (!window.jsQR) { " +
+                        "const script = document.createElement('script'); " +
+                        "script.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js'; " +
+                        "script.onload = () => { console.log('✅ jsQR cargado'); startCamera(); }; " +
+                        "script.onerror = () => { console.error('❌ Error cargando jsQR'); startCamera(); }; " +
+                        "document.head.appendChild(script); " +
+                        "} else { startCamera(); } " +
+                        "function startCamera() { " +
                         "if (video && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) { " +
                         "navigator.mediaDevices.getUserMedia({video: {facingMode: 'environment'}}).then(stream => { " +
                         "video.srcObject = stream; video.play(); " +
@@ -4234,18 +4266,19 @@ input[class*="fast-number"] {
                         "btn.style.cssText = 'position:absolute;top:10px;right:10px;z-index:1000;background:#007bff;color:white;border:none;padding:10px;border-radius:5px;cursor:pointer;'; " +
                         "btn.onclick = function() { console.log('🧪 Simulando QR...'); " +
                         "const testQR = '{\"ProductoUbicacionID\":17}'; console.log('✅ QR simulado:', testQR); " +
-                        "console.log('🔥 Llamando a OnQRDetected...'); " +
                         "if (window.blazorComponent) { " +
                         "window.blazorComponent.invokeMethodAsync('OnQRDetected', testQR).then(() => { " +
-                        "console.log('✅ OnQRDetected llamado exitosamente'); " +
-                        "}).catch(e => { console.error('❌ Error en OnQRDetected:', e); }); " +
+                        "console.log('✅ QR simulado procesado'); " +
+                        "}).catch(e => { console.error('❌ Error procesando QR simulado:', e); }); " +
                         "} else { console.error('❌ blazorComponent no disponible'); } " +
                         "}; " +
                         "const container = document.getElementById('qr-reader'); if (container) { container.style.position = 'relative'; container.appendChild(btn); } " +
+                        "video.onloadedmetadata = () => { console.log('✅ Cámara lista - Iniciando detección QR'); isScanning = true; detectQR(); }; " +
                         "window.isQRScannerActive = true; " +
-                        "console.log('✅ Cámara activada - Botón creado'); " +
+                        "console.log('✅ Cámara activada - Detección QR iniciada'); " +
                         "}).catch(err => { console.error('❌ Error:', err); throw err; }); " +
-                        "} else { throw new Error('Cámara no disponible'); }";
+                        "} else { throw new Error('Cámara no disponible'); } " +
+                        "}";
             
             await JSRuntime.InvokeVoidAsync("eval", jsCode);
             
