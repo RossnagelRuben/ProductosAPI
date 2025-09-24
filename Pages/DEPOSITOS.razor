@@ -2817,11 +2817,10 @@ input[class*="fast-number"] {
             
             // Ocultar completamente el panel de ubicaciones al seleccionar cualquier ubicación
             leftPanelHidden = true;
-            await JSRuntime.InvokeVoidAsync("toggleLocationsPanel", leftPanelHidden);
-            
-            // Asegurar que el panel de productos esté visible (especialmente en móviles)
-            await JSRuntime.InvokeVoidAsync("toggleProductsPanel", false);
             rightPanelHidden = false;
+            
+            // Actualizar estado sin JavaScript
+            StateHasChanged();
 
             // Cargar productos de la ubicación seleccionada
             _currentPage = 0; // Reiniciar paginación al cambiar de nodo
@@ -4220,7 +4219,11 @@ input[class*="fast-number"] {
             
             Console.WriteLine("📷 Activando la cámara...");
             
-            // Usar método JavaScript simple
+            // Registrar el componente Blazor usando una función global
+            await JSRuntime.InvokeVoidAsync("eval", "window.setBlazorComponent = function(component) { window.blazorComponent = component; console.log('✅ Componente Blazor registrado'); };");
+            await JSRuntime.InvokeVoidAsync("setBlazorComponent", DotNetObjectReference.Create(this));
+            
+            // Usar método JavaScript simple y directo
             var jsCode = "console.log('📷 Activando cámara...'); " +
                         "const video = document.getElementById('qr-video'); " +
                         "if (video && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) { " +
@@ -4229,10 +4232,18 @@ input[class*="fast-number"] {
                         "const btn = document.createElement('button'); " +
                         "btn.textContent = 'Simular QR'; " +
                         "btn.style.cssText = 'position:absolute;top:10px;right:10px;z-index:1000;background:#007bff;color:white;border:none;padding:10px;border-radius:5px;cursor:pointer;'; " +
-                        "btn.onclick = () => { console.log('🧪 Simulando QR...'); if (window.blazorComponent) window.blazorComponent.invokeMethodAsync('OnQRDetected', '{\"ProductoUbicacionID\":17}'); }; " +
+                        "btn.onclick = function() { console.log('🧪 Simulando QR...'); " +
+                        "const testQR = '{\"ProductoUbicacionID\":17}'; console.log('✅ QR simulado:', testQR); " +
+                        "console.log('🔥 Llamando a OnQRDetected...'); " +
+                        "if (window.blazorComponent) { " +
+                        "window.blazorComponent.invokeMethodAsync('OnQRDetected', testQR).then(() => { " +
+                        "console.log('✅ OnQRDetected llamado exitosamente'); " +
+                        "}).catch(e => { console.error('❌ Error en OnQRDetected:', e); }); " +
+                        "} else { console.error('❌ blazorComponent no disponible'); } " +
+                        "}; " +
                         "const container = document.getElementById('qr-reader'); if (container) { container.style.position = 'relative'; container.appendChild(btn); } " +
                         "window.isQRScannerActive = true; " +
-                        "console.log('✅ Cámara activada'); " +
+                        "console.log('✅ Cámara activada - Botón creado'); " +
                         "}).catch(err => { console.error('❌ Error:', err); throw err; }); " +
                         "} else { throw new Error('Cámara no disponible'); }";
             
@@ -4363,12 +4374,21 @@ input[class*="fast-number"] {
                 
                 // Seleccionar el nodo encontrado usando el método existente
                 // Esto automáticamente cargará los productos de esa ubicación
+                Console.WriteLine($"🔥 Llamando SelectNodeFromJS para: {nodoEncontrado.Item.Descripcion}");
                 await SelectNodeFromJS(
                     nodoEncontrado.Item.ProductoUbicacionID, 
                     nodoEncontrado.Item.Descripcion, 
                     nodoEncontrado.Level, 
                     nodoEncontrado.Item.Orden
                 );
+                
+                // Verificar que los productos se cargaron
+                Console.WriteLine($"📊 Productos cargados después de SelectNodeFromJS: {productosSeleccionados.Count}");
+                Console.WriteLine($"📊 selectedProductsCount: {selectedProductsCount}");
+                Console.WriteLine($"📊 isLoading: {isLoading}");
+                
+                // Forzar actualización de la UI después de cargar productos
+                await InvokeAsync(StateHasChanged);
                 
                 Console.WriteLine($"🎯 Ubicación seleccionada y productos cargados automáticamente: {nodoEncontrado.Item.Descripcion}");
             }
@@ -4389,7 +4409,7 @@ input[class*="fast-number"] {
     /// </summary>
     /// <param name="qrValue">Valor detectado del QR</param>
     [JSInvokable]
-    public void OnQRDetected(string qrValue)
+    public async Task OnQRDetected(string qrValue)
     {
         try
         {
@@ -4432,30 +4452,52 @@ input[class*="fast-number"] {
             {
                 Console.WriteLine($"🚀 Iniciando procesamiento automático del QR...");
                 
-                // Cerrar el modal QR automáticamente después de 1 segundo
-                _ = Task.Run(async () =>
+                // Procesar inmediatamente sin delay
+                try
                 {
-                    await Task.Delay(1000); // Esperar 1 segundo
-                    await InvokeAsync(async () =>
+                    Console.WriteLine($"🔥 Procesando QR inmediatamente...");
+                    
+                    // Buscar el nodo directamente
+                    var nodoEncontrado = FindNodeById(rootNodes, productoUbicacionID.Value);
+                    
+                    if (nodoEncontrado != null)
                     {
-                        try
-                        {
-                            Console.WriteLine($"⏱️ Esperando 1 segundo antes de procesar...");
-                            
-                            // Cerrar el modal QR
-                            await CerrarQRModal();
-                            
-                            // Buscar y seleccionar la ubicación automáticamente
-                            await BuscarUbicacionPorID(productoUbicacionID.Value);
-                            
-                            Console.WriteLine($"✅ QR detectado y procesado automáticamente: ProductoUbicacionID = {productoUbicacionID.Value}");
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"❌ Error procesando QR automáticamente: {ex.Message}");
-                        }
-                    });
-                });
+                        Console.WriteLine($"✅ Ubicación encontrada: {nodoEncontrado.Item.Descripcion} (Nivel: {nodoEncontrado.Level})");
+                        
+                        // Llamar directamente a SelectNodeFromJS
+                        Console.WriteLine($"🔥 Llamando SelectNodeFromJS directamente...");
+                        await SelectNodeFromJS(
+                            nodoEncontrado.Item.ProductoUbicacionID, 
+                            nodoEncontrado.Item.Descripcion, 
+                            nodoEncontrado.Level, 
+                            nodoEncontrado.Item.Orden
+                        );
+                        
+                        // Verificar que los productos se cargaron
+                        Console.WriteLine($"📊 Productos cargados después de SelectNodeFromJS: {productosSeleccionados.Count}");
+                        Console.WriteLine($"📊 selectedProductsCount: {selectedProductsCount}");
+                        Console.WriteLine($"📊 isLoading: {isLoading}");
+                        
+                        // Forzar actualización de la UI
+                        await InvokeAsync(StateHasChanged);
+                        
+                        Console.WriteLine($"🎯 Ubicación seleccionada y productos cargados: {nodoEncontrado.Item.Descripcion}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"❌ No se encontró la ubicación con ProductoUbicacionID: {productoUbicacionID.Value}");
+                    }
+                    
+                    // Cerrar el modal QR después de procesar
+                    await CerrarQRModal();
+                    
+                    Console.WriteLine($"✅ QR detectado y procesado automáticamente: ProductoUbicacionID = {productoUbicacionID.Value}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"❌ Error procesando QR automáticamente: {ex.Message}");
+                    Console.WriteLine($"❌ Stack trace: {ex.StackTrace}");
+                }
             }
             else
             {
