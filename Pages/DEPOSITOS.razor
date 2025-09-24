@@ -1929,8 +1929,17 @@ input[class*="fast-number"] {
             
             <!-- Botón para activar la cámara -->
             <div class="mt-3">
-                <button class="btn btn-primary" @onclick="ActivarCamara">
-                    <i class="oi oi-camera-slr"></i> Activar Cámara
+                <button class="btn btn-primary" @onclick="ActivarCamara" disabled="@isCameraLoading">
+                    @if (isCameraLoading)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1"></span>
+                        <span>Activando...</span>
+                    }
+                    else
+                    {
+                        <i class="oi oi-camera-slr"></i>
+                        <span>Activar Cámara</span>
+                    }
                 </button>
             </div>
             
@@ -1940,9 +1949,23 @@ input[class*="fast-number"] {
                     Estado: @if (isCameraActive) { <span class="text-success">Cámara Activa</span> } else { <span class="text-muted">Cámara Inactiva</span> }
                 </small>
             </div>
+            
+            <!-- Mensaje de error si existe -->
+            @if (!string.IsNullOrEmpty(cameraErrorMessage))
+            {
+                <div class="mt-2">
+                    <small class="text-danger">@cameraErrorMessage</small>
+                </div>
+            }
         </div>
     </ChildContent>
-    <!-- Footer removido - la modal se cierra automáticamente al detectar QR -->
+    <FooterContent>
+        <div style="display: flex; gap: 0.5rem; justify-content: center; align-items: center; width: 100%;">
+            <button class="btn btn-outline-secondary" @onclick="CerrarQRModal" style="width: 120px; height: 50px; padding: 0.75rem 1rem; font-size: 1rem;">
+                <i class="oi oi-x"></i> Cerrar
+            </button>
+        </div>
+    </FooterContent>
 </AppModal>
 
 @code {
@@ -2257,6 +2280,9 @@ input[class*="fast-number"] {
     private bool showQRModal = false;
     private string qrDetectedValue = string.Empty;
     private bool isCameraActive = false;
+    private bool isCameraLoading = false;
+    private string cameraErrorMessage = string.Empty;
+    private CancellationTokenSource? cameraCancellationToken;
 
     private async Task OnAddUbicacionClick()
     {
@@ -4077,25 +4103,74 @@ input[class*="fast-number"] {
     }
     
     /// <summary>
-    /// Cierra el modal QR
+    /// Cierra el modal QR de forma segura y forzada
     /// </summary>
     private async Task CerrarQRModal()
     {
         try
         {
+            Console.WriteLine("🚪 ====== CERRAR MODAL QR ======");
+            
+            // Cancelar cualquier operación de cámara en curso
+            if (cameraCancellationToken != null)
+            {
+                cameraCancellationToken.Cancel();
+                cameraCancellationToken.Dispose();
+                cameraCancellationToken = null;
+            }
+            
             // Detener la cámara si está activa
             if (isCameraActive)
             {
-                await JSRuntime.InvokeVoidAsync("stopQRScanner");
+                Console.WriteLine("📷 Deteniendo cámara...");
+                try
+                {
+                    await JSRuntime.InvokeVoidAsync("eval", @"
+                        (function() {
+                            try {
+                                // Detener QrScanner si está activo
+                                if (window.qrCodeReader) {
+                                    window.qrCodeReader.stop();
+                                    window.qrCodeReader.destroy();
+                                    window.qrCodeReader = null;
+                                }
+                                
+                                // Detener stream de video
+                                const video = document.getElementById('qr-video');
+                                if (video && video.srcObject) {
+                                    const tracks = video.srcObject.getTracks();
+                                    tracks.forEach(track => track.stop());
+                                    video.srcObject = null;
+                                }
+                                
+                                window.isQRScannerActive = false;
+                                console.log('✅ Cámara detenida correctamente');
+                            } catch (error) {
+                                console.error('❌ Error deteniendo cámara:', error);
+                            }
+                        })();
+                    ");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"⚠️ Error deteniendo cámara: {ex.Message}");
+                }
             }
             
+            // Limpiar todos los estados
             showQRModal = false;
             qrDetectedValue = string.Empty;
             isCameraActive = false;
+            isCameraLoading = false;
+            cameraErrorMessage = string.Empty;
+            
+            // Forzar actualización del estado
             StateHasChanged();
             
+            Console.WriteLine("✅ Modal QR cerrada correctamente");
+            
             // Restaurar focus al textbox de código de barras después de cerrar la modal
-            await Task.Delay(300); // Delay más largo para asegurar que la modal se cierre completamente
+            await Task.Delay(500); // Delay más largo para asegurar que la modal se cierre completamente
             
             // Verificar que la modal realmente se cerró antes de hacer focus
             try 
@@ -4118,7 +4193,14 @@ input[class*="fast-number"] {
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error cerrando QR modal: {ex.Message}");
+            Console.WriteLine($"❌ Error cerrando modal QR: {ex.Message}");
+            
+            // Forzar cierre en caso de error
+            showQRModal = false;
+            isCameraActive = false;
+            isCameraLoading = false;
+            cameraErrorMessage = string.Empty;
+            StateHasChanged();
         }
     }
     
@@ -4140,82 +4222,127 @@ input[class*="fast-number"] {
     }
     
     /// <summary>
-    /// Activa la cámara para escanear QR de forma simple
+    /// Activa la cámara para escanear QR de forma simple y segura
     /// </summary>
     private async Task ActivarCamara()
     {
         try
         {
             Console.WriteLine($"📷 ====== ACTIVAR CÁMARA ======");
-            Console.WriteLine($"📷 Estado actual de la cámara: {isCameraActive}");
             
+            // Verificar si ya está activa
             if (isCameraActive)
             {
                 Console.WriteLine("📷 La cámara ya está activa");
                 return;
             }
             
-            Console.WriteLine("📷 Activando la cámara...");
+            // Verificar si ya está cargando
+            if (isCameraLoading)
+            {
+                Console.WriteLine("📷 La cámara ya se está activando");
+                return;
+            }
             
-            // Usar eval para evitar problemas de interop
-            await JSRuntime.InvokeVoidAsync("eval", @"
-                (async function() {
-                    try {
-                        console.log('🚀 Iniciando cámara desde eval...');
-                        
-                        const video = document.getElementById('qr-video');
-                        if (!video) {
-                            console.error('❌ Video no encontrado');
-                            alert('Error: Video no encontrado');
-                            return;
-                        }
-                        
-                        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                            alert('Tu navegador no soporta acceso a la cámara');
-                            return;
-                        }
-                        
-                        console.log('📷 Solicitando acceso a la cámara...');
-                        const stream = await navigator.mediaDevices.getUserMedia({
-                            video: { facingMode: 'environment' }
-                        });
-                        
-                        video.srcObject = stream;
-                        await video.play();
-                        console.log('✅ Cámara activada');
-                        
-                        // Inicializar QrScanner si está disponible
-                        if (typeof QrScanner !== 'undefined') {
-                            const qrCodeReader = new QrScanner(video, result => {
-                                console.log('✅ QR detectado:', result);
-                                if (window.blazorComponent) {
-                                    window.blazorComponent.invokeMethodAsync('OnQRDetected', result);
+            // Iniciar estado de carga
+            isCameraLoading = true;
+            cameraErrorMessage = string.Empty;
+            StateHasChanged();
+            
+            // Crear token de cancelación con timeout de 10 segundos
+            cameraCancellationToken = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            
+            Console.WriteLine("📷 Activando la cámara con timeout de 10 segundos...");
+            
+            // Usar método JavaScript directo con eval para evitar problemas de registro
+            try
+            {
+                Console.WriteLine("📷 Activando cámara con método directo...");
+                
+                await JSRuntime.InvokeVoidAsync("eval", @"
+                    (async function() {
+                        try {
+                            console.log('📷 ====== ACTIVAR CÁMARA DIRECTA ======');
+                            
+                            const video = document.getElementById('qr-video');
+                            if (!video) {
+                                console.error('❌ Elemento de video no encontrado');
+                                throw new Error('Elemento de video no encontrado');
+                            }
+                            
+                            // Verificar soporte básico
+                            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                                console.error('❌ Navegador no soporta acceso a la cámara');
+                                throw new Error('Tu navegador no soporta acceso a la cámara');
+                            }
+                            
+                            console.log('📷 Solicitando acceso a la cámara...');
+                            
+                            // Configuración simple y confiable
+                            const constraints = {
+                                video: {
+                                    facingMode: 'environment',
+                                    width: { ideal: 640 },
+                                    height: { ideal: 480 }
                                 }
-                            });
-                            await qrCodeReader.start();
+                            };
+                            
+                            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                            video.srcObject = stream;
+                            await video.play();
+                            
+                            console.log('✅ Cámara activada correctamente');
+                            
+                            // Inicializar detección QR simple
+                            if (typeof QrScanner !== 'undefined') {
+                                console.log('🔍 Inicializando QrScanner...');
+                                const qrCodeReader = new QrScanner(video, result => {
+                                    console.log('✅ QR detectado:', result);
+                                    if (window.blazorComponent) {
+                                        window.blazorComponent.invokeMethodAsync('OnQRDetected', result);
+                                    }
+                                });
+                                await qrCodeReader.start();
+                                window.qrCodeReader = qrCodeReader;
+                                window.isQRScannerActive = true;
+                            } else {
+                                console.log('⚠️ QrScanner no disponible, usando detección manual');
+                                window.isQRScannerActive = true;
+                            }
+                            
+                        } catch (error) {
+                            console.error('❌ Error activando cámara:', error);
+                            throw error;
                         }
-                        
-                    } catch (error) {
-                        console.error('❌ Error:', error);
-                        if (error.name === 'NotAllowedError') {
-                            alert('Permisos de cámara denegados. Permite el acceso a la cámara y vuelve a intentar.');
-                        } else {
-                            alert('Error: ' + error.message);
-                        }
-                    }
-                })();
-            ");
+                    })();
+                ");
+            }
+            catch (Exception jsEx)
+            {
+                Console.WriteLine($"❌ Error en JavaScript: {jsEx.Message}");
+                throw new Exception($"Error activando cámara: {jsEx.Message}");
+            }
             
             // Actualizar estado
             isCameraActive = true;
+            isCameraLoading = false;
             StateHasChanged();
             
             Console.WriteLine("✅ Cámara activada correctamente");
         }
+        catch (OperationCanceledException)
+        {
+            Console.WriteLine("⏰ Timeout activando cámara");
+            cameraErrorMessage = "Timeout: La cámara tardó demasiado en activarse";
+            isCameraLoading = false;
+            StateHasChanged();
+        }
         catch (Exception ex)
         {
             Console.WriteLine($"❌ Error activando cámara: {ex.Message}");
-            Console.WriteLine($"❌ Stack trace: {ex.StackTrace}");
+            cameraErrorMessage = $"Error: {ex.Message}";
+            isCameraLoading = false;
+            StateHasChanged();
         }
     }
 
@@ -4819,6 +4946,68 @@ input[class*="fast-number"] {
     window.setBlazorComponent = function(component) {
         window.blazorComponent = component;
         console.log('🔥 BlazorComponent establecido:', window.blazorComponent);
+    };
+
+    // Función de prueba para verificar que las funciones se registran correctamente
+    window.testFunction = function() {
+        console.log('✅ Función de prueba ejecutada correctamente');
+        return 'test ok';
+    };
+
+    // Función simplificada para activar cámara QR
+    window.activateCameraSimple = async function() {
+        try {
+            console.log('📷 ====== ACTIVAR CÁMARA SIMPLE ======');
+            
+            const video = document.getElementById('qr-video');
+            if (!video) {
+                console.error('❌ Elemento de video no encontrado');
+                throw new Error('Elemento de video no encontrado');
+            }
+            
+            // Verificar soporte básico
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                console.error('❌ Navegador no soporta acceso a la cámara');
+                throw new Error('Tu navegador no soporta acceso a la cámara');
+            }
+            
+            console.log('📷 Solicitando acceso a la cámara...');
+            
+            // Configuración simple y confiable
+            const constraints = {
+                video: {
+                    facingMode: 'environment',
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                }
+            };
+            
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = stream;
+            await video.play();
+            
+            console.log('✅ Cámara activada correctamente');
+            
+            // Inicializar detección QR simple
+            if (typeof QrScanner !== 'undefined') {
+                console.log('🔍 Inicializando QrScanner...');
+                qrCodeReader = new QrScanner(video, result => {
+                    console.log('✅ QR detectado:', result);
+                    if (window.blazorComponent) {
+                        window.blazorComponent.invokeMethodAsync('OnQRDetected', result);
+                    }
+                });
+                await qrCodeReader.start();
+                isQRScannerActive = true;
+            } else {
+                console.log('⚠️ QrScanner no disponible, usando detección manual');
+                isQRScannerActive = true;
+            }
+            
+        } catch (error) {
+            console.error('❌ Error activando cámara:', error);
+            throw error;
+        }
     };
 
     // Función para seleccionar nodos del árbol
@@ -5685,6 +5874,7 @@ input[class*="fast-number"] {
             console.log('✅ blazorComponent disponible para OnQRDetected');
         }
     };
+
 
     // Forzar activación de cámara con método más agresivo
     window.forceCameraActivation = async function() {
