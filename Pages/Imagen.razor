@@ -1,14 +1,8 @@
 @page "/imagen"
-@using System.Net.Http.Headers
-@using System.IO
-@using System.Text.Json
-@using System.Text.Json.Serialization
-@using BlazorApp_ProductosAPI.Components
-@inject HttpClient Http
-@inject IJSRuntime JS
 
 <AuthorizeView>
-    <h3 style="margin-bottom:10px;">Imagen</h3>
+    <h3 style="margin-bottom:10px; text-align:center;">Escanear Facturas & Remitos X</h3>
+
 
 <div class="card">
     <div class="row">
@@ -25,9 +19,6 @@
         <InputFile OnChange="OnFileSelected" accept=".png,.jpg,.jpeg,.bmp,.webp" />
         <button class="btn" @onclick="RunOCR" disabled="@IsOcrLoading">
             @(IsOcrLoading ? "Procesando..." : "Procesar OCR")
-        </button>
-        <button class="btn btn-gray" @onclick="CopyOcrText" disabled="@string.IsNullOrWhiteSpace(FullOcrText)">
-            Copiar texto OCR
         </button>
         <button class="btn btn-purple" @onclick="ExtraerProductosIA" disabled="@(!CanRunIA)">
             @(IsIaLoading ? "Extrayendo..." : "Extraer productos (IA)")
@@ -57,12 +48,13 @@
     <div class="stage">
         <div class="img-wrap">
             <img id="ocr-img" src="@ImageDataUrl" @ref="ImgRef" @onload="OnImageLoaded" />
-            <svg class="overlay" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+            <svg class="overlay" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; background: transparent; fill: none;">
                 @if (Polygons?.Count > 0)
                 {
                     @foreach (var p in Polygons)
                     {
                         <polygon points="@p.PointsAttr" class="poly"
+                                 style="fill: rgba(255,0,0,0.15); stroke: #ef4444; stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: auto;"
                                  @onmouseover="@(() => HoverText = p.Text)" 
                                  @onmouseout="@(() => HoverText = null)"
                                  @onclick="@(() => CopyText(p.Text))">
@@ -73,10 +65,10 @@
         </div>
 
         <div class="side">
-            <div class="section">
+@*             <div class="section">
                 <div class="section-title">Proveedor</div>
                 <textarea readonly rows="3">@(string.IsNullOrWhiteSpace(ProveedorExtraido) ? "Esperando extracción..." : ProveedorExtraido)</textarea>
-            </div>
+            </div> *@
 
             <div class="section">
                 <div class="section-title">Texto OCR</div>
@@ -87,18 +79,24 @@
                 <div class="section-title">Productos (IA)</div>
                 <textarea readonly rows="12">@ProductosJson</textarea>
                 <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 12px; max-width: 100%;">
-                    <button class="btn btn-green" 
+@*                     <button class="btn btn-green" 
                             @onclick="AbrirModalTipoOperacion" 
                             disabled="@(!CanSendToColector)"
                             style="width: 100%;">
                         ENVIAR AL COLECTOR
-                    </button>
+                    </button> *@
                     <button class="btn btn-orange" 
-                            @onclick="ListarDatosColectados" 
-                            disabled="@IsListandoColector"
+                            @onclick="MostrarProductosEnTabla" 
+                            disabled="@string.IsNullOrWhiteSpace(ProductosJson)"
                             style="width: 100%;">
-                        @(IsListandoColector ? "Listando..." : "📋 LISTAR COLECTOR")
+                        📋 VER PRODUCTOS EN TABLA
                     </button>
+@*                     <button class="btn btn-blue" 
+                            @onclick="ListarDatosColectados" 
+                            disabled="@(IsListandoColector || string.IsNullOrWhiteSpace(ProductosJson))"
+                            style="width: 100%;">
+                        @(IsListandoColector ? "Listando..." : "📋 VER PRODUCTOS EN TABLA")
+                    </button> *@
                 </div>
             </div>
         </div>
@@ -112,1302 +110,6 @@
         <div class="tooltip-body">@HoverText</div>
         <div class="tooltip-foot">Click para copiar</div>
     </div>
-}
-
-<style>
-    .card {
-        background: #fff;
-        border-radius: 14px;
-        padding: 12px 14px;
-        box-shadow: 0 6px 18px rgba(0,0,0,.08);
-        margin-bottom: 12px
-    }
-
-    .row {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        flex-wrap: wrap;
-        margin-bottom: 8px
-    }
-
-    .row label {
-        font-weight: 600;
-        color: #334155
-    }
-
-    .row input {
-        flex: 1 1 280px;
-        padding: 8px 10px;
-        border-radius: 10px;
-        border: 1px solid #d0d7de
-    }
-
-    .row input:focus {
-        outline: none;
-        border-color: #1DA1F2;
-        box-shadow: 0 0 0 3px rgba(29,161,242,.15)
-    }
-
-    .btn {
-        padding: 8px 14px;
-        border-radius: 10px;
-        border: none;
-        background: #1DA1F2;
-        color: #fff;
-        cursor: pointer
-    }
-
-    .btn[disabled] {
-        opacity: .6;
-        cursor: default
-    }
-
-    .btn-gray {
-        background: #e2e8f0;
-        color: #111827
-    }
-
-    .btn-purple {
-        background: #7c3aed
-    }
-
-    .btn-green {
-        background: #10b981
-    }
-
-    .btn-blue {
-        background: #3b82f6
-    }
-
-    .btn-orange {
-        background: #f97316
-    }
-    
-    .section .btn {
-        margin: 0;
-        flex-shrink: 0;
-        min-height: 40px;
-        font-size: 14px;
-        font-weight: 600;
-        transition: all 0.2s ease;
-    }
-    
-    .section .btn + .btn {
-        margin-left: 0;
-    }
-    
-    .section .btn:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    }
-    
-    .section .btn:active {
-        transform: translateY(0);
-        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-    }
-
-    .alert.error {
-        margin-top: 6px;
-        padding: 12px 14px;
-        color: #0f5132;
-        background: #d1e7dd;
-        border: 1px solid #badbcc;
-        border-radius: 10px;
-        white-space: pre-wrap;
-        font-family: 'Courier New', monospace;
-        font-size: 12px;
-        max-height: 400px;
-        overflow-y: auto;
-        line-height: 1.4;
-        animation: fadeInOut 3s ease-in-out forwards;
-    }
-    
-    .alert.success {
-        margin-top: 6px;
-        padding: 12px 14px;
-        color: #0f5132;
-        background: #d1e7dd;
-        border: 1px solid #badbcc;
-        border-radius: 10px;
-        white-space: pre-wrap;
-        font-family: 'Courier New', monospace;
-        font-size: 12px;
-        line-height: 1.4;
-        animation: fadeInOut 3s ease-in-out;
-    }
-    
-    .fadeInOut {
-        animation: fadeInOut 3s ease-in-out;
-    }
-    
-    @@keyframes fadeInOut {
-        0% { opacity: 0; transform: translateY(-10px); max-height: 0; margin: 0; padding: 0; }
-        10% { opacity: 1; transform: translateY(0); max-height: 200px; margin: 6px 0 0 0; padding: 12px 14px; }
-        90% { opacity: 1; transform: translateY(0); max-height: 200px; margin: 6px 0 0 0; padding: 12px 14px; }
-        100% { opacity: 0; transform: translateY(-10px); max-height: 0; margin: 0; padding: 0; }
-    }
-
-    .stage {
-        display: flex;
-        gap: 14px;
-        align-items: flex-start
-    }
-
-    .img-wrap {
-        position: relative;
-        max-width: 60%;
-        border: 1px solid #e5e7eb;
-        border-radius: 10px;
-        overflow: auto;
-        background: #fff
-    }
-
-    .img-wrap img {
-        display: block;
-        max-width: 100%;
-        height: auto
-    }
-
-    .overlay {
-        position: absolute;
-        left: 0;
-        top: 0;
-        pointer-events: auto
-    }
-
-    .poly {
-        fill: rgba(255,0,0,.15);
-        stroke: #ef4444;
-        stroke-width: 2;
-        vector-effect: non-scaling-stroke
-    }
-
-    .side {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        gap: 12px
-    }
-
-    .section {
-        background: #fff;
-        border: 1px solid #e5e7eb;
-        border-radius: 10px;
-        padding: 10px
-    }
-
-    .section-title {
-        font-weight: 700;
-        margin-bottom: 8px
-    }
-
-    textarea {
-        width: 100%;
-        border: 1px solid #d0d7de;
-        border-radius: 8px;
-        padding: 8px;
-        resize: vertical
-    }
-
-    .tooltip-fixed {
-        position: fixed;
-        right: 16px;
-        bottom: 16px;
-        background: #111827;
-        color: #fff;
-        border-radius: 12px;
-        box-shadow: 0 10px 22px rgba(0,0,0,.25);
-        max-width: 420px
-    }
-
-    .tooltip-title {
-        font-weight: 700;
-        padding: 10px 12px;
-        border-bottom: 1px solid rgba(255,255,255,.1)
-    }
-
-    .tooltip-body {
-        padding: 10px 12px;
-        white-space: pre-wrap
-    }
-
-    .tooltip-foot {
-        padding: 8px 12px;
-        color: #cbd5e1;
-        border-top: 1px solid rgba(255,255,255,.1)
-    }
-</style>
-
-@code {
-    // Habilita el botón cuando hay texto OCR y una imagen cargada, y no está corriendo IA
-    private bool CanRunIA => !IsIaLoading
-                             && ImageBytes is not null
-                             && !string.IsNullOrWhiteSpace(FullOcrText);
-
-    // Habilita el botón "ENVIAR AL COLECTOR" cuando hay productos (IA) extraídos
-    private bool CanSendToColector => !IsColectorLoading
-                                     && !string.IsNullOrWhiteSpace(ProductosJson)
-                                     && !string.IsNullOrWhiteSpace(ColectorToken);
-
-    // ===== Estado UI =====
-    private string? BearerToken { get; set; }
-    private string? GoogleApiKey { get; set; }
-    private string? ColectorToken { get; set; }
-    private bool IsOcrLoading { get; set; }
-    private bool IsIaLoading { get; set; }
-    private bool IsColectorLoading { get; set; }
-    private bool IsListandoColector { get; set; }
-    private string? Error { get; set; }
-    
-    // ===== Estado del Modal del Colector =====
-    private bool MostrarModalColector { get; set; } = false;
-    private string? DatosColectorModal { get; set; }
-    
-    // ===== Estado del Modal de Tipo de Operación =====
-    private bool MostrarModalTipoOperacion { get; set; } = false;
-    private int TipoOperacionSeleccionado { get; set; } = 4; // Valor por defecto: pago
-    private int TipoOperacionTemporal { get; set; } = 4; // Variable temporal para capturar la selección
-    
-    // ===== Opciones de Tipo de Operación =====
-    private readonly List<TipoOperacion> TiposOperacion = new()
-    {
-        new TipoOperacion { Id = 4, Nombre = "Pago" },
-        new TipoOperacion { Id = 10, Nombre = "Inventario" },
-        new TipoOperacion { Id = 20, Nombre = "Despacho" },
-        new TipoOperacion { Id = 21, Nombre = "Recepción" },
-        new TipoOperacion { Id = 150, Nombre = "Etiquetas" },
-        new TipoOperacion { Id = 23, Nombre = "Pedido Compra / Reposición" }
-    };
-    
-    // ===== Estado del mensaje de éxito =====
-    private bool MostrarMensajeExito { get; set; } = false;
-    private string MensajeExito { get; set; } = "";
-    
-    // ===== Estado del div verde de confirmación de imagen =====
-    private bool MostrarConfirmacionImagen { get; set; } = false;
-    private string NombreArchivoImagen { get; set; } = "";
-    private string TamañoArchivoImagen { get; set; } = "";
-
-    // ===== Imagen & Overlay =====
-    private ElementReference ImgRef;
-    private ElementReference ModalRef;
-    private string? ImageDataUrl { get; set; }
-    private byte[]? ImageBytes { get; set; }
-    private string? ImageMimeType { get; set; }
-    private string? HoverText { get; set; }
-    private readonly List<PolyModel> Polygons = new();
-
-    // ===== Resultados =====
-    private string FullOcrText = "";
-    private string ProductosJson = "";
-    private string ProveedorExtraido = "";
-
-    // ===== LocalStorage keys =====
-    private const string LS_TOKEN = "img_token";
-    private const string LS_GKEY = "img_gkey";
-    private const string LS_COLECTOR = "img_colector";
-
-    // ===== Tamaños naturales de la imagen =====
-    private double NaturalW, NaturalH;
-
-    protected override async Task OnInitializedAsync()
-    {
-        BearerToken = await JS.InvokeAsync<string?>("localStorage.getItem", LS_TOKEN);
-        GoogleApiKey = await JS.InvokeAsync<string?>("localStorage.getItem", LS_GKEY);
-        ColectorToken = await JS.InvokeAsync<string?>("localStorage.getItem", LS_COLECTOR);
-    }
-
-    // ===== MANEJO DE ARCHIVOS DE IMAGEN =====
-    private async Task OnFileSelected(InputFileChangeEventArgs e)
-    {
-        try
-        {
-            // ===== LIMPIEZA COMPLETA =====
-            Error = null;
-            FullOcrText = "";
-            ProductosJson = "";
-            ProveedorExtraido = "";
-            Polygons.Clear();
-            ImageBytes = null;
-            ImageDataUrl = null;
-            ImageMimeType = null;
-
-            var file = e.File;
-            if (file is null) 
-            {
-                Error = "No se pudo seleccionar el archivo.";
-                return;
-            }
-
-            // ===== VALIDACIONES BÁSICAS =====
-            if (file.Size > 20 * 1024 * 1024)
-            {
-                Error = "El archivo es demasiado grande. Máximo 20MB.";
-                return;
-            }
-
-            var allowedTypes = new[] { "image/png", "image/jpeg", "image/jpg", "image/bmp", "image/webp" };
-            var contentType = file.ContentType ?? string.Empty;
-            var contentTypeLower = contentType.ToLowerInvariant();
-
-            // Respaldo por extensión si ContentType viene vacío o no esperado
-            if (string.IsNullOrWhiteSpace(contentTypeLower) || !allowedTypes.Contains(contentTypeLower))
-            {
-                var ext = (Path.GetExtension(file.Name) ?? string.Empty).ToLowerInvariant();
-                contentTypeLower = ext switch
-                {
-                    ".png" => "image/png",
-                    ".jpg" => "image/jpeg",
-                    ".jpeg" => "image/jpeg",
-                    ".bmp" => "image/bmp",
-                    ".webp" => "image/webp",
-                    _ => string.Empty
-                };
-            }
-
-            if (string.IsNullOrWhiteSpace(contentTypeLower) || !allowedTypes.Contains(contentTypeLower))
-            {
-                Error = $"Tipo de archivo no soportado: {file.ContentType} ({file.Name})";
-                return;
-            }
-
-            // ===== LECTURA SIMPLE (ORIGINAL) =====
-            using var ms = new MemoryStream();
-            await file.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024).CopyToAsync(ms);
-            var originalBytes = ms.ToArray();
-            
-            if (originalBytes.Length == 0)
-            {
-                Error = "El archivo está vacío";
-                return;
-            }
-
-            // ===== PREVIEW REDIMENSIONADA PARA MOSTRAR Y PROCESAR (reduce memoria) =====
-            ImageMimeType = contentTypeLower;
-            try
-            {
-                var preview = await file.RequestImageFileAsync(contentTypeLower, 1600, 1600);
-                using var msPrev = new MemoryStream();
-                await preview.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024).CopyToAsync(msPrev);
-                var previewBytes = msPrev.ToArray();
-                var base64Prev = Convert.ToBase64String(previewBytes);
-                ImageDataUrl = $"data:{ImageMimeType};base64,{base64Prev}";
-                // Usar también la imagen reducida para OCR/IA para evitar OOM
-                ImageBytes = previewBytes;
-            }
-            catch
-            {
-                // Fallback: usar original si falla el resize (p.ej. BMP sin soporte)
-                var base64 = Convert.ToBase64String(originalBytes);
-                ImageDataUrl = $"data:{ImageMimeType};base64,{base64}";
-                ImageBytes = originalBytes;
-            }
-            NaturalW = 800;
-            NaturalH = 600;
-
-            // ===== CONFIRMACIÓN VISUAL =====
-            NombreArchivoImagen = file.Name ?? "";
-            TamañoArchivoImagen = $"{file.Size / 1024} KB";
-            MostrarConfirmacionImagen = true;
-            
-            _ = OcultarConfirmacionImagenAsync();
-        }
-        catch (Exception ex)
-        {
-            Error = $"❌ Error crítico: {ex.Message}";
-            
-            // ===== LIMPIEZA TOTAL =====
-            ImageBytes = null;
-            ImageDataUrl = null;
-            ImageMimeType = null;
-            FullOcrText = "";
-            ProductosJson = "";
-            ProveedorExtraido = "";
-            Polygons.Clear();
-        }
-    }
-
-    private async Task OcultarConfirmacionImagenAsync()
-    {
-        try
-        {
-            await Task.Delay(3000);
-            MostrarConfirmacionImagen = false;
-            await InvokeAsync(StateHasChanged);
-        }
-        catch { }
-    }
-
-    private async Task RunOCR()
-    {
-        Error = null;
-        FullOcrText = "";
-        Polygons.Clear();
-
-        if (ImageBytes is null) { Error = "Elegí una imagen primero."; return; }
-        if (string.IsNullOrWhiteSpace(GoogleApiKey)) { Error = "Pegá la Google API Key."; return; }
-
-        await JS.InvokeVoidAsync("localStorage.setItem", LS_TOKEN, BearerToken ?? "");
-        await JS.InvokeVoidAsync("localStorage.setItem", LS_GKEY, GoogleApiKey ?? "");
-
-        if (IsOcrLoading) return; // Evitar doble ejecución
-        IsOcrLoading = true;
-        
-        try
-        {
-            var url = $"https://vision.googleapis.com/v1/images:annotate?key={GoogleApiKey}";
-            var body = new VisionRequest
-            {
-                Requests = new[]
-                {
-                    new VisionRequestItem
-                    {
-                        Image = new VisionImage { Content = Convert.ToBase64String(ImageBytes!) },
-                        Features = new[]{ new VisionFeature { Type = "DOCUMENT_TEXT_DETECTION" } }
-                    }
-                }
-            };
-
-            var req = new HttpRequestMessage(HttpMethod.Post, url)
-            {
-                Content = new StringContent(JsonSerializer.Serialize(body), System.Text.Encoding.UTF8, "application/json")
-            };
-
-            var res = await Http.SendAsync(req);
-            var json = await res.Content.ReadAsStringAsync();
-
-            if (!res.IsSuccessStatusCode)
-            {
-                Error = $"Vision API error {(int)res.StatusCode} - {res.ReasonPhrase}. Respuesta: {json}";
-                return;
-            }
-
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var parsed = JsonSerializer.Deserialize<VisionResponse>(json, options);
-
-            var ann = parsed?.Responses?.FirstOrDefault()?.FullTextAnnotation;
-            if (ann is null)
-            {
-                Error = "No se detectó texto en la imagen.";
-                return;
-            }
-
-            FullOcrText = ann.Text ?? "";
-
-            foreach (var page in ann.Pages)
-            {
-                foreach (var block in page.Blocks)
-                {
-                    var text = new System.Text.StringBuilder();
-                    foreach (var paragraph in block.Paragraphs)
-                    {
-                        foreach (var word in paragraph.Words)
-                        {
-                            foreach (var symbol in word.Symbols) text.Append(symbol.Text);
-                            text.Append(' ');
-                        }
-                        text.AppendLine();
-                    }
-
-                    var rawPts = block.BoundingBox?.Vertices?
-                        .Where(v => v != null)
-                        .Select(v => new Pt(v.X, v.Y))
-                        .ToList() ?? new List<Pt>();
-
-                    bool bad = rawPts.Count < 3 || rawPts.Count(p => p.X == 0 && p.Y == 0) >= 2;
-
-                    if (bad && block.BoundingBox?.NormalizedVertices?.Count >= 3)
-                    {
-                        rawPts = block.BoundingBox.NormalizedVertices
-                            .Select(v => new Pt(v.X, v.Y))
-                            .ToList();
-                    }
-
-                    if (rawPts.Count < 3) continue;
-
-                    var pts = NormalizeIfNeeded(rawPts, NaturalW, NaturalH);
-                    Polygons.Add(new PolyModel(pts, text.ToString().Trim()));
-                }
-            }
-
-            try
-            {
-                var s2 = await JS.InvokeAsync<DomSize2>("getImageSizes", "#ocr-img");
-                await JS.InvokeVoidAsync("sizeSvgOverImage", ".overlay", s2.ClientWidth, s2.ClientHeight, s2.NaturalWidth, s2.NaturalHeight);
-            }
-            catch { }
-        }
-        catch (Exception ex)
-        {
-            Error = $"Excepción OCR: {ex.Message}";
-        }
-        finally
-        {
-            IsOcrLoading = false;
-        }
-    }
-
-    // === USA LA MISMA API KEY que Vision y manda la IMAGEN a Gemini ===
-    private async Task ExtraerProductosIA()
-    {
-        Console.WriteLine("🤖 ExtraerProductosIA: INICIANDO");
-        
-        Error = null;
-        ProductosJson = "";
-        ProveedorExtraido = "";
-
-        if (ImageBytes is null)
-        {
-            Error = "Primero elegí una imagen válida.";
-            return;
-        }
-        
-        if (string.IsNullOrWhiteSpace(ImageMimeType))
-        {
-            Error = "Primero elegí una imagen válida.";
-            return;
-        }
-        
-        if (string.IsNullOrWhiteSpace(GoogleApiKey))
-        {
-            Error = "Pegá la Google API Key (se usa para Vision y Gemini).";
-            return;
-        }
-
-        await JS.InvokeVoidAsync("localStorage.setItem", LS_GKEY, GoogleApiKey ?? "");
-
-        if (IsIaLoading) return; // Evitar doble ejecución
-        IsIaLoading = true;
-        
-        try
-        {
-            var prompt = @"Analiza esta factura y extrae:
-
-1. PROVEEDOR: Busca el primer CUIT/CUIL y la primera razón social que aparezcan (generalmente en la parte superior de la factura)
-
-2. PRODUCTOS: Lista todos los ítems de productos/servicios (sin subtotales, impuestos ni totales)
-
-Devuelve ÚNICAMENTE un JSON válido con esta estructura exacta:
-{
-  ""proveedor"": {
-    ""cuit_cuil"": ""20-12345678-9"",
-    ""razon_social"": ""Nombre del Proveedor S.A.""
-  },
-  ""productos"": [
-    {
-      ""codigo"": ""COD001"",
-      ""descripcion"": ""Producto 1"",
-      ""cantidad"": ""2"",
-      ""precio_unitario"": ""100.50""
-    }
-  ]
-}
-
-IMPORTANTE: 
-- Usa punto (.) como separador decimal
-- Devuelve SOLO el JSON, sin texto adicional
-- Si no encuentras CUIT/CUIL, usa ""No encontrado""
-- Si no encuentras razón social, usa ""No encontrado""";
-
-            var model = "gemini-1.5-flash-latest";
-            var url = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GoogleApiKey}";
-
-            var body = new
-            {
-                contents = new[] {
-                    new {
-                        parts = new object[] {
-                            new { text = "Sos un extractor de ítems de facturas. Devuelve solo JSON válido." },
-                            new { text = prompt },
-                            new { inlineData = new { mimeType = ImageMimeType, data = Convert.ToBase64String(ImageBytes) } }
-                        }
-                    }
-                }
-            };
-
-            var req = new HttpRequestMessage(HttpMethod.Post, url)
-            {
-                Content = new StringContent(JsonSerializer.Serialize(body), System.Text.Encoding.UTF8, "application/json")
-            };
-            var res = await Http.SendAsync(req);
-            var json = await res.Content.ReadAsStringAsync();
-
-            if (!res.IsSuccessStatusCode)
-            {
-                Error = $"Gemini error {(int)res.StatusCode} - {res.ReasonPhrase}. Respuesta: {json}";
-                return;
-            }
-
-            var (productosJson, proveedorJson) = TryParseGeminiWithProveedor(json);
-            Console.WriteLine($"🔍 Debug - ProductosJson: {productosJson}");
-            Console.WriteLine($"🔍 Debug - ProveedorJson: {proveedorJson}");
-            ProductosJson = productosJson;
-            ProveedorExtraido = proveedorJson;
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", productosJson);
-        }
-        catch (Exception ex)
-        {
-            Error = $"Excepción IA: {ex.Message}";
-        }
-        finally
-        {
-            IsIaLoading = false;
-        }
-    }
-
-    // ===== ENVÍO AL COLECTOR =====
-    private async Task EnviarAlColector()
-    {
-        Error = null;
-        
-        if (string.IsNullOrWhiteSpace(ProductosJson))
-        {
-            Error = "No hay productos para enviar al Colector. Primero extrae productos con IA.";
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(ColectorToken))
-        {
-            Error = "Pegá el Token de Colector para poder enviar los datos.";
-            return;
-        }
-
-        await JS.InvokeVoidAsync("localStorage.setItem", LS_COLECTOR, ColectorToken ?? "");
-
-        if (IsColectorLoading) return;
-        IsColectorLoading = true;
-        
-        try
-        {
-            // Crear el JSON manualmente para asegurar el formato correcto
-            var fechaHoraFormateada = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss");
-            var productos = ParseProductosToColector(ProductosJson);
-            
-            // USAR LA VARIABLE TEMPORAL DIRECTAMENTE
-            var tipoOperacionFinal = TipoOperacionTemporal;
-            
-            Console.WriteLine($"🔍 VALORES ANTES DE CREAR JSON:");
-            Console.WriteLine($"🔍 TipoOperacionSeleccionado: {TipoOperacionSeleccionado}");
-            Console.WriteLine($"🔍 TipoOperacionTemporal: {TipoOperacionTemporal}");
-            Console.WriteLine($"🔍 tipoOperacionFinal (USADO): {tipoOperacionFinal}");
-            Console.WriteLine($"🔍 FechaHora formateada: {fechaHoraFormateada}");
-            Console.WriteLine($"🔍 Cantidad de productos: {productos.Count}");
-            
-            // Crear JSON manualmente con formato exacto
-            var payloadJson = $@"{{
-  ""colectorEncabID"": 0,
-  ""fechaHora"": ""{fechaHoraFormateada}"",
-  ""sucursalID"": null,
-  ""depositoID"": null,
-  ""tipoOperacionID"": {tipoOperacionFinal},
-  ""clienteID"": null,
-  ""proveedorID"": null,
-  ""registroOperacionID"": null,
-  ""estadoID"": null,
-  ""pedirAlDepositoID"": null,
-  ""colectorItem"": {JsonSerializer.Serialize(productos, new JsonSerializerOptions { WriteIndented = true })}
-}}";
-
-            var url = "https://drrsystemas4.azurewebsites.net/Colector";
-            
-            Console.WriteLine($"🔍 JSON FINAL QUE SE ENVÍA:");
-            Console.WriteLine($"🔍 TipoOperacionID en JSON: {tipoOperacionFinal}");
-            Console.WriteLine($"🔍 FechaHora en JSON: {fechaHoraFormateada}");
-            Console.WriteLine($"🔍 JSON COMPLETO:");
-            Console.WriteLine(payloadJson);
-            
-            // Copiar el JSON al portapapeles para análisis
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", payloadJson);
-            Console.WriteLine($"🔍 JSON copiado al portapapeles para análisis");
-            
-            var req = new HttpRequestMessage(HttpMethod.Post, url)
-            {
-                Content = new StringContent(payloadJson, System.Text.Encoding.UTF8, "application/json")
-            };
-
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", ColectorToken);
-
-            var res = await Http.SendAsync(req);
-            var responseJson = await res.Content.ReadAsStringAsync();
-
-            if (!res.IsSuccessStatusCode)
-            {
-                Error = $"❌ Error Colector {(int)res.StatusCode} - {res.ReasonPhrase}\n\n" +
-                       $"Respuesta del servidor:\n{responseJson}\n\n" +
-                       $"Payload enviado:\n{payloadJson}";
-                return;
-            }
-
-            // Cerrar la modal de tipo de operación después del envío exitoso
-            MostrarModalTipoOperacion = false;
-            
-            var mensajeExito = $"✅ Datos enviados exitosamente al Colector!\n\n" +
-                              $"📊 Productos enviados: {productos.Count}\n" +
-                              $"⚙️ Tipo de operación: {ObtenerNombreTipoOperacion(tipoOperacionFinal)} (ID: {tipoOperacionFinal})\n" +
-                              $"📅 Fecha y hora: {fechaHoraFormateada}\n" +
-                              $"📋 JSON ENVIADO copiado al portapapeles para análisis";
-            
-            MensajeExito = mensajeExito;
-            MostrarMensajeExito = true;
-            Error = null;
-            
-            var _ = Task.Delay(5000).ContinueWith(async _ =>
-            {
-                await InvokeAsync(() => { MostrarMensajeExito = false; });
-            });
-            
-            // NO copiar la respuesta, ya se copió el JSON enviado arriba
-            // await JS.InvokeVoidAsync("navigator.clipboard.writeText", responseJson);
-        }
-        catch (Exception ex)
-        {
-            Error = $"❌ Excepción al enviar al Colector: {ex.Message}";
-        }
-        finally
-        {
-            IsColectorLoading = false;
-        }
-    }
-
-    // ===== LISTAR DATOS COLECTADOS =====
-    private async Task ListarDatosColectados()
-    {
-        if (string.IsNullOrWhiteSpace(ColectorToken))
-        {
-            Error = "Pegá el Token de Colector para poder listar los datos.";
-            return;
-        }
-
-        IsListandoColector = true;
-        try
-        {
-            var url = "https://drrsystemas4.azurewebsites.net/Colector";
-            var req = new HttpRequestMessage(HttpMethod.Get, url);
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", ColectorToken);
-            
-            var res = await Http.SendAsync(req);
-            var responseJson = await res.Content.ReadAsStringAsync();
-
-            if (!res.IsSuccessStatusCode)
-            {
-                Error = $"❌ Error al listar datos del Colector {(int)res.StatusCode} - {res.ReasonPhrase}\n\n" +
-                       $"Respuesta del servidor:\n{responseJson}";
-                return;
-            }
-
-            DatosColectorModal = responseJson;
-            MostrarModalColector = true;
-            
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", responseJson);
-        }
-        catch (Exception ex)
-        {
-            Error = $"❌ Excepción al listar datos del Colector: {ex.Message}";
-        }
-        finally
-        {
-            IsListandoColector = false;
-        }
-    }
-
-    // ===== MANEJO DEL MODAL DEL COLECTOR =====
-    private async Task CerrarModalColector()
-    {
-        MostrarModalColector = false;
-        DatosColectorModal = null;
-        await Task.CompletedTask;
-    }
-    
-    // ===== MANEJO DEL MODAL DE TIPO DE OPERACIÓN =====
-    private async Task AbrirModalTipoOperacion()
-    {
-        TipoOperacionTemporal = TipoOperacionSeleccionado; // Inicializar con el valor actual
-        MostrarModalTipoOperacion = true;
-        Console.WriteLine($"🔍 ABRIR MODAL - TipoOperacionTemporal inicializado: {TipoOperacionTemporal}");
-        await Task.CompletedTask;
-    }
-    
-    private async Task CerrarModalTipoOperacion()
-    {
-        MostrarModalTipoOperacion = false;
-        await Task.CompletedTask;
-    }
-    
-    private async Task SeleccionarTipoOperacion(int tipoId, string tipoNombre)
-    {
-        Console.WriteLine($"🔍 SELECCIONAR TIPO OPERACIÓN:");
-        Console.WriteLine($"🔍 TipoId recibido: {tipoId}");
-        Console.WriteLine($"🔍 TipoNombre recibido: {tipoNombre}");
-        Console.WriteLine($"🔍 TipoOperacionTemporal ANTES del cambio: {TipoOperacionTemporal}");
-        
-        TipoOperacionTemporal = tipoId;
-        
-        Console.WriteLine($"🔍 TipoOperacionTemporal DESPUÉS del cambio: {TipoOperacionTemporal}");
-        
-        // Forzar actualización del estado
-        await InvokeAsync(StateHasChanged);
-        
-        Console.WriteLine($"🔍 Estado actualizado. TipoOperacionTemporal final: {TipoOperacionTemporal}");
-    }
-
-    private async Task ConfirmarTipoOperacion()
-    {
-        Console.WriteLine($"🔍 CONFIRMAR TIPO OPERACIÓN:");
-        Console.WriteLine($"🔍 TipoOperacionTemporal: {TipoOperacionTemporal}");
-        Console.WriteLine($"🔍 TipoOperacionSeleccionado ANTES del cambio: {TipoOperacionSeleccionado}");
-        
-        // Asignar el valor temporal al valor final
-        TipoOperacionSeleccionado = TipoOperacionTemporal;
-        
-        Console.WriteLine($"🔍 TipoOperacionSeleccionado DESPUÉS del cambio: {TipoOperacionSeleccionado}");
-        Console.WriteLine($"🔍 VALOR FINAL QUE SE USARÁ: {TipoOperacionSeleccionado}");
-        
-        // Forzar actualización del estado
-        await InvokeAsync(StateHasChanged);
-        
-        // No cerrar la modal aquí, se cerrará después del envío exitoso
-        await EnviarAlColector();
-    }
-    
-    private string ObtenerNombreTipoOperacion(int tipoId)
-    {
-        var tipo = TiposOperacion.FirstOrDefault(t => t.Id == tipoId);
-        return tipo?.Nombre ?? $"ID: {tipoId}";
-    }
-    
-    private async Task HandleKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Escape")
-        {
-            await CerrarModalColector();
-        }
-    }
-    
-    private async Task CopiarDatosColector()
-    {
-        if (!string.IsNullOrWhiteSpace(DatosColectorModal))
-        {
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", DatosColectorModal);
-        }
-    }
-
-    // ===== Parseo robusto desde ProductosJson a colectorItem =====
-    private List<ColectorItem> ParseProductosToColector(string productosJson)
-    {
-        var items = new List<ColectorItem>();
-        
-        if (string.IsNullOrWhiteSpace(productosJson))
-        {
-            var itemEjemplo = new ColectorItem
-            {
-                itemColectorID = 0,
-                presentacionID = 0,
-                codigoID = 11589,
-                listaPrecID = 0,
-                cantidad = 1.0m,
-                codigoBarra = "PRODUCTO_EJEMPLO",
-                descripcion = "Producto de ejemplo generado automáticamente",
-                cantidadPiezas = 1
-            };
-            items.Add(itemEjemplo);
-            return items;
-        }
-
-        var jsonLimpio = productosJson.Trim();
-        var options = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-            AllowTrailingCommas = true,
-            ReadCommentHandling = JsonCommentHandling.Skip,
-            NumberHandling = JsonNumberHandling.AllowReadingFromString
-        };
-
-        List<ProductoItem>? parsed = null;
-        try
-        {
-            parsed = JsonSerializer.Deserialize<List<ProductoItem>>(jsonLimpio, options);
-        }
-        catch
-        {
-            try
-            {
-                var s = jsonLimpio.IndexOf('[');
-                var e = jsonLimpio.LastIndexOf(']');
-                
-                if (s >= 0 && e > s)
-                {
-                    var inner = jsonLimpio.Substring(s, e - s + 1);
-                    parsed = JsonSerializer.Deserialize<List<ProductoItem>>(inner, options);
-                }
-            }
-            catch { }
-        }
-
-        if (parsed == null || parsed.Count == 0)
-        {
-            var itemEjemplo = new ColectorItem
-            {
-                itemColectorID = 0,
-                presentacionID = 0,
-                codigoID = 11589,
-                listaPrecID = 0,
-                cantidad = 1.0m,
-                codigoBarra = "PRODUCTO_EJEMPLO",
-                descripcion = "Producto de ejemplo generado automáticamente",
-                cantidadPiezas = 1
-            };
-            items.Add(itemEjemplo);
-            return items;
-        }
-
-        foreach (var p in parsed)
-        {
-            decimal cantDec = 0m;
-            if (!string.IsNullOrWhiteSpace(p.Cantidad))
-            {
-                var norm = p.Cantidad.Replace(',', '.');
-                decimal.TryParse(norm, System.Globalization.NumberStyles.Any,
-                    System.Globalization.CultureInfo.InvariantCulture, out cantDec);
-            }
-
-            int codigoId = 11589;
-            
-            var item = new ColectorItem
-            {
-                itemColectorID = 0,
-                presentacionID = 0,
-                codigoID = codigoId,
-                listaPrecID = 0,
-                cantidad = cantDec,
-                codigoBarra = p.Descripcion ?? string.Empty,
-                descripcion = p.Codigo ?? string.Empty,
-                cantidadPiezas = (int)Math.Max(0, Math.Round(cantDec))
-            };
-            
-            items.Add(item);
-        }
-
-        return items;
-    }
-
-    private async Task CopyOcrText()
-    {
-        if (!string.IsNullOrWhiteSpace(FullOcrText))
-        {
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", FullOcrText);
-        }
-    }
-
-    private async Task CopyText(string txt)
-    {
-        await JS.InvokeVoidAsync("navigator.clipboard.writeText", txt ?? "");
-        HoverText = "📋 Copiado al portapapeles.\n\n" + txt;
-    }
-
-
-    private async Task OnImageLoaded()
-    {
-        try
-        {
-            if (ImageBytes == null || ImageDataUrl == null) return;
-
-            try
-            {
-                var s = await JS.InvokeAsync<DomSize2>("getImageSizes", "#ocr-img");
-                
-                if (s != null)
-                {
-                    NaturalW = s.NaturalWidth;
-                    NaturalH = s.NaturalHeight;
-                    
-                    try
-                    {
-                        await JS.InvokeVoidAsync("sizeSvgOverImage", ".overlay",
-                            s.ClientWidth, s.ClientHeight, s.NaturalWidth, s.NaturalHeight);
-                    }
-                    catch { }
-                }
-            }
-            catch { }
-        }
-        catch { }
-    }
-
-    // === Normalización (0..1 → px naturales) ===
-    private static bool LooksNormalized(List<Pt> pts)
-        => pts.Count > 0 && pts.All(p => p.X >= 0 && p.Y >= 0 && p.X <= 1.05 && p.Y <= 1.05);
-
-    private static List<Pt> NormalizeIfNeeded(List<Pt> pts, double naturalW, double naturalH)
-    {
-        if (naturalW <= 0 || naturalH <= 0) return pts;
-        if (!LooksNormalized(pts)) return pts;
-        return pts.Select(p => new Pt(
-            (float)(p.X * naturalW),
-            (float)(p.Y * naturalH)
-        )).ToList();
-    }
-
-    // DTO para JS interop
-    private sealed class DomSize2
-    {
-        public double ClientWidth { get; set; }
-        public double ClientHeight { get; set; }
-        public double NaturalWidth { get; set; }
-        public double NaturalHeight { get; set; }
-    }
-
-    private static (string productosJson, string proveedorJson) TryParseGeminiWithProveedor(string responseJson)
-    {
-        try
-        {
-            Console.WriteLine($"🔍 TryParseGeminiWithProveedor - ResponseJson: {responseJson}");
-            using var doc = JsonDocument.Parse(responseJson);
-            var root = doc.RootElement;
-            
-            var candidates = root.GetProperty("candidates");
-            if (candidates.ValueKind != JsonValueKind.Array || candidates.GetArrayLength() == 0)
-            {
-                return (responseJson, "");
-            }
-            
-            var parts = candidates[0].GetProperty("content").GetProperty("parts");
-            if (parts.ValueKind != JsonValueKind.Array || parts.GetArrayLength() == 0)
-            {
-                return (responseJson, "");
-            }
-            
-            var text = parts[0].GetProperty("text").GetString() ?? "";
-            Console.WriteLine($"🔍 Text from Gemini: {text}");
-            
-            // Intentar parsear como JSON completo con proveedor y productos
-            try
-            {
-                using var responseDoc = JsonDocument.Parse(text);
-                var responseRoot = responseDoc.RootElement;
-                Console.WriteLine($"🔍 ResponseRoot keys: {string.Join(", ", responseRoot.EnumerateObject().Select(p => p.Name))}");
-                
-                if (responseRoot.TryGetProperty("proveedor", out var proveedorElement) && 
-                    responseRoot.TryGetProperty("productos", out var productosElement))
-                {
-                    Console.WriteLine($"🔍 Found proveedor and productos properties");
-                    var proveedorJson = JsonSerializer.Serialize(proveedorElement, new JsonSerializerOptions { WriteIndented = true });
-                    var productosJson = JsonSerializer.Serialize(productosElement, new JsonSerializerOptions { WriteIndented = true });
-                    Console.WriteLine($"🔍 ProveedorJson: {proveedorJson}");
-                    Console.WriteLine($"🔍 ProductosJson: {productosJson}");
-                    return (productosJson, proveedorJson);
-                }
-                else
-                {
-                    Console.WriteLine($"🔍 No se encontraron las propiedades 'proveedor' y 'productos'");
-                    // Intentar extraer proveedor de forma manual del texto
-                    var proveedorManual = ExtraerProveedorManual(text);
-                    if (!string.IsNullOrWhiteSpace(proveedorManual))
-                    {
-                        Console.WriteLine($"🔍 Proveedor extraído manualmente: {proveedorManual}");
-                        return (text.Trim(), proveedorManual);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"🔍 Error parsing JSON: {ex.Message}");
-                // Intentar extraer proveedor de forma manual del texto
-                var proveedorManual = ExtraerProveedorManual(text);
-                if (!string.IsNullOrWhiteSpace(proveedorManual))
-                {
-                    Console.WriteLine($"🔍 Proveedor extraído manualmente (catch): {proveedorManual}");
-                    return (text.Trim(), proveedorManual);
-                }
-            }
-            
-            // Fallback: buscar solo productos como antes
-            var start = text.IndexOf('[');
-            var end = text.LastIndexOf(']');
-            
-            if (start >= 0 && end > start)
-            {
-                var result = text.Substring(start, end - start + 1).Trim();
-                Console.WriteLine($"🔍 Fallback - Solo productos encontrados: {result}");
-                return (result, "");
-            }
-            
-            Console.WriteLine($"🔍 Fallback - Texto completo: {text.Trim()}");
-            return (text.Trim(), "");
-        }
-        catch
-        {
-            return (responseJson, "");
-        }
-    }
-
-    private static string TryParseGemini(string responseJson)
-    {
-        var (productosJson, _) = TryParseGeminiWithProveedor(responseJson);
-        return productosJson;
-    }
-
-    private static string ExtraerProveedorManual(string text)
-    {
-        try
-        {
-            // Buscar patrones de CUIT/CUIL en el texto
-            var cuitPattern = @"\b\d{2}-\d{8}-\d{1}\b";
-            var cuilPattern = @"\b\d{2}-\d{7}-\d{1}\b";
-            var cuitMatch = System.Text.RegularExpressions.Regex.Match(text, cuitPattern);
-            var cuilMatch = System.Text.RegularExpressions.Regex.Match(text, cuilPattern);
-            
-            var cuitCuil = cuitMatch.Success ? cuitMatch.Value : (cuilMatch.Success ? cuilMatch.Value : "No encontrado");
-            
-            // Buscar posibles nombres de empresas (líneas que contengan palabras como S.A., S.R.L., etc.)
-            var empresaPattern = @"[A-ZÁÉÍÓÚÑ][A-Za-záéíóúñ\s\.&,]+(?:S\.A\.|S\.R\.L\.|S\.A\.S\.|S\.H\.|S\.C\.A\.|LTD\.|INC\.|CORP\.)";
-            var empresaMatch = System.Text.RegularExpressions.Regex.Match(text, empresaPattern);
-            var razonSocial = empresaMatch.Success ? empresaMatch.Value.Trim() : "No encontrado";
-            
-            // Si no encontramos empresa con patrón, buscar líneas que parezcan nombres de empresa
-            if (razonSocial == "No encontrado")
-            {
-                var lineas = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                foreach (var linea in lineas)
-                {
-                    var lineaTrim = linea.Trim();
-                    if (lineaTrim.Length > 5 && lineaTrim.Length < 100 && 
-                        char.IsUpper(lineaTrim[0]) && 
-                        !lineaTrim.Contains('[') && !lineaTrim.Contains(']') &&
-                        !lineaTrim.Contains('{') && !lineaTrim.Contains('}'))
-                    {
-                        razonSocial = lineaTrim;
-                        break;
-                    }
-                }
-            }
-            
-            var proveedor = new
-            {
-                cuit_cuil = cuitCuil,
-                razon_social = razonSocial
-            };
-            
-            return JsonSerializer.Serialize(proveedor, new JsonSerializerOptions { WriteIndented = true });
-        }
-        catch
-        {
-            return "";
-        }
-    }
-
-    // ===== Modelos Vision (mínimos) =====
-    private sealed class VisionRequest
-    {
-        [JsonPropertyName("requests")] public VisionRequestItem[] Requests { get; set; } = Array.Empty<VisionRequestItem>();
-    }
-    private sealed class VisionRequestItem
-    {
-        [JsonPropertyName("image")] public VisionImage Image { get; set; } = new();
-        [JsonPropertyName("features")] public VisionFeature[] Features { get; set; } = Array.Empty<VisionFeature>();
-    }
-    private sealed class VisionImage { [JsonPropertyName("content")] public string Content { get; set; } = ""; }
-    private sealed class VisionFeature { [JsonPropertyName("type")] public string Type { get; set; } = "DOCUMENT_TEXT_DETECTION"; }
-    private sealed class VisionResponse { [JsonPropertyName("responses")] public VisionOne[] Responses { get; set; } = Array.Empty<VisionOne>(); }
-    private sealed class VisionOne { [JsonPropertyName("fullTextAnnotation")] public FullTextAnnotation? FullTextAnnotation { get; set; } }
-    private sealed class FullTextAnnotation { [JsonPropertyName("text")] public string? Text { get; set; } [JsonPropertyName("pages")] public List<Page> Pages { get; set; } = new(); }
-    private sealed class Page { [JsonPropertyName("blocks")] public List<Block> Blocks { get; set; } = new(); }
-    private sealed class Block { [JsonPropertyName("boundingBox")] public BoundingPoly? BoundingBox { get; set; } [JsonPropertyName("paragraphs")] public List<Paragraph> Paragraphs { get; set; } = new(); }
-    private sealed class Paragraph { [JsonPropertyName("words")] public List<Word> Words { get; set; } = new(); }
-    private sealed class Word { [JsonPropertyName("symbols")] public List<Symbol> Symbols { get; set; } = new(); }
-    private sealed class Symbol { [JsonPropertyName("text")] public string Text { get; set; } = ""; }
-    private sealed class BoundingPoly
-    {
-        [JsonPropertyName("vertices")] public List<Vertex> Vertices { get; set; } = new();
-        [JsonPropertyName("normalizedVertices")] public List<NVertex> NormalizedVertices { get; set; } = new();
-    }
-    private sealed class Vertex { [JsonPropertyName("x")] public float X { get; set; } public float Y { get; set; } }
-    private sealed class NVertex { [JsonPropertyName("x")] public float X { get; set; } public float Y { get; set; } }
-
-    private sealed record Pt(float X, float Y);
-    private sealed class PolyModel
-    {
-        public List<Pt> Points { get; }
-        public string PointsAttr => string.Join(' ', Points.Select(p => $"{p.X},{p.Y}"));
-        public string Text { get; }
-        public PolyModel(List<Pt> pts, string text) { Points = pts; Text = text; }
-    }
-
-    // ===== DTOs reales para Colector =====
-    private sealed class ColectorPayload
-    {
-        [JsonPropertyName("colectorEncabID")]
-        public int colectorEncabID { get; set; }
-        
-        [JsonPropertyName("fechaHora")]
-        public DateTime fechaHora { get; set; }
-        
-        [JsonPropertyName("sucursalID")]
-        public int? sucursalID { get; set; }
-        
-        [JsonPropertyName("depositoID")]
-        public int? depositoID { get; set; }
-        
-        [JsonPropertyName("tipoOperacionID")]
-        public int? tipoOperacionID { get; set; }
-        
-        [JsonPropertyName("clienteID")]
-        public int? clienteID { get; set; }
-        
-        [JsonPropertyName("proveedorID")]
-        public int? proveedorID { get; set; }
-        
-        [JsonPropertyName("registroOperacionID")]
-        public int? registroOperacionID { get; set; }
-        
-        [JsonPropertyName("estadoID")]
-        public int? estadoID { get; set; }
-        
-        [JsonPropertyName("pedirAlDepositoID")]
-        public int? pedirAlDepositoID { get; set; }
-        
-        [JsonPropertyName("colectorItem")]
-        public List<ColectorItem> colectorItem { get; set; } = new();
-    }
-
-    private sealed class ColectorItem
-    {
-        public int itemColectorID { get; set; }
-        public int presentacionID { get; set; }
-        public int codigoID { get; set; }
-        public int listaPrecID { get; set; }
-        public decimal cantidad { get; set; }
-        public string codigoBarra { get; set; } = "";
-        public string descripcion { get; set; } = "";
-        public int cantidadPiezas { get; set; }
-    }
-
-    private sealed class ProductoItem
-    {
-        [JsonPropertyName("codigo")] public string? Codigo { get; set; }
-        [JsonPropertyName("descripcion")] public string? Descripcion { get; set; }
-        [JsonPropertyName("cantidad")] public string? Cantidad { get; set; }
-        [JsonPropertyName("precio_unitario")] public string? PrecioUnitario { get; set; }
-    }
-
-    private sealed class TipoOperacion
-    {
-        public int Id { get; set; }
-        public string Nombre { get; set; } = "";
-    }
-
-    private sealed class DateTimeConverter : JsonConverter<DateTime>
-    {
-        public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-        {
-            return DateTime.Parse(reader.GetString()!);
-        }
-
-        public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options)
-        {
-            writer.WriteStringValue(value.ToString("yyyy-MM-ddTHH:mm:ss"));
-        }
-    }
 }
 
 @if (MostrarModalTipoOperacion)
@@ -1462,24 +164,156 @@ IMPORTANTE:
     <div class="app-modal-backdrop" @onclick="CerrarModalColector">
         <div class="app-modal app-modal-xl" @onclick:stopPropagation="true" @onkeydown="HandleKeyDown" tabindex="0" @ref="ModalRef">
             <div class="app-modal-header">
-                <h3 class="app-modal-title">📋 Datos del Colector</h3>
+                <h3 class="app-modal-title">📋 @(ProductosExtraidos != null ? "Productos Extraídos con IA" : "Datos del Colector")</h3>
                 <button class="app-modal-close" @onclick="CerrarModalColector">×</button>
             </div>
             
             <div class="app-modal-body">
-                @if (!string.IsNullOrWhiteSpace(DatosColectorModal))
+                @if (ProductosExtraidos != null || (ColectorDatos != null && ColectorDatos.Any()) || !string.IsNullOrWhiteSpace(DatosColectorModal))
                 {
-                    <div style="margin-bottom: 16px;">
-                        <strong>✅ Datos obtenidos exitosamente del servidor</strong>
-                        <br />
-                        <small style="color: #666;">
-                            Los datos se copiaron automáticamente al portapapeles
-                        </small>
-                    </div>
-                    
-                    <div style="background: #f8f9fa; border: 1px solid #e1e5e9; border-radius: 8px; padding: 16px; font-family: 'Courier New', monospace; font-size: 12px; max-height: 400px; overflow-y: auto; white-space: pre-wrap;">
-                        @DatosColectorModal
-                    </div>
+                    @if (ProductosExtraidos != null)
+                    {
+                        <div style="margin-bottom: 16px;">
+                            <strong>✅ Productos extraídos con IA</strong>
+                            @if (ProductosExtraidos.Proveedor != null)
+                            {
+                                <div style="margin-top: 8px; padding: 12px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e1e5e9;">
+                                    <strong style="color: #333; font-size: 14px;">Proveedor:</strong>
+                                    <div style="margin-top: 4px; color: #666; font-size: 13px;">
+                                        <div><strong>Razón Social:</strong> @(ProductosExtraidos.Proveedor.RazonSocial ?? "-")</div>
+                                        <div><strong>CUIT/CUIL:</strong> @(ProductosExtraidos.Proveedor.CuitCuil ?? "-")</div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                        
+                        @if (ProductosExtraidos.Productos != null && ProductosExtraidos.Productos.Any())
+                        {
+                            <div style="max-height: 500px; overflow-y: auto;">
+                                <div style="border: 1px solid #e1e5e9; border-radius: 8px; padding: 16px; background: #fff;">
+                                    <div style="overflow-x: auto;">
+                                        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                                            <thead>
+                                                <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                                                    <th style="padding: 10px; text-align: left; font-weight: 600; color: #495057; border-right: 1px solid #dee2e6;">Código</th>
+                                                    <th style="padding: 10px; text-align: left; font-weight: 600; color: #495057; border-right: 1px solid #dee2e6;">Descripción</th>
+                                                    <th style="padding: 10px; text-align: right; font-weight: 600; color: #495057; border-right: 1px solid #dee2e6;">Cantidad</th>
+                                                    <th style="padding: 10px; text-align: right; font-weight: 600; color: #495057;">Precio Unitario</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var producto in ProductosExtraidos.Productos)
+                                                {
+                                                    <tr style="border-bottom: 1px solid #e9ecef;">
+                                                        <td style="padding: 10px; border-right: 1px solid #e9ecef; color: #333; font-family: 'Courier New', monospace;">
+                                                            @(producto.Codigo ?? "-")
+                                                        </td>
+                                                        <td style="padding: 10px; border-right: 1px solid #e9ecef; color: #333; max-width: 300px; word-wrap: break-word;">
+                                                            @(producto.Descripcion ?? "-")
+                                                        </td>
+                                                        <td style="padding: 10px; border-right: 1px solid #e9ecef; text-align: right; color: #333; font-weight: 500;">
+                                                            @(producto.Cantidad ?? "-")
+                                                        </td>
+                                                        <td style="padding: 10px; text-align: right; color: #333; font-weight: 500;">
+                                                            @(producto.PrecioUnitario ?? "-")
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="text-align: center; color: #666; padding: 20px;">
+                                No hay productos para mostrar
+                            </div>
+                        }
+                    }
+                    else if (ColectorDatos != null && ColectorDatos.Any())
+                    {
+                        <div style="margin-bottom: 16px;">
+                            <strong>✅ Datos obtenidos exitosamente del servidor</strong>
+                            <br />
+                            <small style="color: #666;">
+                                Los datos se copiaron automáticamente al portapapeles
+                            </small>
+                        </div>
+                        
+                        <div style="max-height: 500px; overflow-y: auto;">
+                            @foreach (var encabezado in ColectorDatos)
+                            {
+                                <div style="margin-bottom: 24px; border: 1px solid #e1e5e9; border-radius: 8px; padding: 16px; background: #fff;">
+                                    <div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 2px solid #e1e5e9;">
+                                        <strong style="color: #333; font-size: 14px;">📋 Encabezado ID: @encabezado.ColectorEncabID</strong>
+                                        @if (!string.IsNullOrWhiteSpace(encabezado.FechaHora))
+                                        {
+                                            <div style="color: #666; font-size: 12px; margin-top: 4px;">
+                                                📅 Fecha/Hora: @encabezado.FechaHora
+                                            </div>
+                                        }
+                                    </div>
+                                    
+                                    @if (encabezado.ColectorItem != null && encabezado.ColectorItem.Any())
+                                    {
+                                        <div style="overflow-x: auto;">
+                                            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                                                <thead>
+                                                    <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                                                        <th style="padding: 10px; text-align: left; font-weight: 600; color: #495057; border-right: 1px solid #dee2e6;">Código ID</th>
+                                                        <th style="padding: 10px; text-align: left; font-weight: 600; color: #495057; border-right: 1px solid #dee2e6;">Rubro</th>
+                                                        <th style="padding: 10px; text-align: left; font-weight: 600; color: #495057; border-right: 1px solid #dee2e6;">Descripción</th>
+                                                        <th style="padding: 10px; text-align: right; font-weight: 600; color: #495057; border-right: 1px solid #dee2e6;">Cantidad</th>
+                                                        <th style="padding: 10px; text-align: left; font-weight: 600; color: #495057; border-right: 1px solid #dee2e6;">Código Barra</th>
+                                                        <th style="padding: 10px; text-align: right; font-weight: 600; color: #495057;">Piezas</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var item in encabezado.ColectorItem)
+                                                    {
+                                                        <tr style="border-bottom: 1px solid #e9ecef;">
+                                                            <td style="padding: 10px; border-right: 1px solid #e9ecef; color: #333;">
+                                                                @(item.Producto?.CodigoID ?? item.codigoID)
+                                                            </td>
+                                                            <td style="padding: 10px; border-right: 1px solid #e9ecef; color: #666;">
+                                                                @(item.Producto?.RubroCodigo ?? "-")
+                                                            </td>
+                                                            <td style="padding: 10px; border-right: 1px solid #e9ecef; color: #333; max-width: 300px; word-wrap: break-word;">
+                                                                @(item.Producto?.DescripcionLarga ?? item.Producto?.Descripcion ?? item.descripcion ?? "-")
+                                                            </td>
+                                                            <td style="padding: 10px; border-right: 1px solid #e9ecef; text-align: right; color: #333; font-weight: 500;">
+                                                                @item.cantidad.ToString("N2")
+                                                            </td>
+                                                            <td style="padding: 10px; border-right: 1px solid #e9ecef; color: #666; font-family: 'Courier New', monospace; font-size: 11px;">
+                                                                @(item.codigoBarra ?? "-")
+                                                            </td>
+                                                            <td style="padding: 10px; text-align: right; color: #333; font-weight: 500;">
+                                                                @item.cantidadPiezas
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div style="text-align: center; color: #666; padding: 20px;">
+                                            No hay items en este encabezado
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div style="background: #f8f9fa; border: 1px solid #e1e5e9; border-radius: 8px; padding: 16px; font-family: 'Courier New', monospace; font-size: 12px; max-height: 400px; overflow-y: auto; white-space: pre-wrap;">
+                            @DatosColectorModal
+                        </div>
+                    }
                 }
                 else
                 {

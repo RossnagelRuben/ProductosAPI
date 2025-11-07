@@ -21,4 +21,8 @@
     <ServiceWorker Include="wwwroot\service-worker.js" PublishedContent="wwwroot\service-worker.published.js" />
   </ItemGroup>
 
+  <Target Name="CopyScopedCss" AfterTargets="Build">
+    <Copy SourceFiles="$(IntermediateOutputPath)scopedcss\bundle\$(AssemblyName).styles.css" DestinationFiles="$(OutputPath)wwwroot\$(AssemblyName).styles.css" SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

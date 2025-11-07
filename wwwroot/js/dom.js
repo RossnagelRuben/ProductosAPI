@@ -219,4 +219,62 @@ window.addEventListener('resize', function() {
 
 // Listener de resize ya está configurado en setupResizeListener
 
+// Funciones para Imagen.razor - OCR y overlay SVG
+
+// Función para obtener dimensiones de imagen
+window.getImageSizes = function(selector) {
+    try {
+        const img = document.querySelector(selector);
+        if (!img) {
+            console.warn(`No se encontró imagen con selector: ${selector}`);
+            return {
+                clientWidth: 0,
+                clientHeight: 0,
+                naturalWidth: 0,
+                naturalHeight: 0
+            };
+        }
+        
+        return {
+            clientWidth: img.clientWidth || 0,
+            clientHeight: img.clientHeight || 0,
+            naturalWidth: img.naturalWidth || 0,
+            naturalHeight: img.naturalHeight || 0
+        };
+    } catch (error) {
+        console.error('Error en getImageSizes:', error);
+        return {
+            clientWidth: 0,
+            clientHeight: 0,
+            naturalWidth: 0,
+            naturalHeight: 0
+        };
+    }
+};
+
+// Función para ajustar SVG sobre imagen
+window.sizeSvgOverImage = function(selector, clientW, clientH, naturalW, naturalH) {
+    try {
+        const svg = document.querySelector(selector);
+        if (!svg) {
+            console.warn(`No se encontró SVG con selector: ${selector}`);
+            return;
+        }
+        
+        // Asegurar que los valores sean válidos
+        if (!clientW || !clientH || !naturalW || !naturalH) {
+            console.warn('Dimensiones inválidas para sizeSvgOverImage');
+            return;
+        }
+        
+        svg.setAttribute('width', clientW);
+        svg.setAttribute('height', clientH);
+        svg.setAttribute('viewBox', `0 0 ${naturalW} ${naturalH}`);
+        svg.setAttribute('preserveAspectRatio', 'none');
+        
+    } catch (error) {
+        console.error('Error en sizeSvgOverImage:', error);
+    }
+};
+
 console.log('JavaScript simplificado cargado correctamente');

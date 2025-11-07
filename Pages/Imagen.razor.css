@@ -1,0 +1,288 @@
+﻿::deep .card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 12px 14px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.08);
+    margin-bottom: 12px
+}
+
+::deep .row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 8px
+}
+
+    ::deep .row label {
+        font-weight: 600;
+        color: #334155
+    }
+
+    ::deep .row input {
+        flex: 1 1 280px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        border: 1px solid #d0d7de
+    }
+
+        ::deep .row input:focus {
+            outline: none;
+            border-color: #1DA1F2;
+            box-shadow: 0 0 0 3px rgba(29,161,242,.15)
+        }
+
+::deep .btn {
+    padding: 8px 14px;
+    border-radius: 10px;
+    border: none;
+    background: #1DA1F2;
+    color: #fff;
+    cursor: pointer
+}
+
+    ::deep .btn[disabled] {
+        opacity: .6;
+        cursor: default
+    }
+
+::deep .btn-gray {
+    background: #e2e8f0;
+    color: #111827
+}
+
+::deep .btn-purple {
+    background: #7c3aed
+}
+
+::deep .btn-green {
+    background: #10b981
+}
+
+::deep .btn-blue {
+    background: #3b82f6
+}
+
+::deep .btn-orange {
+    background: #f97316
+}
+
+::deep .section .btn {
+    margin: 0;
+    flex-shrink: 0;
+    min-height: 40px;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+    ::deep .section .btn + .btn {
+        margin-left: 0;
+    }
+
+    ::deep .section .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    ::deep .section .btn:active {
+        transform: translateY(0);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+
+::deep .alert.error {
+    margin-top: 6px;
+    padding: 12px 14px;
+    color: #0f5132;
+    background: #d1e7dd;
+    border: 1px solid #badbcc;
+    border-radius: 10px;
+    white-space: pre-wrap;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    max-height: 400px;
+    overflow-y: auto;
+    line-height: 1.4;
+    animation: fadeInOut 3s ease-in-out forwards;
+}
+
+::deep .alert.success {
+    margin-top: 6px;
+    padding: 12px 14px;
+    color: #0f5132;
+    background: #d1e7dd;
+    border: 1px solid #badbcc;
+    border-radius: 10px;
+    white-space: pre-wrap;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    animation: fadeInOut 3s ease-in-out;
+}
+
+::deep .fadeInOut {
+    animation: fadeInOut 3s ease-in-out;
+}
+
+@keyframes fadeInOut {
+    0% {
+        opacity: 0;
+        transform: translateY(-10px);
+        max-height: 0;
+        margin: 0;
+        padding: 0;
+    }
+
+    10% {
+        opacity: 1;
+        transform: translateY(0);
+        max-height: 200px;
+        margin: 6px 0 0 0;
+        padding: 12px 14px;
+    }
+
+    90% {
+        opacity: 1;
+        transform: translateY(0);
+        max-height: 200px;
+        margin: 6px 0 0 0;
+        padding: 12px 14px;
+    }
+
+    100% {
+        opacity: 0;
+        transform: translateY(-10px);
+        max-height: 0;
+        margin: 0;
+        padding: 0;
+    }
+}
+
+::deep .stage {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start
+}
+
+::deep .img-wrap {
+    position: relative;
+    max-width: 60%;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    overflow: auto;
+    background: #fff
+}
+
+    ::deep .img-wrap img {
+        display: block;
+        max-width: 100%;
+        height: auto;
+        position: relative;
+        z-index: 1;
+    }
+    
+    ::deep .img-wrap svg {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 2;
+        pointer-events: none;
+        background: transparent !important;
+    }
+    
+    ::deep .img-wrap svg polygon {
+        fill: rgba(255,0,0,.15) !important;
+        stroke: #ef4444 !important;
+        stroke-width: 2 !important;
+        vector-effect: non-scaling-stroke !important;
+        pointer-events: auto !important;
+    }
+
+::deep .overlay {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: auto;
+    fill: none !important;
+    background: transparent !important;
+}
+
+::deep .poly {
+    fill: rgba(255,0,0,.15) !important;
+    stroke: #ef4444 !important;
+    stroke-width: 2 !important;
+    vector-effect: non-scaling-stroke !important;
+    pointer-events: auto !important;
+}
+
+/* Estilos adicionales para asegurar que los SVG no tengan fondo negro */
+::deep svg.overlay {
+    background: transparent !important;
+    fill: none !important;
+}
+
+::deep svg.overlay polygon {
+    fill: rgba(255,0,0,.15) !important;
+    stroke: #ef4444 !important;
+    stroke-width: 2 !important;
+    vector-effect: non-scaling-stroke !important;
+}
+
+::deep .side {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 12px
+}
+
+::deep .section {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 10px
+}
+
+::deep .section-title {
+    font-weight: 700;
+    margin-bottom: 8px
+}
+
+::deep textarea {
+    width: 100%;
+    border: 1px solid #d0d7de;
+    border-radius: 8px;
+    padding: 8px;
+    resize: vertical
+}
+
+::deep .tooltip-fixed {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    background: #111827;
+    color: #fff;
+    border-radius: 12px;
+    box-shadow: 0 10px 22px rgba(0,0,0,.25);
+    max-width: 420px
+}
+
+::deep .tooltip-title {
+    font-weight: 700;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255,255,255,.1)
+}
+
+::deep .tooltip-body {
+    padding: 10px 12px;
+    white-space: pre-wrap
+}
+
+::deep .tooltip-foot {
+    padding: 8px 12px;
+    color: #cbd5e1;
+    border-top: 1px solid rgba(255,255,255,.1)
+}
