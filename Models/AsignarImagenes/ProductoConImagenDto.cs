@@ -1,0 +1,18 @@
+namespace BlazorApp_ProductosAPI.Models.AsignarImagenes;
+
+/// <summary>
+/// DTO de producto con datos para asignación de imágenes.
+/// Principio de responsabilidad única: solo transporta datos.
+/// </summary>
+public sealed class ProductoConImagenDto
+{
+    public int ProductoID { get; set; }
+    public string? Codigo { get; set; }
+    public string? DescripcionLarga { get; set; }
+    public string? CodigoBarra { get; set; }
+    public string? Presentacion { get; set; }
+    /// <summary>URL de imagen actual (API Centralizadora o guardada).</summary>
+    public string? ImagenUrl { get; set; }
+    /// <summary>Indica si la imagen fue cargada desde API o está pendiente.</summary>
+    public bool ImagenCargada { get; set; }
+}

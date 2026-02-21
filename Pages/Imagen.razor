@@ -16,7 +16,7 @@
     </div>
     
     <div class="row">
-        <InputFile OnChange="OnFileSelected" accept=".png,.jpg,.jpeg,.bmp,.webp" />
+        <InputFile OnChange="OnFileSelected" accept=".png,.jpg,.jpeg,.bmp,.webp,.pdf" />
         <button class="btn" @onclick="RunOCR" disabled="@IsOcrLoading">
             @(IsOcrLoading ? "Procesando..." : "Procesar OCR")
         </button>
@@ -35,33 +35,45 @@
         <div class="alert success fadeInOut">@MensajeExito</div>
     }
     
-    @if (MostrarConfirmacionImagen)
+    @if (MostrarConfirmacionImagen && !string.IsNullOrWhiteSpace(MensajeExito))
     {
         <div class="alert success fadeInOut">
-            ✅ Imagen cargada: @NombreArchivoImagen (@TamañoArchivoImagen)
+            @MensajeExito
         </div>
     }
 </div>
 
-@if (!string.IsNullOrWhiteSpace(ImageDataUrl))
+@if (!string.IsNullOrWhiteSpace(ImageDataUrl) || (ImageBytes != null && IsPdfFile))
 {
     <div class="stage">
         <div class="img-wrap">
-            <img id="ocr-img" src="@ImageDataUrl" @ref="ImgRef" @onload="OnImageLoaded" />
-            <svg class="overlay" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; background: transparent; fill: none;">
-                @if (Polygons?.Count > 0)
-                {
-                    @foreach (var p in Polygons)
+            @if (IsPdfFile)
+            {
+                <div style="padding: 40px; text-align: center; background: #f8f9fa; border-radius: 10px; min-height: 400px; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+                    <div style="font-size: 64px; margin-bottom: 16px;">📄</div>
+                    <div style="font-weight: 600; color: #333; margin-bottom: 8px;">Archivo PDF cargado</div>
+                    <div style="color: #666; font-size: 14px;">@NombreArchivoImagen</div>
+                    <div style="color: #999; font-size: 12px; margin-top: 4px;">@TamañoArchivoImagen</div>
+                </div>
+            }
+            else
+            {
+                <img id="ocr-img" src="@ImageDataUrl" @ref="ImgRef" @onload="OnImageLoaded" />
+                <svg class="overlay" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; background: transparent; fill: none;">
+                    @if (Polygons?.Count > 0)
                     {
-                        <polygon points="@p.PointsAttr" class="poly"
-                                 style="fill: rgba(255,0,0,0.15); stroke: #ef4444; stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: auto;"
-                                 @onmouseover="@(() => HoverText = p.Text)" 
-                                 @onmouseout="@(() => HoverText = null)"
-                                 @onclick="@(() => CopyText(p.Text))">
-                        </polygon>
+                        @foreach (var p in Polygons)
+                        {
+                            <polygon points="@p.PointsAttr" class="poly"
+                                     style="fill: rgba(255,0,0,0.15); stroke: #ef4444; stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: auto;"
+                                     @onmouseover="@(() => HoverText = p.Text)" 
+                                     @onmouseout="@(() => HoverText = null)"
+                                     @onclick="@(() => CopyText(p.Text))">
+                            </polygon>
+                        }
                     }
-                }
-            </svg>
+                </svg>
+            }
         </div>
 
         <div class="side">
@@ -74,6 +86,17 @@
                 <div class="section-title">Texto OCR</div>
                 <textarea readonly rows="12">@FullOcrText</textarea>
             </div>
+
+            @if (!string.IsNullOrWhiteSpace(TipoComprobanteDetectado))
+            {
+                <div class="section">
+                    <div class="section-title">Tipo de comprobante detectado</div>
+                    <div style="margin-top: 8px; padding: 12px; border-radius: 10px; border: 1px solid #cbd5f5; background: #eff6ff; color: #0f172a; display: flex; flex-direction: column; gap: 6px;">
+                        <div style="font-size: 14px; font-weight: 600;">@TipoComprobanteDetectado</div>
+                        <div style="font-size: 12px; color: #475569;">Identificado automáticamente a partir del OCR y los datos IA.</div>
+                    </div>
+                </div>
+            }
 
             <div class="section">
                 <div class="section-title">Productos (IA)</div>
@@ -171,40 +194,113 @@
             <div class="app-modal-body">
                 @if (ProductosExtraidos != null || (ColectorDatos != null && ColectorDatos.Any()) || !string.IsNullOrWhiteSpace(DatosColectorModal))
                 {
-                    @if (ProductosExtraidos != null)
-                    {
-                        <div style="margin-bottom: 16px;">
-                            <strong>✅ Productos extraídos con IA</strong>
-                            @if (ProductosExtraidos.Proveedor != null)
-                            {
-                                <div style="margin-top: 8px; padding: 12px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e1e5e9;">
-                                    <strong style="color: #333; font-size: 14px;">Proveedor:</strong>
-                                    <div style="margin-top: 4px; color: #666; font-size: 13px;">
-                                        <div><strong>Razón Social:</strong> @(ProductosExtraidos.Proveedor.RazonSocial ?? "-")</div>
-                                        <div><strong>CUIT/CUIL:</strong> @(ProductosExtraidos.Proveedor.CuitCuil ?? "-")</div>
+                        @if (ProductosExtraidos != null)
+                        {
+                            <div style="margin-bottom: 16px;">
+                                <strong>✅ Productos extraídos con IA</strong>
+                                
+                                @* Mostrar datos de encabezado *@
+                                @if (ProductosExtraidos.Encabezado != null)
+                                {
+                                    <div style="margin-top: 8px; padding: 12px; background: #e3f2fd; border-radius: 8px; border: 1px solid #90caf9;">
+                                        <strong style="color: #333; font-size: 14px;">📋 Encabezado del Comprobante:</strong>
+                                        <div style="margin-top: 4px; color: #666; font-size: 13px;">
+                                            @if (!string.IsNullOrWhiteSpace(ProductosExtraidos.Encabezado.TipoComprobante))
+                                            {
+                                                <div><strong>Tipo:</strong> @ProductosExtraidos.Encabezado.TipoComprobante</div>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(ProductosExtraidos.Encabezado.NumeroComprobante))
+                                            {
+                                                <div><strong>Número:</strong> @ProductosExtraidos.Encabezado.NumeroComprobante</div>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(ProductosExtraidos.Encabezado.Talonario))
+                                            {
+                                                <div><strong>Talonario:</strong> @ProductosExtraidos.Encabezado.Talonario</div>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(ProductosExtraidos.Encabezado.FechaComprobante))
+                                            {
+                                                <div><strong>Fecha:</strong> @ProductosExtraidos.Encabezado.FechaComprobante</div>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(ProductosExtraidos.Encabezado.Subtotal))
+                                            {
+                                                <div><strong>Subtotal:</strong> @ProductosExtraidos.Encabezado.Subtotal</div>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(ProductosExtraidos.Encabezado.Total))
+                                            {
+                                                <div><strong>Total:</strong> @ProductosExtraidos.Encabezado.Total</div>
+                                            }
+                                        </div>
+
+                                        @if (ProductosExtraidos.Encabezado.ImpuestosAplicados != null && ProductosExtraidos.Encabezado.ImpuestosAplicados.Any(i => !string.IsNullOrWhiteSpace(i?.Nombre) || !string.IsNullOrWhiteSpace(i?.Monto)))
+                                        {
+                                            <div style="margin-top: 10px; padding: 10px; border-radius: 8px; background: #fff; border: 1px dashed #90caf9;">
+                                                <div style="font-weight: 600; color: #1d4ed8; margin-bottom: 6px;">Impuestos / Recargos:</div>
+                                                <div style="display: flex; flex-direction: column; gap: 4px;">
+                                                    @foreach (var impuesto in ProductosExtraidos.Encabezado.ImpuestosAplicados)
+                                                    {
+                                                        if (impuesto == null || (string.IsNullOrWhiteSpace(impuesto.Nombre) && string.IsNullOrWhiteSpace(impuesto.Monto)))
+                                                        {
+                                                            continue;
+                                                        }
+
+                                                        <div style="display: flex; justify-content: space-between; font-size: 12px; color: #1e293b; border: 1px solid #e0e7ff; border-radius: 6px; padding: 6px 10px; background: #f8fafc;">
+                                                            <span style="font-weight: 600;">@(impuesto.Nombre ?? "Impuesto")</span>
+                                                            <span>@(impuesto.Monto ?? "-")</span>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
                                     </div>
-                                </div>
-                            }
-                        </div>
+                                }
+                                
+                                @* Mostrar datos del proveedor *@
+                                @if (ProductosExtraidos.Proveedor != null)
+                                {
+                                    <div style="margin-top: 8px; padding: 12px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e1e5e9;">
+                                        <strong style="color: #333; font-size: 14px;">🏢 Proveedor:</strong>
+                                        <div style="margin-top: 4px; color: #666; font-size: 13px;">
+                                            <div><strong>Razón Social:</strong> @(ProductosExtraidos.Proveedor.RazonSocial ?? "-")</div>
+                                            <div><strong>CUIT/CUIL:</strong> @(ProductosExtraidos.Proveedor.CuitCuil ?? "-")</div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
                         
                         @if (ProductosExtraidos.Productos != null && ProductosExtraidos.Productos.Any())
                         {
+                            var productosOrdenados = ProductosExtraidos.Productos
+                                .OrderBy(p => p.Orden ?? int.MaxValue)
+                                .ToList();
+                            
+                            var mostrarColumnaDescuento = productosOrdenados.Any(p =>
+                                !string.IsNullOrWhiteSpace(p.Descuento));
+
                             <div style="max-height: 500px; overflow-y: auto;">
                                 <div style="border: 1px solid #e1e5e9; border-radius: 8px; padding: 16px; background: #fff;">
                                     <div style="overflow-x: auto;">
                                         <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
                                             <thead>
                                                 <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                                                    <th style="padding: 10px; text-align: center; font-weight: 600; color: #495057; border-right: 1px solid #dee2e6; width: 50px;">#</th>
                                                     <th style="padding: 10px; text-align: left; font-weight: 600; color: #495057; border-right: 1px solid #dee2e6;">Código</th>
                                                     <th style="padding: 10px; text-align: left; font-weight: 600; color: #495057; border-right: 1px solid #dee2e6;">Descripción</th>
                                                     <th style="padding: 10px; text-align: right; font-weight: 600; color: #495057; border-right: 1px solid #dee2e6;">Cantidad</th>
-                                                    <th style="padding: 10px; text-align: right; font-weight: 600; color: #495057;">Precio Unitario</th>
+                                                    <th style="padding: 10px; text-align: right; font-weight: 600; color: #495057; border-right: 1px solid #dee2e6;">Precio Unit.</th>
+                                                    <th style="padding: 10px; text-align: center; font-weight: 600; color: #495057; border-right: 1px solid #dee2e6;">IVA</th>
+                                                    @if (mostrarColumnaDescuento)
+                                                    {
+                                                        <th style="padding: 10px; text-align: center; font-weight: 600; color: #495057;">Descuento</th>
+                                                    }
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                @foreach (var producto in ProductosExtraidos.Productos)
+                                                @foreach (var producto in productosOrdenados)
                                                 {
                                                     <tr style="border-bottom: 1px solid #e9ecef;">
+                                                        <td style="padding: 10px; border-right: 1px solid #e9ecef; text-align: center; color: #666; font-weight: 600;">
+                                                            @(producto.Orden?.ToString() ?? "-")
+                                                        </td>
                                                         <td style="padding: 10px; border-right: 1px solid #e9ecef; color: #333; font-family: 'Courier New', monospace;">
                                                             @(producto.Codigo ?? "-")
                                                         </td>
@@ -214,9 +310,32 @@
                                                         <td style="padding: 10px; border-right: 1px solid #e9ecef; text-align: right; color: #333; font-weight: 500;">
                                                             @(producto.Cantidad ?? "-")
                                                         </td>
-                                                        <td style="padding: 10px; text-align: right; color: #333; font-weight: 500;">
+                                                        <td style="padding: 10px; border-right: 1px solid #e9ecef; text-align: right; color: #333; font-weight: 500;">
                                                             @(producto.PrecioUnitario ?? "-")
                                                         </td>
+                                                        <td style="padding: 10px; border-right: 1px solid #e9ecef; text-align: center; color: #333;">
+                                                            @if (!string.IsNullOrWhiteSpace(producto.IvaPorcentaje))
+                                                            {
+                                                                <span style="background: #fff3cd; padding: 4px 8px; border-radius: 4px; font-weight: 500;">@producto.IvaPorcentaje%</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span style="color: #999;">-</span>
+                                                            }
+                                                        </td>
+                                                    @if (mostrarColumnaDescuento)
+                                                    {
+                                                        if (!string.IsNullOrWhiteSpace(producto.Descuento))
+                                                        {
+                                                            <td style="padding: 10px; text-align: center; color: #333;">
+                                                                <span style="background: #d1e7dd; padding: 4px 8px; border-radius: 4px; font-weight: 500;">@producto.Descuento</span>
+                                                            </td>
+                                                        }
+                                                        else
+                                                        {
+                                                            <td style="padding: 10px; text-align: center; color: #999;">—</td>
+                                                        }
+                                                    }
                                                     </tr>
                                                 }
                                             </tbody>

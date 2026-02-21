@@ -93,6 +93,15 @@ public class FamiliaItem
     public string Orden { get; set; } = string.Empty;
 }
 
+public class MarcaItem
+{
+    [JsonPropertyName("marcaID")]
+    public int MarcaID { get; set; }
+    
+    [JsonPropertyName("descripcion")]
+    public string Descripcion { get; set; } = string.Empty;
+}
+
 public class TreeNode
 {
     public UbicacionItem Item { get; set; } = new();

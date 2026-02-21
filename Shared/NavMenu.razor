@@ -1,91 +1,64 @@
-﻿<div class="top-row ps-3 navbar navbar-dark" style="z-index: 2000; position: sticky; top: 0;">
+<div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
         <a class="navbar-brand" href="">Alma NET APIs</a>
-        <div class="d-flex align-items-center gap-2">
-            
-            <button class="btn btn-primary btn-sm" style="border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.25);" title="Colapsar/Expandir menú" @onclick="ToggleSidebar">
-                <span class="oi oi-chevron-left" aria-hidden="true"></span>
-            </button>
-        </div>
+        <button class="navbar-toggler" type="button" aria-label="Alternar navegación" @onclick="ToggleNavMenu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
     </div>
 </div>
 
-<div class="@NavMenuCssClass nav-scrollable" style="@SidebarStyle">
+<div class="@NavMenuCssClass nav-scrollable">
     <nav class="flex-column">
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All" @onclick="CollapseAfterNavigate">
-                <span class="oi oi-home" aria-hidden="true"></span> <span class="nav-text">Inicio</span>
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All" @onclick="CollapseNav">
+                <span class="oi oi-home" aria-hidden="true"></span> Inicio
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="productos" @onclick="CollapseAfterNavigate">
-                <span class="oi oi-list-rich" aria-hidden="true"></span> <span class="nav-text">Productos API</span>
+            <NavLink class="nav-link" href="productos" @onclick="CollapseNav">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> Productos API
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="Empresas" @onclick="CollapseAfterNavigate">
-                <span class="oi oi-briefcase" aria-hidden="true"></span> <span class="nav-text">Datos Empresa</span>
+            <NavLink class="nav-link" href="Empresas" @onclick="CollapseNav">
+                <span class="oi oi-briefcase" aria-hidden="true"></span> Datos Empresa
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="Imagen" @onclick="CollapseAfterNavigate">
-                <span class="oi oi-camera-slr" aria-hidden="true"></span> <span class="nav-text">Analizar Imagen</span>
+            <NavLink class="nav-link" href="Imagen" @onclick="CollapseNav">
+                <span class="oi oi-camera-slr" aria-hidden="true"></span> Analizar Imagen
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="DEPOSITOS" @onclick="CollapseAfterNavigate">
-                <span class="oi oi-location" aria-hidden="true"></span> <span class="nav-text">Stock por Ubicación</span>
+            <NavLink class="nav-link" href="DEPOSITOS" @onclick="CollapseNav">
+                <span class="oi oi-location" aria-hidden="true"></span> Stock por Ubicación
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="Publicidad" @onclick="CollapseAfterNavigate">
-                <span class="oi oi-camera-slr" aria-hidden="true"></span> <span class="nav-text">PUBLICIDAD</span>
+            <NavLink class="nav-link" href="Publicidad" @onclick="CollapseNav">
+                <span class="oi oi-megaphone" aria-hidden="true"></span> Publicidad
             </NavLink>
         </div>
-
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="AsignarImagenes" @onclick="CollapseNav">
+                <span class="oi oi-image" aria-hidden="true"></span> Asignar imágenes
+            </NavLink>
+        </div>
     </nav>
 </div>
 
 @code {
-    private bool collapseNavMenu = false;
+    private bool collapseNavMenu = true;
 
-    // Usar colapso clásico: en pantallas grandes no colapsa (CSS), en móviles sí
     private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
-    private string SidebarStyle => IsSidebarCollapsed ? "width: 0; overflow: hidden; padding: 0; margin: 0; display: none;" : string.Empty;
 
-    private void ToggleNavMenu() { }
-
-    [Parameter] public EventCallback<bool> SidebarToggled { get; set; }
-    [Parameter] public bool IsSidebarCollapsed { get; set; }
-    [Inject] IJSRuntime JS { get; set; } = default!;
-
-    private async Task ToggleSidebar()
+    private void ToggleNavMenu()
     {
-        var newCollapsed = !IsSidebarCollapsed;
-        if (SidebarToggled.HasDelegate)
-        {
-            await SidebarToggled.InvokeAsync(newCollapsed);
-        }
-        try { await JS.InvokeVoidAsync("collapseSidebar", newCollapsed); } catch { }
+        collapseNavMenu = !collapseNavMenu;
     }
 
-    private async Task CollapseAfterNavigate()
+    private void CollapseNav()
     {
-        try
-        {
-            // Colapsar el nav en todas las pantallas al seleccionar un elemento
-            if (SidebarToggled.HasDelegate)
-            {
-                await SidebarToggled.InvokeAsync(true);
-                await JS.InvokeVoidAsync("collapseSidebar", true);
-            }
-        }
-        catch { }
-    }
-
-    protected override void OnParametersSet()
-    {
-        // Cuando el sidebar vuelve a mostrarse, aseguramos que el menú esté expandido
-        if (!IsSidebarCollapsed) collapseNavMenu = false;
+        collapseNavMenu = true;
     }
 }

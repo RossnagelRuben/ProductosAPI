@@ -1,0 +1,461 @@
+@page "/AsignarImagenes"
+@using BlazorApp_ProductosAPI.Components
+@using BlazorApp_ProductosAPI.Components.AsignarImagenes
+@using BlazorApp_ProductosAPI.Models
+@using BlazorApp_ProductosAPI.Models.AsignarImagenes
+@using Microsoft.AspNetCore.Components.Web
+
+<AuthorizeView>
+    <div class="asignar-imagenes-page">
+        <header class="page-header">
+            <h1 class="page-title">Asignar imágenes</h1>
+            <p class="page-subtitle">Busca productos por API, obtén imágenes desde Centralizadora y guárdalas.</p>
+        </header>
+
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="alert-error" role="alert">
+                <span class="oi oi-warning"></span> @_error
+            </div>
+        }
+
+        <section class="filters-section">
+            <div class="filters-card">
+                <h2 class="filters-title">Filtros</h2>
+                <div class="filters-grid">
+                    <div class="filter-field">
+                        <label for="desc">Descripción</label>
+                        <input id="desc" type="text" class="filter-input" placeholder="Descripción del producto"
+                               @bind="_filter.DescripcionLarga" @bind:event="oninput" />
+                    </div>
+                    <div class="filter-field">
+                        <label for="cb">Código de barra</label>
+                        <input id="cb" type="text" class="filter-input" placeholder="Código de barra"
+                               @bind="_filter.CodigoBarra" @bind:event="oninput" />
+                    </div>
+                    <div class="filter-field">
+                        <label for="fam">Familia</label>
+                        <select id="fam" class="filter-input" @bind="_filter.FamiliaID">
+                            @foreach (var f in _familias)
+                            {
+                                <option value="@f.FamiliaID">@f.Descripcion</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="filter-field">
+                        <label for="marca">Marca</label>
+                        <select id="marca" class="filter-input" @bind="_filter.MarcaID">
+                            @foreach (var m in _marcas)
+                            {
+                                <option value="@m.MarcaID">@m.Descripcion</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="filter-field">
+                        <label for="ps">Cantidad (pageSize)</label>
+                        <input id="ps" type="number" class="filter-input" min="1" max="500"
+                               @bind="_filter.PageSize" @bind:event="oninput" />
+                    </div>
+                    <div class="filter-field">
+                        <label for="filtro-imagen">Imagen</label>
+                        <select id="filtro-imagen" class="filter-input" @bind="_filtroImagenOption">
+                            <option value="Todos">Todos</option>
+                            <option value="Con">Con imagen</option>
+                            <option value="Sin">Sin imagen</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="filters-actions">
+                    <button type="button" class="btn-primary" @onclick="Buscar" disabled="@_loading">
+                        @if (_loading)
+                        {
+                            <span class="oi oi-loop spin"></span>
+                            <span>Buscando…</span>
+                        }
+                        else
+                        {
+                            <span class="oi oi-magnifying-glass"></span>
+                            <span>Buscar</span>
+                        }
+                    </button>
+                    <button type="button" class="btn-ghost" @onclick="Limpiar" disabled="@_loading">Limpiar</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="grid-section">
+            <div class="record-count"><strong>@(_items.Count) registro@(_items.Count == 1 ? "" : "s")</strong></div>
+            <div class="pager">
+                <button type="button" class="btn" @onclick="Primera" disabled="@(_filter.PageNumber <= 1 || _loading)">« Primero</button>
+                <button type="button" class="btn" @onclick="Anterior" disabled="@(_filter.PageNumber <= 1 || _loading)">‹ Anterior</button>
+                <span class="page-indicator">Página @_filter.PageNumber</span>
+                <button type="button" class="btn" @onclick="Siguiente" disabled="@(!PuedeSiguiente || _loading)">Siguiente ›</button>
+            </div>
+            <ProductosImagenGrid Items="_items"
+                                BusquedaId="_busquedaId"
+                                IsLoading="_loading"
+                                LoadingText="Cargando productos…"
+                                EmptyText="No hay productos. Ajusta los filtros y haz clic en Buscar."
+                                IsLoadingImage="_loadingImageId"
+                                IsSavingImage="_savingImageId"
+                                OnAbrirModalImagen="AbrirModalImagenAsync"
+                                OnGuardar="GuardarAsync" />
+        </section>
+
+        @if (_productoModal != null)
+        {
+            <div class="modal-overlay">
+                <div class="modal-card" @onkeydown="OnModalKeyDown" tabindex="0">
+                    <div class="modal-header">
+                        <h3>Imagen del producto</h3>
+                        <button type="button" class="modal-close" aria-label="Cerrar" @onclick="CerrarModal">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="modal-image-wrap">
+                            @if (_mejorandoImagen)
+                            {
+                                <div class="modal-loading"><span class="oi oi-loop spin"></span> @(_tieneImagenEnModal ? "Mejorando…" : "Generando imagen…")</div>
+                            }
+                            else
+                            {
+                                <img src="@_imagenModalDataUrl" alt="@(_productoModal.DescripcionLarga ?? "Producto")" class="modal-img" />
+                            }
+                        </div>
+                        <div class="modal-desc">
+                            <strong>@(_productoModal.DescripcionLarga ?? "—")</strong>
+                            <div class="modal-meta">Código: @(_productoModal.Codigo ?? "—") @if (!string.IsNullOrWhiteSpace(_productoModal.CodigoBarra)) { <span>| @_productoModal.CodigoBarra</span> }</div>
+                        </div>
+                        <div class="modal-prompt">
+                            <label for="modal-prompt-txt">Prompt para Gemini (podés editarlo)</label>
+                            <textarea id="modal-prompt-txt" class="modal-textarea" rows="4"
+                                      placeholder="Instrucciones para mejorar o generar la imagen…"
+                                      @bind="_promptModal"
+                                      @bind:event="oninput"
+                                      @onkeydown="OnModalKeyDown"></textarea>
+                        </div>
+                        <div class="modal-apikey">
+                            <label for="modal-gemini-key">API key de Gemini (Google)</label>
+                            <input id="modal-gemini-key" type="password" class="modal-input"
+                                   placeholder="Pegá la API key de Gemini…"
+                                   value="@_geminiApiKeyModal"
+                                   @oninput="OnGeminiKeyInput" />
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(_errorModal))
+                        {
+                            <div class="modal-error">@_errorModal</div>
+                        }
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn-modal btn-mejorar" disabled="@_mejorandoImagen" @onclick="MejorarOGenerarImagenAsync">
+                            @if (_tieneImagenEnModal)
+                            {
+                                <span class="oi oi-wrench"></span><span>Mejorar imagen (Gemini)</span>
+                            }
+                            else
+                            {
+                                <span class="oi oi-plus"></span><span>Generar imagen (Gemini)</span>
+                            }
+                        </button>
+                        <button type="button" class="btn-modal btn-ghost" @onclick="CerrarModal">Cancelar</button>
+                        <button type="button" class="btn-modal btn-save" @onclick="GuardarCambiosModal">Guardar cambios</button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</AuthorizeView>
+
+<style>
+    .asignar-imagenes-page {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 1rem 0 2rem;
+    }
+    .page-header {
+        margin-bottom: 1.5rem;
+    }
+    .page-title {
+        font-size: 1.75rem;
+        font-weight: 600;
+        color: #1a1a2e;
+        margin: 0 0 0.25rem 0;
+    }
+    .page-subtitle {
+        color: #6c757d;
+        margin: 0;
+        font-size: 1rem;
+    }
+    .alert-error {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1rem;
+        background: #f8d7da;
+        border: 1px solid #f5c2c7;
+        border-radius: 8px;
+        color: #842029;
+        margin-bottom: 1rem;
+    }
+    .alert-error .oi { flex-shrink: 0; }
+    .filters-section {
+        margin-bottom: 1.5rem;
+    }
+    .filters-card {
+        background: #fff;
+        border-radius: 12px;
+        border: 1px solid #e9ecef;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        padding: 1.25rem;
+    }
+    .filters-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin: 0 0 1rem 0;
+        color: #343a40;
+    }
+    .filters-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+    .filter-field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+    .filter-field label {
+        font-weight: 500;
+        font-size: 0.9rem;
+        color: #495057;
+    }
+    .filter-input {
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        font-size: 0.95rem;
+    }
+    .filter-input:focus {
+        outline: none;
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
+    }
+    .filters-actions {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+    .btn-primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.6rem 1.25rem;
+        background: #0d6efd;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    .btn-primary:hover:not(:disabled) {
+        background: #0b5ed7;
+    }
+    .btn-primary:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+    .btn-ghost {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.6rem 1.25rem;
+        background: transparent;
+        color: #495057;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background 0.2s, border-color 0.2s;
+    }
+    .btn-ghost:hover:not(:disabled) {
+        background: #f8f9fa;
+        border-color: #adb5bd;
+    }
+    .oi.spin { animation: spin 0.8s linear infinite; }
+    @@keyframes spin { to { transform: rotate(360deg); } }
+    .grid-section {
+        margin-top: 0.5rem;
+    }
+    .record-count {
+        margin-top: 8px;
+        margin-bottom: 4px;
+        text-align: right;
+    }
+    .pager {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+    }
+    .pager .btn {
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+        background: #f8f9fa;
+        cursor: pointer;
+    }
+    .pager .btn:hover:not(:disabled) {
+        background: #e9ecef;
+    }
+    .pager .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+    .page-indicator {
+        font-weight: 600;
+        color: #495057;
+    }
+    .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        padding: 1rem;
+    }
+    .modal-card {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        max-width: 520px;
+        width: 100%;
+        max-height: 90vh;
+        overflow: auto;
+        outline: none;
+    }
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid #e9ecef;
+    }
+    .modal-header h3 { margin: 0; font-size: 1.15rem; color: #1a1a2e; }
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        line-height: 1;
+        color: #6c757d;
+        cursor: pointer;
+        padding: 0 0.25rem;
+    }
+    .modal-close:hover { color: #1a1a2e; }
+    .modal-body { padding: 1.25rem; }
+    .modal-image-wrap {
+        aspect-ratio: 1;
+        background: #f8f9fa;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        margin-bottom: 1rem;
+    }
+    .modal-img { width: 100%; height: 100%; object-fit: contain; }
+    .modal-loading {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: #6c757d;
+    }
+    .modal-desc { margin-bottom: 0.75rem; }
+    .modal-meta { font-size: 0.85rem; color: #6c757d; margin-top: 0.25rem; }
+    .modal-prompt {
+        margin-top: 1rem;
+    }
+    .modal-prompt label {
+        display: block;
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: #495057;
+        margin-bottom: 0.35rem;
+    }
+    .modal-textarea {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        resize: vertical;
+        min-height: 80px;
+    }
+    .modal-textarea:focus {
+        outline: none;
+        border-color: #6f42c1;
+        box-shadow: 0 0 0 2px rgba(111, 66, 193, 0.2);
+    }
+    .modal-apikey {
+        margin-top: 1rem;
+    }
+    .modal-apikey label {
+        display: block;
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: #495057;
+        margin-bottom: 0.35rem;
+    }
+    .modal-input {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        font-size: 0.95rem;
+    }
+    .modal-input:focus {
+        outline: none;
+        border-color: #6f42c1;
+        box-shadow: 0 0 0 2px rgba(111, 66, 193, 0.2);
+    }
+    .modal-error {
+        padding: 0.5rem 0.75rem;
+        background: #f8d7da;
+        border: 1px solid #f5c2c7;
+        border-radius: 8px;
+        color: #842029;
+        font-size: 0.9rem;
+        margin-top: 0.5rem;
+    }
+    .modal-footer {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        padding: 1rem 1.25rem;
+        border-top: 1px solid #e9ecef;
+    }
+    .btn-modal {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        border: none;
+        font-size: 0.9rem;
+        cursor: pointer;
+    }
+    .btn-modal:disabled { opacity: 0.7; cursor: not-allowed; }
+    .btn-mejorar { background: #6f42c1; color: #fff; }
+    .btn-mejorar:hover:not(:disabled) { background: #5a32a3; }
+    .btn-ghost { background: #e9ecef; color: #495057; }
+    .btn-ghost:hover { background: #dee2e6; }
+    .btn-save { background: #198754; color: #fff; }
+    .btn-save:hover { background: #157347; }
+    @@media (max-width: 576px) {
+        .filters-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>

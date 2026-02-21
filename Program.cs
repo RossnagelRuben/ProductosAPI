@@ -20,4 +20,8 @@ builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.IGeminiService, Blazo
 builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.IColectorService, BlazorApp_ProductosAPI.Services.ColectorService>();
 builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.IJsInteropService, BlazorApp_ProductosAPI.Services.JsInteropService>();
 
+// Asignar imágenes (SOLID: interfaces y implementaciones)
+builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.AsignarImagenes.IProductoQueryService, BlazorApp_ProductosAPI.Services.AsignarImagenes.ProductoQueryService>();
+builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.AsignarImagenes.IProductImageService, BlazorApp_ProductosAPI.Services.AsignarImagenes.ProductImageService>();
+
 await builder.Build().RunAsync();

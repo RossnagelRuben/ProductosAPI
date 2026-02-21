@@ -1,0 +1,206 @@
+@using System.Linq
+@using BlazorApp_ProductosAPI.Models.AsignarImagenes
+@using Microsoft.AspNetCore.Components.Web
+
+<div class="productos-imagen-grid">
+    @if (IsLoading)
+    {
+        <div class="grid-loading">
+            <span class="oi oi-loop spin" aria-hidden="true"></span>
+            <span>@LoadingText</span>
+        </div>
+    }
+    else if (!Items?.Any() == true)
+    {
+        <div class="grid-empty">
+            <span class="oi oi-image" aria-hidden="true"></span>
+            <p>@EmptyText</p>
+        </div>
+    }
+    else
+    {
+        <div class="grid-cards">
+            @foreach (var p in Items!)
+            {
+                <div class="product-card" @key="p.ProductoID">
+                    <div class="product-card-image">
+                        <img src="@GetImageSrc(p)"
+                             alt="@(p.DescripcionLarga ?? "Producto")"
+                             loading="lazy"
+                             decoding="async"
+                             referrerpolicy="no-referrer"
+                             @onerror="() => MarcarImagenFallida(p)" />
+                    </div>
+                    <div class="product-card-body">
+                        <div class="product-card-desc">@(p.DescripcionLarga ?? "—")</div>
+                        <div class="product-card-meta">
+                            <span class="product-code">@(p.Codigo ?? "—")</span>
+                            @if (!string.IsNullOrWhiteSpace(p.CodigoBarra))
+                            {
+                                <span class="product-barcode">@p.CodigoBarra</span>
+                            }
+                        </div>
+                        <div class="product-card-actions">
+                            <button type="button"
+                                    class="btn-card btn-obtener"
+                                    @onclick="() => OnAbrirModalImagen.InvokeAsync(p)">
+                                <span class="oi oi-image" aria-hidden="true"></span>
+                                <span>Ver / Mejorar</span>
+                            </button>
+                            <button type="button"
+                                    class="btn-card btn-guardar"
+                                    disabled="@(!p.ImagenCargada || IsSavingImage == p.ProductoID)"
+                                    @onclick="() => OnGuardar.InvokeAsync(p)">
+                                @if (IsSavingImage == p.ProductoID)
+                                {
+                                    <span class="oi oi-loop spin" aria-hidden="true"></span>
+                                    <span>Guardando…</span>
+                                }
+                                else
+                                {
+                                    <span class="oi oi-check" aria-hidden="true"></span>
+                                    <span>Guardar</span>
+                                }
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+        <div class="grid-footer">
+            <strong>@(Items != null ? Items.Count() : 0) producto(s)</strong>
+        </div>
+    }
+</div>
+
+<style>
+    .productos-imagen-grid {
+        min-height: 200px;
+        padding: 0.5rem 0;
+    }
+    .grid-loading, .grid-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 3rem 1rem;
+        color: #6c757d;
+        gap: 0.75rem;
+    }
+    .grid-loading .oi.spin, .grid-empty .oi {
+        font-size: 2.5rem;
+        opacity: 0.6;
+    }
+    .oi.spin { animation: spin 0.8s linear infinite; }
+    @@keyframes spin { to { transform: rotate(360deg); } }
+    .grid-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 1.25rem;
+        padding: 0.5rem 0;
+    }
+    .product-card {
+        background: #fff;
+        border-radius: 12px;
+        border: 1px solid #e9ecef;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        overflow: hidden;
+        transition: box-shadow 0.2s, transform 0.2s;
+        display: flex;
+        flex-direction: column;
+    }
+    .product-card:hover {
+        box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    .product-card-image {
+        aspect-ratio: 1;
+        background: #f8f9fa;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+    .product-card-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+    .product-card-body {
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        flex: 1;
+    }
+    .product-card-desc {
+        font-weight: 500;
+        color: #1a1a2e;
+        font-size: 0.95rem;
+        line-height: 1.35;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .product-card-meta {
+        font-size: 0.8rem;
+        color: #6c757d;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .product-code { font-weight: 600; }
+    .product-barcode { font-family: monospace; }
+    .product-card-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: auto;
+        padding-top: 0.75rem;
+        flex-wrap: wrap;
+    }
+    .btn-card {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 8px;
+        border: none;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: opacity 0.2s, background 0.2s;
+    }
+    .btn-card:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+    .btn-obtener {
+        background: #0d6efd;
+        color: #fff;
+    }
+    .btn-obtener:hover:not(:disabled) {
+        background: #0b5ed7;
+    }
+    .btn-guardar {
+        background: #198754;
+        color: #fff;
+    }
+    .btn-guardar:hover:not(:disabled) {
+        background: #157347;
+    }
+    .grid-footer {
+        padding: 0.75rem 0;
+        font-size: 0.9rem;
+        color: #495057;
+    }
+    @@media (max-width: 576px) {
+        .grid-cards {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+        }
+        .product-card-actions {
+            flex-direction: column;
+        }
+        .btn-card { width: 100%; justify-content: center; }
+    }
+</style>

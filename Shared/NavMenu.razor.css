@@ -1,31 +1,15 @@
+/* Estilos del menú lateral original Blazor */
 .navbar-toggler {
     background-color: rgba(255, 255, 255, 0.1);
 }
 
 .top-row {
     height: 3.5rem;
-    background-color: rgba(0,0,0,0.4);
+    background-color: rgba(0, 0, 0, 0.4);
 }
 
 .navbar-brand {
     font-size: 1.1rem;
-}
-
-/* Adaptación tipográfica progresiva para evitar deformaciones */
-@media (max-width: 992px) {
-    .navbar-brand { font-size: 1rem; }
-    .nav-item { font-size: 0.85rem; }
-    .oi { font-size: 1rem; }
-}
-
-@media (max-width: 768px) {
-    .navbar-brand { font-size: 0.95rem; }
-    .nav-item { font-size: 0.8rem; }
-}
-
-@media (max-width: 576px) {
-    .navbar-brand { font-size: 0.9rem; }
-    .nav-item { font-size: 0.75rem; }
 }
 
 .oi {
@@ -40,51 +24,30 @@
     padding-bottom: 0.5rem;
 }
 
-    .nav-item:first-of-type {
-        padding-top: 1rem;
-    }
+.nav-item:first-of-type {
+    padding-top: 1rem;
+}
 
-    .nav-item:last-of-type {
-        padding-bottom: 1rem;
-    }
+.nav-item:last-of-type {
+    padding-bottom: 1rem;
+}
 
-    .nav-item ::deep a {
-        color: #d7d7d7;
-        border-radius: 4px;
-        height: 3rem;
-        display: flex;
-        align-items: center;
-        line-height: 3rem;
-        gap: 0.5rem;
-    }
-
-/* Ocultar texto y dejar solo iconos en pantallas muy pequeñas */
-@media (max-width: 480px) {
-    .nav-item ::deep a {
-        justify-content: flex-start;
-        padding: 0 0.5rem;
-        gap: 0.4rem;
-    }
-    .nav-item ::deep a .nav-text {
-        display: inline-block;
-        max-width: 12ch; /* mostrar texto corto con elipsis */
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-    .oi {
-        width: 1.5rem;
-        font-size: 1rem;
-    }
+.nav-item ::deep a {
+    color: #d7d7d7;
+    border-radius: 4px;
+    height: 3rem;
+    display: flex;
+    align-items: center;
+    line-height: 3rem;
 }
 
 .nav-item ::deep a.active {
-    background-color: rgba(255,255,255,0.25);
+    background-color: rgba(255, 255, 255, 0.25);
     color: white;
 }
 
 .nav-item ::deep a:hover {
-    background-color: rgba(255,255,255,0.1);
+    background-color: rgba(255, 255, 255, 0.1);
     color: white;
 }
 
@@ -94,39 +57,11 @@
     }
 
     .collapse {
-        /* Never collapse the sidebar for wide screens */
         display: block;
     }
-    
+
     .nav-scrollable {
-        /* Allow sidebar to scroll for tall menus */
         height: calc(100vh - 3.5rem);
         overflow-y: auto;
-    }
-}
-
-/* Ajustes para pantallas medianas: evitar desalineos en F12 */
-@media (max-width: 992px) {
-    .nav-item { font-size: 0.85rem; }
-    .nav-item ::deep a { padding: 0 0.5rem; }
-    .nav-item ::deep a .nav-text {
-        display: inline-block;
-        max-width: 9ch; /* acortar texto */
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        vertical-align: middle;
-    }
-}
-
-/* Pantallas pequeñas: ocultar textos, solo iconos centrados */
-@media (max-width: 768px) {
-    .nav-item ::deep a { justify-content: flex-start; padding: 0 0.5rem; }
-    .nav-item ::deep a .nav-text {
-        display: inline-block;
-        max-width: 14ch;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
     }
 }

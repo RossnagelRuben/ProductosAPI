@@ -3,7 +3,10 @@ using BlazorApp_ProductosAPI.Services;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Web;
+using System.Globalization;
 using System.Linq;
+using System.Text;
+using System.Text.Json;
 
 namespace BlazorApp_ProductosAPI.Pages
 {
@@ -16,10 +19,11 @@ namespace BlazorApp_ProductosAPI.Pages
         [Inject] public IColectorService ColectorService { get; set; }
         [Inject] public IJsInteropService JsInterop { get; set; }
 
-        // Habilita el botón cuando hay texto OCR y una imagen cargada, y no está corriendo IA
+        // Habilita el botón cuando hay texto OCR y una imagen/PDF cargada, y no está corriendo IA
+        // Para PDFs, no necesitamos OCR previo ya que Gemini puede procesarlos directamente
         private bool CanRunIA => !IsIaLoading
                                  && ImageBytes is not null
-                                 && !string.IsNullOrWhiteSpace(FullOcrText);
+                                 && (!string.IsNullOrWhiteSpace(FullOcrText) || IsPdfFile);
 
         // Habilita el botón "ENVIAR AL COLECTOR" cuando hay productos (IA) extraídos
         private bool CanSendToColector => !IsColectorLoading
@@ -76,10 +80,17 @@ namespace BlazorApp_ProductosAPI.Pages
         private string? HoverText { get; set; }
         private readonly List<PolygonModel> Polygons = new();
 
+        /// <summary>
+        /// Indica si el archivo cargado es un PDF.
+        /// </summary>
+        private bool IsPdfFile => !string.IsNullOrWhiteSpace(ImageMimeType) && 
+                                  ImageMimeType.Equals("application/pdf", StringComparison.OrdinalIgnoreCase);
+
         // ===== Resultados =====
         private string FullOcrText = "";
         private string ProductosJson = "";
         private string ProveedorExtraido = "";
+        private string? TipoComprobanteDetectado { get; set; }
 
         // ===== LocalStorage keys =====
         private const string LS_TOKEN = "img_token";
@@ -110,6 +121,7 @@ namespace BlazorApp_ProductosAPI.Pages
                 ImageBytes = null;
                 ImageDataUrl = null;
                 ImageMimeType = null;
+                TipoComprobanteDetectado = null;
 
                 var result = await ImageFileService.ProcessImageFileAsync(e);
                 if (result is null)
@@ -128,6 +140,16 @@ namespace BlazorApp_ProductosAPI.Pages
                 NombreArchivoImagen = result.FileName;
                 TamañoArchivoImagen = $"{result.FileSize / 1024} KB";
                 MostrarConfirmacionImagen = true;
+                
+                // Mensaje específico según el tipo de archivo
+                if (IsPdfFile)
+                {
+                    MensajeExito = $"✅ PDF cargado: {NombreArchivoImagen} ({TamañoArchivoImagen})\nPuedes extraer productos directamente con IA.";
+                }
+                else
+                {
+                    MensajeExito = $"✅ Imagen cargada: {NombreArchivoImagen} ({TamañoArchivoImagen})";
+                }
 
                 _ = OcultarConfirmacionImagenAsync();
             }
@@ -157,6 +179,10 @@ namespace BlazorApp_ProductosAPI.Pages
             catch { }
         }
 
+        /// <summary>
+        /// Ejecuta OCR sobre la imagen usando Google Vision API.
+        /// Nota: Los PDFs no se procesan con OCR, se envían directamente a Gemini.
+        /// </summary>
         private async Task RunOCR()
         {
             Error = null;
@@ -164,6 +190,7 @@ namespace BlazorApp_ProductosAPI.Pages
             Polygons.Clear();
 
             if (ImageBytes is null) { Error = "Elegí una imagen primero."; return; }
+            if (IsPdfFile) { Error = "Los PDFs no requieren OCR. Usa directamente 'Extraer productos (IA)'."; return; }
             if (string.IsNullOrWhiteSpace(GoogleApiKey)) { Error = "Pegá la Google API Key."; return; }
 
             await LocalStorage.SetItemAsync(LS_TOKEN, BearerToken ?? "");
@@ -185,6 +212,7 @@ namespace BlazorApp_ProductosAPI.Pages
                 FullOcrText = result.FullText;
                 Polygons.Clear();
                 Polygons.AddRange(result.Polygons);
+                DetectarTipoComprobanteDesdeOcr();
 
                 try
                 {
@@ -206,7 +234,10 @@ namespace BlazorApp_ProductosAPI.Pages
             }
         }
 
-        // === USA LA MISMA API KEY que Vision y manda la IMAGEN a Gemini ===
+        /// <summary>
+        /// Extrae productos y datos de la factura/comprobante usando Gemini AI.
+        /// Funciona tanto con imágenes como con PDFs.
+        /// </summary>
         private async Task ExtraerProductosIA()
         {
             Error = null;
@@ -215,13 +246,13 @@ namespace BlazorApp_ProductosAPI.Pages
 
             if (ImageBytes is null)
             {
-                Error = "Primero elegí una imagen válida.";
+                Error = "Primero elegí una imagen o PDF válido.";
                 return;
             }
 
             if (string.IsNullOrWhiteSpace(ImageMimeType))
             {
-                Error = "Primero elegí una imagen válida.";
+                Error = "Primero elegí una imagen o PDF válido.";
                 return;
             }
 
@@ -248,6 +279,33 @@ namespace BlazorApp_ProductosAPI.Pages
 
                 ProductosJson = result.ProductosJson;
                 ProveedorExtraido = result.ProveedorJson;
+                
+                // Normalizar talonario y número de comprobante si es necesario
+                try
+                {
+                    var jsonLimpio = LimpiarJsonPosiblesCodeBlocks(ProductosJson);
+                    var options = new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true,
+                        AllowTrailingCommas = true,
+                        ReadCommentHandling = JsonCommentHandling.Skip
+                    };
+                    
+                    var factura = JsonSerializer.Deserialize<FacturaExtraida>(jsonLimpio, options);
+                    if (factura != null)
+                    {
+                        NormalizarTalonarioYNumero(factura);
+                        NormalizarFechaISO8601(factura);
+                        AsignarOrdenSiFalta(factura);
+                        ProductosJson = JsonSerializer.Serialize(factura, new JsonSerializerOptions { WriteIndented = true });
+                    }
+                }
+                catch
+                {
+                    // Si falla la normalización, continuar con el JSON original
+                }
+                
+                DetectarTipoComprobanteDesdeJson();
                 await JsInterop.CopyToClipboardAsync(ProductosJson);
             }
             catch (Exception ex)
@@ -337,38 +395,21 @@ namespace BlazorApp_ProductosAPI.Pages
                 
                 // Parsear ProductosJson
                 ProductosExtraidos = null;
-                var jsonLimpio = ProductosJson.Trim();
-                
-                // Remover markdown code blocks si existen
-                if (jsonLimpio.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
-                {
-                    var inicio = jsonLimpio.IndexOf('{');
-                    var fin = jsonLimpio.LastIndexOf('}');
-                    if (inicio >= 0 && fin > inicio)
-                    {
-                        jsonLimpio = jsonLimpio.Substring(inicio, fin - inicio + 1);
-                    }
-                }
-                else if (jsonLimpio.StartsWith("```"))
-                {
-                    var inicio = jsonLimpio.IndexOf('{');
-                    var fin = jsonLimpio.LastIndexOf('}');
-                    if (inicio >= 0 && fin > inicio)
-                    {
-                        jsonLimpio = jsonLimpio.Substring(inicio, fin - inicio + 1);
-                    }
-                }
+                var jsonLimpio = LimpiarJsonPosiblesCodeBlocks(ProductosJson);
                 
                 try
                 {
-                    var options = new System.Text.Json.JsonSerializerOptions
+                    var options = new JsonSerializerOptions
                     {
                         PropertyNameCaseInsensitive = true,
                         AllowTrailingCommas = true,
-                        ReadCommentHandling = System.Text.Json.JsonCommentHandling.Skip
+                        ReadCommentHandling = JsonCommentHandling.Skip
                     };
                     
-                    ProductosExtraidos = System.Text.Json.JsonSerializer.Deserialize<FacturaExtraida>(jsonLimpio, options);
+                    ProductosExtraidos = JsonSerializer.Deserialize<FacturaExtraida>(jsonLimpio, options);
+                    NormalizarTalonarioYNumero(ProductosExtraidos);
+                    NormalizarFechaISO8601(ProductosExtraidos);
+                    AsignarOrdenSiFalta(ProductosExtraidos);
                     Console.WriteLine($"Productos extraídos parseados: {(ProductosExtraidos?.Productos != null ? ProductosExtraidos.Productos.Count : 0)} productos");
                 }
                 catch (Exception ex)
@@ -412,36 +453,19 @@ namespace BlazorApp_ProductosAPI.Pages
                 try
                 {
                     // Limpiar el JSON (remover markdown code blocks si existen)
-                    var jsonLimpio = ProductosJson.Trim();
+                    var jsonLimpio = LimpiarJsonPosiblesCodeBlocks(ProductosJson);
                     
-                    // Remover ```json y ``` si existen
-                    if (jsonLimpio.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var inicio = jsonLimpio.IndexOf('{');
-                        var fin = jsonLimpio.LastIndexOf('}');
-                        if (inicio >= 0 && fin > inicio)
-                        {
-                            jsonLimpio = jsonLimpio.Substring(inicio, fin - inicio + 1);
-                        }
-                    }
-                    else if (jsonLimpio.StartsWith("```"))
-                    {
-                        var inicio = jsonLimpio.IndexOf('{');
-                        var fin = jsonLimpio.LastIndexOf('}');
-                        if (inicio >= 0 && fin > inicio)
-                        {
-                            jsonLimpio = jsonLimpio.Substring(inicio, fin - inicio + 1);
-                        }
-                    }
-                    
-                    var options = new System.Text.Json.JsonSerializerOptions
+                    var options = new JsonSerializerOptions
                     {
                         PropertyNameCaseInsensitive = true,
                         AllowTrailingCommas = true,
-                        ReadCommentHandling = System.Text.Json.JsonCommentHandling.Skip
+                        ReadCommentHandling = JsonCommentHandling.Skip
                     };
                     
-                    ProductosExtraidos = System.Text.Json.JsonSerializer.Deserialize<FacturaExtraida>(jsonLimpio, options);
+                    ProductosExtraidos = JsonSerializer.Deserialize<FacturaExtraida>(jsonLimpio, options);
+                    NormalizarTalonarioYNumero(ProductosExtraidos);
+                    NormalizarFechaISO8601(ProductosExtraidos);
+                    AsignarOrdenSiFalta(ProductosExtraidos);
                     
                     Console.WriteLine($"Productos extraídos parseados: {(ProductosExtraidos?.Productos != null ? ProductosExtraidos.Productos.Count : 0)} productos");
                     Console.WriteLine($"Proveedor: {(ProductosExtraidos?.Proveedor != null ? ProductosExtraidos.Proveedor.RazonSocial : "null")}");
@@ -588,6 +612,407 @@ namespace BlazorApp_ProductosAPI.Pages
                 }
             }
             catch { }
+        }
+
+        private void DetectarTipoComprobanteDesdeJson()
+        {
+            var tipoDesdeJson = ObtenerTipoComprobanteDesdeJson(ProductosJson);
+            if (!string.IsNullOrWhiteSpace(tipoDesdeJson))
+            {
+                TipoComprobanteDetectado = tipoDesdeJson;
+            }
+            else
+            {
+                DetectarTipoComprobanteDesdeOcr();
+            }
+        }
+
+        private void DetectarTipoComprobanteDesdeOcr()
+        {
+            TipoComprobanteDetectado = DetectarTipoComprobante(FullOcrText);
+        }
+
+        private static string? ObtenerTipoComprobanteDesdeJson(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return null;
+            }
+
+            try
+            {
+                var jsonLimpio = LimpiarJsonPosiblesCodeBlocks(json);
+                using var doc = JsonDocument.Parse(jsonLimpio);
+                if (doc.RootElement.TryGetProperty("encabezado", out var encabezado) &&
+                    encabezado.ValueKind == JsonValueKind.Object &&
+                    encabezado.TryGetProperty("tipo_comprobante", out var tipoElement) &&
+                    tipoElement.ValueKind == JsonValueKind.String)
+                {
+                    return tipoElement.GetString();
+                }
+            }
+            catch
+            {
+                return null;
+            }
+
+            return null;
+        }
+
+        private static string? DetectarTipoComprobante(string? texto)
+        {
+            if (string.IsNullOrWhiteSpace(texto))
+            {
+                return null;
+            }
+
+            var normalized = NormalizarTexto(texto);
+
+            // PRIORIDAD 1: Detectar "NO VALIDO COMO FACTURA" o "COMPROBANTE NO VALIDO" -> "X"
+            // Esto debe ir ANTES de cualquier detección de factura para evitar falsos positivos
+            if (normalized.Contains("NO VALIDO COMO FACTURA") ||
+                normalized.Contains("NO VÁLIDO COMO FACTURA") ||
+                normalized.Contains("COMPROBANTE NO VALIDO") ||
+                normalized.Contains("COMPROBANTE NO VÁLIDO"))
+            {
+                return "X";
+            }
+
+            // PRIORIDAD 2: Detectar "X" o "COMPROBANTE X" -> "OTROS"
+            if (normalized.Contains("COMPROBANTE X") || 
+                normalized.Contains("COMPROBANTE TIPO X") ||
+                normalized.Contains("COMPROBANTE- X") ||
+                (normalized.Contains("COMPROBANTE") && normalized.Contains(" X ")) ||
+                (normalized.Contains(" X ") && !normalized.Contains("FACTURA")))
+            {
+                return "OTROS";
+            }
+
+            // PRIORIDAD 3: Detectar "CREDITO" (puede ser nota de crédito A, B o C)
+            // Primero verificar si tiene letra específica (A, B o C)
+            var notaCreditoConTipo = DetectarNotaConLetra(normalized, "NOTA DE CREDITO", "Nota de crédito");
+            if (!string.IsNullOrWhiteSpace(notaCreditoConTipo))
+            {
+                return notaCreditoConTipo;
+            }
+
+            // Si solo dice "CREDITO" o "NOTA DE CREDITO" sin letra
+            if (normalized.Contains("CREDITO") || normalized.Contains("NOTA DE CREDITO"))
+            {
+                // Verificar si hay una letra A, B o C cerca de "CREDITO"
+                var tipos = new[] { 'A', 'B', 'C' };
+                foreach (var tipo in tipos)
+                {
+                    if (normalized.Contains($"CREDITO {tipo}") || 
+                        normalized.Contains($"CREDITO-{tipo}") ||
+                        normalized.Contains($"CREDITO \"{tipo}\"") ||
+                        normalized.Contains($"CREDITO '{tipo}'") ||
+                        normalized.Contains($"NOTA DE CREDITO {tipo}") ||
+                        normalized.Contains($"NOTA DE CREDITO-{tipo}") ||
+                        normalized.Contains($"NOTA DE CREDITO \"{tipo}\"") ||
+                        normalized.Contains($"NOTA DE CREDITO '{tipo}'") ||
+                        normalized.Contains($"COMPROBANTE NOTA DE CREDITO {tipo}"))
+                    {
+                        return $"Nota de crédito {tipo}";
+                    }
+                }
+                return "Nota de crédito";
+            }
+
+            // PRIORIDAD 4: Detectar notas de débito
+            var notaDebitoConTipo = DetectarNotaConLetra(normalized, "NOTA DE DEBITO", "Nota de débito");
+            if (!string.IsNullOrWhiteSpace(notaDebitoConTipo))
+            {
+                return notaDebitoConTipo;
+            }
+
+            if (normalized.Contains("NOTA DE DEBITO"))
+            {
+                return "Nota de débito";
+            }
+
+            // PRIORIDAD 5: Detectar presupuesto
+            if (normalized.Contains("PRESUPUESTO"))
+            {
+                return "Presupuesto";
+            }
+
+            // PRIORIDAD 6: Detectar facturas A, B, C (solo si NO dice "NO VALIDO" ni "X")
+            // Verificar que no sea un comprobante no válido antes de detectar factura
+            if (!normalized.Contains("NO VALIDO") && 
+                !normalized.Contains("NO VÁLIDO") &&
+                !normalized.Contains("COMPROBANTE X") &&
+                !normalized.Contains("COMPROBANTE TIPO X"))
+            {
+                if (ContieneFacturaTipo(normalized, 'A'))
+                {
+                    return "Factura A";
+                }
+
+                if (ContieneFacturaTipo(normalized, 'B'))
+                {
+                    return "Factura B";
+                }
+
+                if (ContieneFacturaTipo(normalized, 'C'))
+                {
+                    return "Factura C";
+                }
+            }
+
+            // PRIORIDAD 7: Detectar remito
+            if (normalized.Contains("REMITO"))
+            {
+                return "Remito";
+            }
+
+            // PRIORIDAD 8: Detectar ticket
+            if (normalized.Contains("TICKET") || normalized.Contains("TIQUE") || normalized.Contains("TIQUET"))
+            {
+                return "Ticket";
+            }
+
+            return null;
+        }
+
+        private static bool ContieneFacturaTipo(string texto, char letra)
+        {
+            if (string.IsNullOrWhiteSpace(texto))
+            {
+                return false;
+            }
+
+            var patrones = new[]
+            {
+                $"FACTURA {letra}",
+                $"FACTURA-{letra}",
+                $"FACTURA \"{letra}\"",
+                $"FACTURA '{letra}'",
+                $"FACTURA ELECTRONICA {letra}",
+                $"FACTURA TIPO {letra}",
+                $"FACT. {letra}"
+            };
+
+            return patrones.Any(texto.Contains);
+        }
+
+        private static string? DetectarNotaConLetra(string texto, string fraseBase, string etiquetaBase)
+        {
+            if (string.IsNullOrWhiteSpace(texto))
+            {
+                return null;
+            }
+
+            var tipos = new[] { 'A', 'B', 'C' };
+
+            foreach (var tipo in tipos)
+            {
+                var patrones = new[]
+                {
+                    $"{fraseBase} {tipo}",
+                    $"{fraseBase}-{tipo}",
+                    $"{fraseBase} \"{tipo}\"",
+                    $"{fraseBase} '{tipo}'",
+                    $"{fraseBase} TIPO {tipo}",
+                    $"{fraseBase} ELECTRONICA {tipo}",
+                    $"{fraseBase} COMPROBANTE {tipo}",
+                    $"COMPROBANTE {fraseBase} {tipo}"
+                };
+
+                if (patrones.Any(texto.Contains))
+                {
+                    return $"{etiquetaBase} {tipo}";
+                }
+            }
+
+            return null;
+        }
+
+        private static string NormalizarTexto(string texto)
+        {
+            if (string.IsNullOrWhiteSpace(texto))
+            {
+                return string.Empty;
+            }
+
+            var normalized = texto.Normalize(NormalizationForm.FormD);
+            var builder = new StringBuilder(normalized.Length);
+
+            foreach (var c in normalized)
+            {
+                var category = CharUnicodeInfo.GetUnicodeCategory(c);
+                if (category != UnicodeCategory.NonSpacingMark)
+                {
+                    builder.Append(char.ToUpperInvariant(c));
+                }
+            }
+
+            return builder.ToString();
+        }
+
+        private static string LimpiarJsonPosiblesCodeBlocks(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return string.Empty;
+            }
+
+            var jsonLimpio = json.Trim();
+
+            if (!jsonLimpio.StartsWith("```", StringComparison.Ordinal))
+            {
+                return jsonLimpio;
+            }
+
+            var inicio = jsonLimpio.IndexOf('{');
+            var fin = jsonLimpio.LastIndexOf('}');
+
+            if (inicio >= 0 && fin > inicio)
+            {
+                return jsonLimpio.Substring(inicio, fin - inicio + 1);
+            }
+
+            return jsonLimpio;
+        }
+
+        /// <summary>
+        /// Normaliza el talonario y número de comprobante.
+        /// Si el talonario es null/vacío pero el número de comprobante tiene formato "0008-00016356",
+        /// extrae el talonario (antes del guion) y actualiza el número de comprobante (después del guion).
+        /// </summary>
+        private static void NormalizarTalonarioYNumero(FacturaExtraida? factura)
+        {
+            if (factura?.Encabezado == null)
+            {
+                return;
+            }
+
+            var encabezado = factura.Encabezado;
+
+            // Si el talonario está vacío pero el número de comprobante tiene el formato esperado
+            if (string.IsNullOrWhiteSpace(encabezado.Talonario) && 
+                !string.IsNullOrWhiteSpace(encabezado.NumeroComprobante))
+            {
+                var numeroCompleto = encabezado.NumeroComprobante.Trim();
+                var partes = numeroCompleto.Split('-', StringSplitOptions.RemoveEmptyEntries);
+
+                if (partes.Length == 2)
+                {
+                    // Extraer talonario (antes del guion) y número (después del guion)
+                    encabezado.Talonario = partes[0].Trim();
+                    encabezado.NumeroComprobante = partes[1].Trim();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Normaliza la fecha del comprobante al formato ISO 8601 completo con zona horaria (YYYY-MM-DDTHH:mm:ss+00:00).
+        /// Intenta parsear la fecha en varios formatos comunes y la convierte a ISO 8601 completo.
+        /// </summary>
+        private static void NormalizarFechaISO8601(FacturaExtraida? factura)
+        {
+            if (factura?.Encabezado == null || string.IsNullOrWhiteSpace(factura.Encabezado.FechaComprobante))
+            {
+                return;
+            }
+
+            var fechaOriginal = factura.Encabezado.FechaComprobante.Trim();
+
+            // Si ya está en formato ISO 8601 completo con zona horaria, validar y mantener
+            if (System.Text.RegularExpressions.Regex.IsMatch(fechaOriginal, @"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$") ||
+                System.Text.RegularExpressions.Regex.IsMatch(fechaOriginal, @"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"))
+            {
+                // Validar que sea una fecha válida
+                if (DateTimeOffset.TryParse(fechaOriginal, out var fechaValidada))
+                {
+                    factura.Encabezado.FechaComprobante = fechaValidada.ToString("yyyy-MM-ddTHH:mm:sszzz");
+                    return;
+                }
+            }
+
+            // Si está en formato ISO 8601 sin zona horaria (YYYY-MM-DD o YYYY-MM-DDTHH:mm:ss)
+            if (System.Text.RegularExpressions.Regex.IsMatch(fechaOriginal, @"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?$"))
+            {
+                if (DateTime.TryParse(fechaOriginal, out var fechaSinZona))
+                {
+                    // Convertir a DateTimeOffset con la zona horaria local y luego a formato ISO 8601 completo
+                    var fechaConZona = new DateTimeOffset(fechaSinZona, TimeZoneInfo.Local.GetUtcOffset(fechaSinZona));
+                    factura.Encabezado.FechaComprobante = fechaConZona.ToString("yyyy-MM-ddTHH:mm:sszzz");
+                    return;
+                }
+            }
+
+            // Intentar parsear en varios formatos comunes
+            var formatos = new[]
+            {
+                "dd/MM/yyyy",
+                "dd-MM-yyyy",
+                "dd.MM.yyyy",
+                "d/M/yyyy",
+                "d-M-yyyy",
+                "d.M.yyyy",
+                "dd/MM/yy",
+                "dd-MM-yy",
+                "dd.MM.yy",
+                "yyyy/MM/dd",
+                "yyyy-MM-dd",
+                "yyyy.MM.dd",
+                "MM/dd/yyyy",
+                "MM-dd-yyyy",
+                "MM.dd.yyyy"
+            };
+
+            foreach (var formato in formatos)
+            {
+                if (DateTime.TryParseExact(fechaOriginal, formato, CultureInfo.InvariantCulture, DateTimeStyles.None, out var fechaParseada))
+                {
+                    // Convertir a DateTimeOffset con la zona horaria local y luego a formato ISO 8601 completo
+                    var fechaConZona = new DateTimeOffset(fechaParseada, TimeZoneInfo.Local.GetUtcOffset(fechaParseada));
+                    factura.Encabezado.FechaComprobante = fechaConZona.ToString("yyyy-MM-ddTHH:mm:sszzz");
+                    return;
+                }
+            }
+
+            // Si no se pudo parsear con formatos específicos, intentar parseo genérico
+            if (DateTime.TryParse(fechaOriginal, CultureInfo.InvariantCulture, DateTimeStyles.None, out var fechaGenerica))
+            {
+                // Convertir a DateTimeOffset con la zona horaria local y luego a formato ISO 8601 completo
+                var fechaConZona = new DateTimeOffset(fechaGenerica, TimeZoneInfo.Local.GetUtcOffset(fechaGenerica));
+                factura.Encabezado.FechaComprobante = fechaConZona.ToString("yyyy-MM-ddTHH:mm:sszzz");
+                return;
+            }
+
+            // Si no se pudo parsear, intentar con DateTimeOffset directamente
+            if (DateTimeOffset.TryParse(fechaOriginal, out var fechaOffset))
+            {
+                factura.Encabezado.FechaComprobante = fechaOffset.ToString("yyyy-MM-ddTHH:mm:sszzz");
+                return;
+            }
+
+            // Si no se pudo parsear, dejar la fecha original (pero intentar limpiar espacios)
+            factura.Encabezado.FechaComprobante = fechaOriginal;
+        }
+
+        /// <summary>
+        /// Asigna el orden automáticamente a los productos que no lo tengan.
+        /// Si un producto no tiene orden, se le asigna según su posición en la lista (1, 2, 3, etc.).
+        /// </summary>
+        private static void AsignarOrdenSiFalta(FacturaExtraida? factura)
+        {
+            if (factura?.Productos == null || !factura.Productos.Any())
+            {
+                return;
+            }
+
+            var orden = 1;
+            foreach (var producto in factura.Productos)
+            {
+                if (producto.Orden == null || producto.Orden <= 0)
+                {
+                    producto.Orden = orden;
+                }
+                orden++;
+            }
         }
     }
 }

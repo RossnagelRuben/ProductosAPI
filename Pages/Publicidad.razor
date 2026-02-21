@@ -1,9 +1,74 @@
-﻿@using BlazorApp_ProductosAPI.Components
+@page "/Publicidad"
+@using BlazorApp_ProductosAPI.Components
 
 <AuthorizeView>
-    <h3>Publicidad</h3>
+    <div class="publicidad-page">
+        <div class="publicidad-header">
+            <h1 class="publicidad-title">Publicidad</h1>
+            <p class="publicidad-subtitle">Gestiona campañas y materiales de publicidad.</p>
+        </div>
+        <div class="publicidad-card card-elevated">
+            <div class="publicidad-card-body">
+                <div class="publicidad-placeholder">
+                    <span class="oi oi-megaphone" aria-hidden="true"></span>
+                    <h2>Sección de Publicidad</h2>
+                    <p>Desde aquí podrás configurar y gestionar la publicidad de tus productos cuando esté disponible.</p>
+                </div>
+            </div>
+        </div>
+    </div>
 </AuthorizeView>
 
-@code {
-
-}
+<style>
+    .publicidad-page {
+        padding: 1rem 0;
+        max-width: 900px;
+        margin: 0 auto;
+    }
+    .publicidad-header {
+        margin-bottom: 1.5rem;
+    }
+    .publicidad-title {
+        font-size: 1.75rem;
+        font-weight: 600;
+        color: #1a1a2e;
+        margin: 0 0 0.25rem 0;
+    }
+    .publicidad-subtitle {
+        color: #6c757d;
+        margin: 0;
+        font-size: 1rem;
+    }
+    .card-elevated {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        border: 1px solid #e9ecef;
+        overflow: hidden;
+    }
+    .publicidad-card-body {
+        padding: 2rem;
+    }
+    .publicidad-placeholder {
+        text-align: center;
+        padding: 2rem 1rem;
+        color: #495057;
+    }
+    .publicidad-placeholder .oi {
+        font-size: 4rem;
+        color: #adb5bd;
+        margin-bottom: 1rem;
+        display: block;
+    }
+    .publicidad-placeholder h2 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin: 0 0 0.5rem 0;
+        color: #343a40;
+    }
+    .publicidad-placeholder p {
+        margin: 0;
+        font-size: 0.95rem;
+        line-height: 1.5;
+    }
+</style>

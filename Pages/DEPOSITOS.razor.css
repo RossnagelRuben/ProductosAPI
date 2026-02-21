@@ -4731,3 +4731,44 @@
         line-height: 0 !important;
     }
 }
+
+/* ===== ESCRITORIO: no usar position fixed para que el sidebar Blazor se vea ===== */
+@media (min-width: 641px) {
+    .depositos-container {
+        position: relative !important;
+        left: auto !important;
+        right: auto !important;
+        top: auto !important;
+        bottom: auto !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        height: auto !important;
+        min-height: 100vh !important;
+        z-index: auto !important;
+    }
+    .depositos-content {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+    }
+    .data-grid-container {
+        position: relative !important;
+        left: auto !important;
+        right: auto !important;
+        top: auto !important;
+        bottom: auto !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+        min-height: 300px !important;
+    }
+    .data-grid-footer {
+        position: relative !important;
+        left: auto !important;
+        right: auto !important;
+        bottom: auto !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+}

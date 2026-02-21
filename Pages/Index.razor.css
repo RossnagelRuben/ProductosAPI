@@ -1,10 +1,4 @@
-﻿/* Ocupa toda la pantalla sin márgenes */
-html, body, #app {
-    height: 100%;
-    margin: 0;
-}
-
-/* Fondo animado detrás de todo */
+/* Fondo animado detrás de todo (solo dentro del contenido de Inicio) */
 .animated-background {
     position: fixed;
     inset: 0;

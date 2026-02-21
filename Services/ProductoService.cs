@@ -84,6 +84,60 @@ public class ProductoService
             return null;
         }
     }
+
+    public async Task<List<MarcaItem>> GetMarcasAsync(string token, CancellationToken cancellationToken = default)
+    {
+        var result = new List<MarcaItem>();
+        try
+        {
+            _httpClient.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            var response = await _httpClient.GetAsync("https://drrsystemas4.azurewebsites.net/Producto/Marca", cancellationToken);
+            if (!response.IsSuccessStatusCode) return result;
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            JsonElement listElem;
+            if (root.TryGetProperty("data", out listElem) && listElem.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var el in listElem.EnumerateArray())
+                {
+                    var item = ParseMarca(el);
+                    if (item != null) result.Add(item);
+                }
+            }
+            else if (root.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var el in root.EnumerateArray())
+                {
+                    var item = ParseMarca(el);
+                    if (item != null) result.Add(item);
+                }
+            }
+        }
+        catch { }
+        return result;
+    }
+
+    private static MarcaItem? ParseMarca(JsonElement el)
+    {
+        try
+        {
+            int id = 0;
+            string desc = string.Empty;
+            if (el.TryGetProperty("marcaID", out var idProp) && idProp.TryGetInt32(out var v))
+                id = v;
+            else if (el.TryGetProperty("MarcaID", out var idProp2) && idProp2.TryGetInt32(out var v2))
+                id = v2;
+            if (el.TryGetProperty("descripcion", out var dProp))
+                desc = dProp.GetString() ?? string.Empty;
+            else if (el.TryGetProperty("Descripcion", out var dProp2))
+                desc = dProp2.GetString() ?? string.Empty;
+            if (id == 0 && string.IsNullOrWhiteSpace(desc)) return null;
+            return new MarcaItem { MarcaID = id, Descripcion = desc };
+        }
+        catch { return null; }
+    }
 }
 
 

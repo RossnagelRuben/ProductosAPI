@@ -192,37 +192,161 @@ public sealed class GeminiPartResponse
 }
 
 // Modelos para productos extraídos
+/// <summary>
+/// Representa un producto individual extraído de una factura o comprobante.
+/// </summary>
 public sealed class ProductoItem
 {
+    /// <summary>
+    /// Número de orden del item en la factura (empezando desde 1, de arriba hacia abajo).
+    /// </summary>
+    [JsonPropertyName("orden")]
+    public int? Orden { get; set; }
+
+    /// <summary>
+    /// Código del producto.
+    /// </summary>
     [JsonPropertyName("codigo")]
     public string? Codigo { get; set; }
 
+    /// <summary>
+    /// Descripción del producto.
+    /// </summary>
     [JsonPropertyName("descripcion")]
     public string? Descripcion { get; set; }
 
+    /// <summary>
+    /// Cantidad del producto.
+    /// </summary>
     [JsonPropertyName("cantidad")]
     public string? Cantidad { get; set; }
 
+    /// <summary>
+    /// Precio unitario del producto.
+    /// </summary>
     [JsonPropertyName("precio_unitario")]
     public string? PrecioUnitario { get; set; }
+
+    /// <summary>
+    /// Porcentaje de IVA aplicado al producto (ej: "21", "10.5").
+    /// </summary>
+    [JsonPropertyName("iva_porcentaje")]
+    public string? IvaPorcentaje { get; set; }
+
+    /// <summary>
+    /// Descuento o bonificación aplicado al producto (puede ser porcentaje o monto fijo).
+    /// Nota: Descuento y bonificación son lo mismo, usar solo este campo.
+    /// </summary>
+    [JsonPropertyName("descuento")]
+    public string? Descuento { get; set; }
 }
 
+/// <summary>
+/// Representa los datos del proveedor extraídos de una factura.
+/// </summary>
 public sealed class ProveedorExtraido
 {
+    /// <summary>
+    /// CUIT o CUIL del proveedor.
+    /// </summary>
     [JsonPropertyName("cuit_cuil")]
     public string CuitCuil { get; set; } = "";
 
+    /// <summary>
+    /// Razón social del proveedor.
+    /// </summary>
     [JsonPropertyName("razon_social")]
     public string RazonSocial { get; set; } = "";
 }
 
+/// <summary>
+/// Representa los datos de encabezado de una factura o comprobante.
+/// </summary>
+public sealed class EncabezadoComprobante
+{
+    /// <summary>
+    /// Número de talonario (ej: "00014").
+    /// </summary>
+    [JsonPropertyName("talonario")]
+    public string? Talonario { get; set; }
+
+    /// <summary>
+    /// Número completo del comprobante incluyendo talonario (ej: "00014-000435342").
+    /// </summary>
+    [JsonPropertyName("numero_comprobante")]
+    public string? NumeroComprobante { get; set; }
+
+    /// <summary>
+    /// Tipo de comprobante: "Factura A", "Factura B", "Factura C", "Remito", "Comprobante X", etc.
+    /// </summary>
+    [JsonPropertyName("tipo_comprobante")]
+    public string? TipoComprobante { get; set; }
+
+    /// <summary>
+    /// Fecha del comprobante en formato ISO (YYYY-MM-DD) o el formato que aparezca en la factura.
+    /// </summary>
+    [JsonPropertyName("fecha_comprobante")]
+    public string? FechaComprobante { get; set; }
+
+    /// <summary>
+    /// Subtotal de la factura antes de impuestos o recargos.
+    /// </summary>
+    [JsonPropertyName("subtotal")]
+    public string? Subtotal { get; set; }
+
+    /// <summary>
+    /// Total final de la factura/comprobante.
+    /// </summary>
+    [JsonPropertyName("total")]
+    public string? Total { get; set; }
+
+    /// <summary>
+    /// Impuestos o recargos aplicados para llegar del subtotal al total.
+    /// </summary>
+    [JsonPropertyName("impuestos_aplicados")]
+    public List<ImpuestoDetalle> ImpuestosAplicados { get; set; } = new();
+}
+
+/// <summary>
+/// Representa una factura completa extraída con todos sus datos.
+/// </summary>
 public sealed class FacturaExtraida
 {
+    /// <summary>
+    /// Datos del proveedor.
+    /// </summary>
     [JsonPropertyName("proveedor")]
     public ProveedorExtraido? Proveedor { get; set; }
 
+    /// <summary>
+    /// Datos de encabezado del comprobante (talonario, número, tipo, fecha).
+    /// </summary>
+    [JsonPropertyName("encabezado")]
+    public EncabezadoComprobante? Encabezado { get; set; }
+
+    /// <summary>
+    /// Lista de productos extraídos de la factura.
+    /// </summary>
     [JsonPropertyName("productos")]
     public List<ProductoItem> Productos { get; set; } = new();
+}
+
+/// <summary>
+/// Representa un impuesto, recargo o concepto adicional aplicado al subtotal.
+/// </summary>
+public sealed class ImpuestoDetalle
+{
+    /// <summary>
+    /// Nombre del impuesto o recargo (ej: "IVA 21%", "Ingresos Brutos", "Impuesto interno").
+    /// </summary>
+    [JsonPropertyName("nombre")]
+    public string? Nombre { get; set; }
+
+    /// <summary>
+    /// Monto aplicado correspondiente a este impuesto o recargo.
+    /// </summary>
+    [JsonPropertyName("monto")]
+    public string? Monto { get; set; }
 }
 
 // Modelos para Colector API

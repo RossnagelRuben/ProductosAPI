@@ -1,47 +1,26 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 @using BlazorApp_ProductosAPI.Services
-@inject IJSRuntime JS
 @inject IAuthService AuthService
+@inject IJSRuntime JS
 
 <div class="page">
     @if (isAuthenticated)
     {
-        <div class="sidebar @SidebarClass">
-            <NavMenu SidebarToggled="OnSidebarToggled" IsSidebarCollapsed="@_sidebarCollapsed" />
+        <div class="sidebar">
+            <NavMenu />
         </div>
     }
 
-    <main class="@(isAuthenticated ? "" : "full-width")">
+    <main>
         <article class="content px-4">
             @Body
         </article>
     </main>
 </div>
 
-@if (_sidebarCollapsed)
-{
-    <button class="btn btn-primary btn-sm sidebar-toggle-floating" style="border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.25);" @onclick="ShowSidebar">
-        <span class="oi oi-chevron-right" aria-hidden="true"></span>
-    </button>
-}
-
 @code {
-    private bool _sidebarCollapsed = false;
-    private string SidebarClass => _sidebarCollapsed ? "sidebar-collapsed" : string.Empty;
-    private bool _initialized = false;
     private bool isAuthenticated = false;
-
-    private void OnSidebarToggled(bool collapsed)
-    {
-        _sidebarCollapsed = collapsed;
-        StateHasChanged();
-    }
-
-    private void ShowSidebar()
-    {
-        _sidebarCollapsed = false;
-        StateHasChanged();
-    }
+    private bool _initialized = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -54,29 +33,19 @@
         {
             try
             {
-                var width = await JS.InvokeAsync<int>("blazorGetViewportWidth");
-                if (width <= 768)
-                {
-                    _sidebarCollapsed = true;
-                    StateHasChanged();
-                }
-                await JS.InvokeVoidAsync("registerSidebarAutoCollapse", DotNetObjectReference.Create(this));
                 await JS.InvokeVoidAsync("registerAuthChangeListener", DotNetObjectReference.Create(this));
             }
             catch { }
             _initialized = true;
         }
-        // No forzar cambios en renders posteriores: respetar el botón del usuario
     }
 
     private async Task CheckAuthentication()
     {
         try
         {
-            // Verificar tanto el token básico como el token final
             var basicAuth = await AuthService.IsLoggedInAsync();
             var finalToken = await AuthService.GetTokenFINALAsync();
-            
             isAuthenticated = basicAuth || !string.IsNullOrEmpty(finalToken);
         }
         catch
@@ -92,13 +61,6 @@
     }
 
     [JSInvokable]
-    public void SetSidebarCollapsedFromJs(bool collapsed)
-    {
-        _sidebarCollapsed = collapsed;
-        StateHasChanged();
-    }
-
-    [JSInvokable]
     public async Task OnAuthChanged()
     {
         await CheckAuthentication();
@@ -107,45 +69,17 @@
 }
 
 <script>
-    window.blazorGetViewportWidth = function(){ return window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth; };
-</script>
-<script>
-    window.collapseSidebar = function(collapsed){
-        try {
-            var el = document.querySelector('.sidebar');
-            if (!el) return;
-            if (collapsed) { el.classList.add('sidebar-collapsed'); }
-            else { el.classList.remove('sidebar-collapsed'); }
-        } catch {}
-    }
-    window.registerSidebarAutoCollapse = function(dotnetHelper){
-        function apply(){
-            var w = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
-            var collapsed = w <= 768;
-            window.collapseSidebar(collapsed);
-            try { if (dotnetHelper) dotnetHelper.invokeMethodAsync('SetSidebarCollapsedFromJs', collapsed); } catch {}
-        }
-        window.addEventListener('resize', apply);
-        apply();
-    }
     window.registerAuthChangeListener = function(dotnetHelper){
-        // Escuchar cambios en localStorage
         window.addEventListener('storage', function(e) {
             if (e.key === 'auth_token_final' || e.key === 'auth_token') {
-                try { 
-                    if (dotnetHelper) dotnetHelper.invokeMethodAsync('OnAuthChanged'); 
-                } catch {}
+                try { if (dotnetHelper) dotnetHelper.invokeMethodAsync('OnAuthChanged'); } catch {}
             }
         });
-        
-        // También escuchar cambios en el mismo tab (storage event no se dispara en el mismo tab)
-        const originalSetItem = localStorage.setItem;
+        var originalSetItem = localStorage.setItem;
         localStorage.setItem = function(key, value) {
             originalSetItem.apply(this, arguments);
             if (key === 'auth_token_final' || key === 'auth_token') {
-                try { 
-                    if (dotnetHelper) dotnetHelper.invokeMethodAsync('OnAuthChanged'); 
-                } catch {}
+                try { if (dotnetHelper) dotnetHelper.invokeMethodAsync('OnAuthChanged'); } catch {}
             }
         };
     }

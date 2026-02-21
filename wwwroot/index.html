@@ -9,11 +9,10 @@
     <link href="css/bootstrap/bootstrap.min.css" rel="stylesheet" />
     <link href="css/app.css" rel="stylesheet" />
     <link href="css/app.modal.css" rel="stylesheet" />
-    <link rel="icon" type="image/png" href="favicon.png" />
+    <link rel="icon" type="image/x-icon" href="ICO.ico" />
     <link href="BlazorApp_ProductosAPI.styles.css" rel="stylesheet" />
     <link href="manifest.json" rel="manifest" />
-    <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png" />
-    <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png" />
+    <link rel="apple-touch-icon" href="ICO.ico" />
 </head>
 
 <body>
@@ -85,6 +84,18 @@
                 
             } catch (error) {
                 console.error('Error en sizeSvgOverImage:', error);
+            }
+        };
+
+        // Log para diagnóstico de Asignar Imágenes (F12 → Consola)
+        window.__logAsignarImagenes = function(tag, data) {
+            try {
+                var out = (typeof data === 'string' && (data.trim().startsWith('[') || data.trim().startsWith('{')))
+                    ? JSON.parse(data)
+                    : data;
+                console.log('[AsignarImagenes] ' + tag, out);
+            } catch (e) {
+                console.log('[AsignarImagenes] ' + tag, data);
             }
         };
     </script>
