@@ -61,7 +61,17 @@ public partial class ProductosImagenGrid
     {
         if (_imagenFallidaIds.Contains(p.ProductoID) || string.IsNullOrWhiteSpace(p.ImagenUrl))
             return PlaceholderImageUrl;
+        if (EsPdf(p.ImagenUrl)) return PlaceholderImageUrl;
         return p.ImagenUrl;
+    }
+
+    /// <summary>No mostrar PDF como imagen del producto (data:application/pdf o URL .pdf).</summary>
+    private static bool EsPdf(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return false;
+        if (url.StartsWith("data:application/pdf", StringComparison.OrdinalIgnoreCase)) return true;
+        if (url.IndexOf(".pdf", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+        return false;
     }
 
     private async Task LogGridAlConsolaAsync()

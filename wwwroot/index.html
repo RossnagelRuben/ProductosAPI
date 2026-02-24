@@ -98,6 +98,23 @@
                 console.log('[AsignarImagenes] ' + tag, data);
             }
         };
+
+        // Descarga una imagen por URL y devuelve data URL (evita CORS/HttpClient en Blazor WASM)
+        window.__fetchImageAsDataUrl = function(url) {
+            return fetch(url, { mode: 'cors', credentials: 'omit' })
+                .then(function(r) { if (!r.ok) return null; return r.blob(); })
+                .then(function(blob) {
+                    if (!blob) return null;
+                    if (blob.type && blob.type.indexOf('pdf') !== -1) return null;
+                    return new Promise(function(resolve, reject) {
+                        var r = new FileReader();
+                        r.onload = function() { resolve(r.result); };
+                        r.onerror = reject;
+                        r.readAsDataURL(blob);
+                    });
+                })
+                .catch(function() { return null; });
+        };
     </script>
     <script src="_framework/blazor.webassembly.js"></script>
     <script src="js/dom.js"></script>

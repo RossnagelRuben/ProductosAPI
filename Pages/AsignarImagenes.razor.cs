@@ -48,6 +48,8 @@ public partial class AsignarImagenes
     private string _googleSearchKeysRaw = "";
     /// <summary>Estado del modal "Buscar imagen en la web". Null = cerrado. Evita referencias obsoletas al 2º/3er producto (SOLID: estado único).</summary>
     private BusquedaWebState? _busquedaWeb;
+    /// <summary>Cancelación de la descarga actual para no quedar en "Descargando imagen" y poder elegir otra.</summary>
+    private CancellationTokenSource? _busquedaWebCts;
 
     private bool _tieneImagenEnModal => !string.IsNullOrWhiteSpace(_imagenModalDataUrl) && !_imagenModalDataUrl.StartsWith("data:image/svg", StringComparison.OrdinalIgnoreCase);
 
@@ -444,6 +446,9 @@ public partial class AsignarImagenes
 
     private void CerrarBusquedaWeb()
     {
+        _busquedaWebCts?.Cancel();
+        _busquedaWebCts?.Dispose();
+        _busquedaWebCts = null;
         _busquedaWeb = null;
         StateHasChanged();
     }
@@ -464,7 +469,12 @@ public partial class AsignarImagenes
         catch { }
     }
 
-    /// <summary>Proxy público para evitar CORS al cargar imágenes externas en &lt;img&gt;. Open/Closed: cambiar esta constante si se usa otro proxy.</summary>
+    /// <summary>Proxies CORS para descargar imágenes desde el navegador. Si uno falla se prueba el siguiente.</summary>
+    private static readonly string[] CorsProxyBases = new[]
+    {
+        "https://api.allorigins.win/raw?url=",
+        "https://corsproxy.io/?url="
+    };
     private const string CorsProxyBase = "https://api.allorigins.win/raw?url=";
 
     private async Task LogImagenWebFallida(string url, int indice)
@@ -487,24 +497,45 @@ public partial class AsignarImagenes
         await InvokeAsync(StateHasChanged);
     }
 
-    /// <summary>Asigna la imagen descargada al producto indicado por productId. El ID viene de la vista (closure) para no depender de _busquedaWeb en medio del await (evita 2º/3er producto equivocado).</summary>
+    /// <summary>Asigna la imagen descargada al producto. Usa tiempo límite (12 s) y CancellationToken para no quedar colgado en "Descargando imagen" y poder elegir otra.</summary>
     private async Task SeleccionarImagenWebAsync(string imageUrl, int productId)
     {
         if (_busquedaWeb == null || productId == 0) return;
         if (_busquedaWeb.Descargando) return;
-        // Bloqueo por sesión de modal: solo aceptamos clics del producto para el que está abierto este modal.
         if (!_busquedaWeb.EsParaProducto(productId)) return;
+
+        _busquedaWebCts?.Cancel();
+        _busquedaWebCts?.Dispose();
+        _busquedaWebCts = new CancellationTokenSource();
 
         _busquedaWeb.Descargando = true;
         _busquedaWeb.Error = null;
         await InvokeAsync(StateHasChanged);
         try
         {
-            var dataUrl = await GoogleImageSearch.FetchImageAsDataUrlAsync(imageUrl);
-            if (string.IsNullOrWhiteSpace(dataUrl) && imageUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase) && !imageUrl.StartsWith(CorsProxyBase, StringComparison.OrdinalIgnoreCase))
-                dataUrl = await GoogleImageSearch.FetchImageAsDataUrlAsync(CorsProxyBase + Uri.EscapeDataString(imageUrl));
+            var ct = _busquedaWebCts.Token;
+            string? dataUrl = null;
+            var yaEsProxy = imageUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase) && CorsProxyBases.Any(b => imageUrl.StartsWith(b, StringComparison.OrdinalIgnoreCase));
+            if (yaEsProxy)
+            {
+                dataUrl = await GoogleImageSearch.FetchImageAsDataUrlAsync(imageUrl, ct);
+            }
+            else if (imageUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            {
+                var encoded = Uri.EscapeDataString(imageUrl);
+                var t1 = GoogleImageSearch.FetchImageAsDataUrlAsync(CorsProxyBases[0] + encoded, ct);
+                var t2 = GoogleImageSearch.FetchImageAsDataUrlAsync(CorsProxyBases[1] + encoded, ct);
+                var primera = await Task.WhenAny(t1, t2);
+                dataUrl = await primera;
+                if (string.IsNullOrWhiteSpace(dataUrl))
+                    dataUrl = await (primera == t1 ? t2 : t1);
+            }
+            else
+            {
+                dataUrl = await GoogleImageSearch.FetchImageAsDataUrlAsync(imageUrl, ct);
+            }
 
-            if (!string.IsNullOrWhiteSpace(dataUrl))
+            if (!string.IsNullOrWhiteSpace(dataUrl) && dataUrl.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
             {
                 var item = _items.FirstOrDefault(x => x.ProductoID == productId);
                 if (item != null)
@@ -520,15 +551,27 @@ public partial class AsignarImagenes
             }
             else
             {
-                _busquedaWeb.Error = "No se pudo descargar esta imagen (CORS, red o servidor). Probá con otra imagen.";
+                _busquedaWeb.Error = "No se pudo descargar esta imagen. Probá con otra miniatura o con otro producto.";
             }
+        }
+        catch (OperationCanceledException)
+        {
+            _busquedaWeb.Error = "Descarga cancelada. Elegí otra imagen.";
         }
         finally
         {
+            _busquedaWebCts?.Dispose();
+            _busquedaWebCts = null;
             if (_busquedaWeb != null)
                 _busquedaWeb.Descargando = false;
             await InvokeAsync(StateHasChanged);
         }
+    }
+
+    /// <summary>Cancela la descarga en curso para poder elegir otra imagen sin esperar.</summary>
+    private void CancelarDescargaImagen()
+    {
+        _busquedaWebCts?.Cancel();
     }
 
     private async Task GuardarAsync(ProductoConImagenDto? p)

@@ -199,7 +199,10 @@
                             var productIdParaAsignar = _busquedaWeb.ProductoID;
                             @if (_busquedaWeb.Descargando)
                             {
-                                <div class="modal-loading"><span class="oi oi-loop spin"></span> Descargando imagen…</div>
+                                <div class="modal-loading">
+                                    <span class="oi oi-loop spin"></span> Descargando imagen…
+                                    <button type="button" class="btn-link-cancelar" @onclick="CancelarDescargaImagen">Cancelar y elegir otra</button>
+                                </div>
                             }
                             @if (!string.IsNullOrWhiteSpace(_busquedaWeb.Error))
                             {
@@ -446,9 +449,20 @@
     .modal-loading {
         display: flex;
         align-items: center;
+        flex-wrap: wrap;
         gap: 0.5rem;
         color: #6c757d;
     }
+    .btn-link-cancelar {
+        background: none;
+        border: none;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.9rem;
+        color: #0d6efd;
+        cursor: pointer;
+        text-decoration: underline;
+    }
+    .btn-link-cancelar:hover { color: #0a58ca; }
     .modal-desc { margin-bottom: 0.75rem; }
     .modal-meta { font-size: 0.85rem; color: #6c757d; margin-top: 0.25rem; }
     .modal-prompt {
