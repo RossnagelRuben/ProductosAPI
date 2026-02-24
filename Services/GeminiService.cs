@@ -216,6 +216,57 @@ IMPORTANTE:
         }
     }
 
+    /// <inheritdoc />
+    public async Task<GeminiTextResult> GenerateTextAsync(string prompt, string apiKey)
+    {
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return new GeminiTextResult { Success = false, ErrorMessage = "Falta la API key." };
+        if (string.IsNullOrWhiteSpace(prompt))
+            return new GeminiTextResult { Success = false, ErrorMessage = "El prompt no puede estar vacío." };
+        try
+        {
+            var model = "gemini-2.5-flash-lite";
+            var url = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={apiKey}";
+            var body = new
+            {
+                contents = new[] { new { parts = new[] { new { text = prompt } } } }
+            };
+            var req = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(body), System.Text.Encoding.UTF8, "application/json")
+            };
+            var res = await GeminiHttpClient.SendAsync(req);
+            var json = await res.Content.ReadAsStringAsync();
+            if (!res.IsSuccessStatusCode)
+                return new GeminiTextResult { Success = false, ErrorMessage = $"Gemini {(int)res.StatusCode}: {json}" };
+            var text = ParseGeminiTextResponse(json);
+            return new GeminiTextResult { Success = true, Text = text };
+        }
+        catch (Exception ex)
+        {
+            return new GeminiTextResult { Success = false, ErrorMessage = ex.Message };
+        }
+    }
+
+    private static string? ParseGeminiTextResponse(string responseJson)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(responseJson);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("candidates", out var candidates) || candidates.ValueKind != JsonValueKind.Array || candidates.GetArrayLength() == 0)
+                return null;
+            var content = candidates[0].GetProperty("content");
+            if (!content.TryGetProperty("parts", out var parts) || parts.ValueKind != JsonValueKind.Array || parts.GetArrayLength() == 0)
+                return null;
+            return parts[0].GetProperty("text").GetString();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static GeminiImageResult? ParseGeminiImageResponse(string responseJson)
     {
         try

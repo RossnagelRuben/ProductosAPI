@@ -27,6 +27,7 @@ public partial class ProductosImagenGrid
     [Parameter] public EventCallback<ProductoConImagenDto> OnBuscarImagenWeb { get; set; }
     /// <summary>Callback para búsqueda de imágenes con SerpAPI (Google Images, Argentina). Se habilita con la misma condición que Buscar en web (descripción + código de barras).</summary>
     [Parameter] public EventCallback<ProductoConImagenDto> OnBuscarImagenSerpApi { get; set; }
+    [Parameter] public EventCallback<ProductoConImagenDto> OnAbrirModalObservaciones { get; set; }
     [Parameter] public EventCallback<ProductoConImagenDto> OnGuardar { get; set; }
 
     private static bool PuedeBuscarEnWeb(ProductoConImagenDto p) =>

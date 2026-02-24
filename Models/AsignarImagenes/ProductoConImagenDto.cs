@@ -15,4 +15,6 @@ public sealed class ProductoConImagenDto
     public string? ImagenUrl { get; set; }
     /// <summary>Indica si la imagen fue cargada desde API o está pendiente.</summary>
     public bool ImagenCargada { get; set; }
+    /// <summary>Observaciones adicionales del producto (puede venir de la API o editarse en el modal Observaciones). Formato libre o RTF.</summary>
+    public string? Observaciones { get; set; }
 }

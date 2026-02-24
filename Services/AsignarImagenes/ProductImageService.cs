@@ -14,12 +14,14 @@ public sealed class ProductImageService : IProductImageService
     private const string ImagenPlaceholder = "https://ardiaprod.vtexassets.com/arquivos/ids/321558/Yerba-Mate-Amanda-Suave-500-Gr-_1.jpg";
     private readonly HttpClient _httpClient;
     private readonly IJSRuntime _js;
+    private readonly IProductoPatchService _productoPatch;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    public ProductImageService(HttpClient httpClient, IJSRuntime js)
+    public ProductImageService(HttpClient httpClient, IJSRuntime js, IProductoPatchService productoPatch)
     {
         _httpClient = httpClient;
         _js = js;
+        _productoPatch = productoPatch;
     }
 
     public async Task<string?> GetImageUrlByCodigoBarraAsync(string? codigoBarra, string token, CancellationToken cancellationToken = default)
@@ -93,9 +95,48 @@ public sealed class ProductImageService : IProductImageService
 
     public async Task<bool> SaveProductImageAsync(int productoID, string imageUrlOrBase64, string token, CancellationToken cancellationToken = default)
     {
-        // Placeholder: cuando exista API de guardado de imagen, llamarla aquí.
-        await Task.CompletedTask;
-        return false;
+        if (productoID <= 0) return false;
+        if (string.IsNullOrWhiteSpace(imageUrlOrBase64)) return false;
+
+        // La API espera un string base64 (format: byte). Si viene un data URL ("data:image/...;base64,AAAA"),
+        // recortamos el prefijo y enviamos solo la parte base64.
+        var imagenParaApi = imageUrlOrBase64;
+        if (imageUrlOrBase64.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+        {
+            var coma = imageUrlOrBase64.IndexOf(',');
+            if (coma >= 0 && coma + 1 < imageUrlOrBase64.Length)
+            {
+                imagenParaApi = imageUrlOrBase64.Substring(coma + 1);
+            }
+        }
+
+        var request = new ProductoPatchRequest
+        {
+            CodigoID = productoID,
+            ImagenEspecified = true,
+            Imagen = imagenParaApi,
+            ObservacionEspecified = false,
+            Observacion = "null"
+        };
+
+        try
+        {
+            var result = await _productoPatch.PatchProductoAsync(request, token, cancellationToken);
+            if (!result.Success)
+            {
+                await LogAsync("SaveProductImageAsync PATCH ERROR", new { request, result.StatusCode, result.ResponseBody, result.ErrorMessage });
+            }
+            else
+            {
+                await LogAsync("SaveProductImageAsync PATCH OK", new { request, result.StatusCode });
+            }
+            return result.Success;
+        }
+        catch (Exception ex)
+        {
+            await LogAsync("SaveProductImageAsync EXCEPCIÓN", new { productoID, mensaje = ex.Message });
+            return false;
+        }
     }
 
     private sealed class CentralizadoraProducto

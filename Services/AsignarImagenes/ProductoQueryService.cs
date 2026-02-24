@@ -26,7 +26,10 @@ public sealed class ProductoQueryService : IProductoQueryService
         var qs = new List<string>
         {
             $"pageSize={Math.Clamp(filter.PageSize, 1, 500)}",
-            $"pageNumber={Math.Max(1, filter.PageNumber)}"
+            $"pageNumber={Math.Max(1, filter.PageNumber)}",
+            // Siempre pedimos a la API que incluya datos de imagen (Imagen=true).
+            // El filtrado Con/Sin imagen se hace del lado cliente según ImagenUrl/ImagenCargada.
+            "Imagen=true"
         };
         if (!string.IsNullOrWhiteSpace(filter.CodigoBarra))
             qs.Add($"codigoBarra={Uri.EscapeDataString(filter.CodigoBarra.Trim())}");
@@ -42,8 +45,6 @@ public sealed class ProductoQueryService : IProductoQueryService
             qs.Add($"fechaModifDesde={filter.FechaModifDesde.Value:yyyy-MM-dd}");
         if (filter.FechaModifHasta.HasValue)
             qs.Add($"fechaModifHasta={filter.FechaModifHasta.Value:yyyy-MM-dd}");
-        if (filter.FiltroImagen.HasValue)
-            qs.Add($"Imagen={filter.FiltroImagen.Value.ToString().ToLowerInvariant()}");
         // Si la API GetProducto acepta filtro por código de barras, lo enviamos para que el servidor filtre.
         if (filter.FiltroCodigoBarra.HasValue)
             qs.Add($"ConCodigoBarra={filter.FiltroCodigoBarra.Value.ToString().ToLowerInvariant()}");
@@ -104,6 +105,7 @@ public sealed class ProductoQueryService : IProductoQueryService
             }
             string? imagenUrl = GetImageUrlFromElement(el);
             imagenUrl = NormalizeImageUrl(imagenUrl);
+            string? observaciones = GetObservacionesFromElement(el);
             return new ProductoConImagenDto
             {
                 ProductoID = codigoID,
@@ -112,7 +114,8 @@ public sealed class ProductoQueryService : IProductoQueryService
                 CodigoBarra = codigoBarra,
                 Presentacion = presentacion,
                 ImagenUrl = imagenUrl,
-                ImagenCargada = !string.IsNullOrWhiteSpace(imagenUrl)
+                ImagenCargada = !string.IsNullOrWhiteSpace(imagenUrl),
+                Observaciones = observaciones
             };
         }
         catch
@@ -225,6 +228,21 @@ public sealed class ProductoQueryService : IProductoQueryService
             var url = GetUrlFromProp(prop.Value);
             if (!string.IsNullOrWhiteSpace(url))
                 return url;
+        }
+        return null;
+    }
+
+    /// <summary>Obtiene observaciones del producto desde el JSON (observaciones, observacionesAdicionales, etc.).</summary>
+    private static string? GetObservacionesFromElement(JsonElement el)
+    {
+        var names = new[] { "observacionesAdicionales", "observaciones", "ObservacionesAdicionales", "Observaciones", "notas", "Notas" };
+        foreach (var name in names)
+        {
+            if (el.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.String)
+            {
+                var s = prop.GetString();
+                if (!string.IsNullOrWhiteSpace(s)) return s;
+            }
         }
         return null;
     }

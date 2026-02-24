@@ -21,6 +21,9 @@ public partial class AsignarImagenes
     [Inject] private ILocalStorageService LocalStorage { get; set; } = null!;
     [Inject] private IGoogleImageSearchService GoogleImageSearch { get; set; } = null!;
     [Inject] private ISerpApiImageSearchService SerpApiImageSearch { get; set; } = null!;
+    /// <summary>Servicio de patch de producto para guardar imagen y/u observaciones en la API.</summary>
+    [Inject] private Services.AsignarImagenes.IProductoPatchService ProductoPatch { get; set; } = null!;
+    [Inject] private ISerpApiOrganicSearchService SerpApiOrganicSearch { get; set; } = null!;
 
     private const string PlaceholderSvg = "data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22 viewBox=%220 0 200 200%22%3E%3Crect fill=%22%23e9ecef%22 width=%22200%22 height=%22200%22/%3E%3Ctext x=%22100%22 y=%22105%22 text-anchor=%22middle%22 fill=%22%23999%22 font-size=%2214%22%3ESin imagen%3C/text%3E%3C/svg%3E";
 
@@ -54,6 +57,18 @@ public partial class AsignarImagenes
     private BusquedaWebState? _busquedaWeb;
     /// <summary>Cancelación de la descarga actual para no quedar en "Descargando imagen" y poder elegir otra.</summary>
     private CancellationTokenSource? _busquedaWebCts;
+
+    /// <summary>Modal Observaciones: producto seleccionado y texto (RTF o plano).</summary>
+    private ProductoConImagenDto? _productoObservaciones;
+    private string _observacionesRtf = "";
+    private bool _generandoObservaciones;
+    private string? _errorObservaciones;
+    /// <summary>True = pestaña Código RTF, False = pestaña Vista previa.</summary>
+    private bool _observacionesVistaCodigo = false;
+
+    /// <summary>Mensaje de notificación (toast) para operaciones de guardado (éxito / error).</summary>
+    private string? _toastMessage;
+    private bool _toastIsError;
 
     private bool _tieneImagenEnModal => !string.IsNullOrWhiteSpace(_imagenModalDataUrl) && !_imagenModalDataUrl.StartsWith("data:image/svg", StringComparison.OrdinalIgnoreCase);
 
@@ -416,16 +431,235 @@ public partial class AsignarImagenes
         }
     }
 
-    private void GuardarCambiosModal()
+    private async Task GuardarCambiosModal()
     {
-        if (_productoModal == null) return;
+        if (_productoModal == null || string.IsNullOrWhiteSpace(_token)) return;
+        if (string.IsNullOrWhiteSpace(_imagenModalDataUrl) || _imagenModalDataUrl.StartsWith("data:image/svg", StringComparison.OrdinalIgnoreCase))
+            return;
+
         var item = _items.FirstOrDefault(x => x.ProductoID == _productoModal.ProductoID);
-        if (item != null && !string.IsNullOrWhiteSpace(_imagenModalDataUrl) && !_imagenModalDataUrl.StartsWith("data:image/svg", StringComparison.OrdinalIgnoreCase))
+        if (item == null) return;
+
+        item.ImagenUrl = _imagenModalDataUrl;
+        item.ImagenCargada = true;
+
+        try
         {
-            item.ImagenUrl = _imagenModalDataUrl;
-            item.ImagenCargada = true;
+            var ok = await ProductImage.SaveProductImageAsync(item.ProductoID, _imagenModalDataUrl, _token);
+            if (!ok)
+            {
+                _errorModal = "No se pudo guardar la imagen en la API.";
+                await MostrarToastAsync("No se pudo guardar la imagen en la API.", true);
+                return;
+            }
+
+            await MostrarToastAsync("Imagen guardada correctamente.", false);
+            CerrarModal();
         }
-        CerrarModal();
+        catch (Exception ex)
+        {
+            _errorModal = ex.Message;
+            await MostrarToastAsync("Error guardando imagen: " + ex.Message, true);
+        }
+    }
+
+    private async Task AbrirModalObservacionesAsync(ProductoConImagenDto? p)
+    {
+        if (p == null) return;
+        _productoObservaciones = p;
+        _observacionesRtf = p.Observaciones ?? "";
+        _errorObservaciones = null;
+        _generandoObservaciones = false;
+        _geminiApiKeyModal = await LocalStorage.GetItemAsync(LsGeminiKey) ?? "";
+        _observacionesVistaCodigo = false; // por defecto mostrar Vista previa
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void CerrarModalObservaciones()
+    {
+        _productoObservaciones = null;
+        _observacionesRtf = "";
+        _errorObservaciones = null;
+        _generandoObservaciones = false;
+        _observacionesVistaCodigo = true;
+        StateHasChanged();
+    }
+
+    /// <summary>HTML generado desde el RTF para la vista previa (negritas, viñetas, etc.).</summary>
+    private string ObservacionesPreviewHtml => RtfToHtmlConverter.ToHtml(_observacionesRtf);
+
+    private void OnModalObservacionesKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            CerrarModalObservaciones();
+    }
+
+    /// <summary>Genera observaciones en RTF usando SerpAPI (búsqueda orgánica) + Gemini. Usa la misma API key de Gemini.</summary>
+    private async Task GenerarObservacionesConIAAsync()
+    {
+        if (_productoObservaciones == null) return;
+        var apiKeyGemini = _geminiApiKeyModal?.Trim();
+        if (string.IsNullOrWhiteSpace(apiKeyGemini))
+        {
+            _errorObservaciones = "Ingresá la API key de Gemini en el cuadro de arriba.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_serpApiKeyRaw?.Trim()))
+        {
+            _errorObservaciones = "Para generar con IA necesitás la API key de SerpAPI (en Filtros). SerpAPI busca información en Google y Gemini la convierte en observaciones RTF.";
+            return;
+        }
+        var desc = _productoObservaciones.DescripcionLarga ?? "";
+        var barra = _productoObservaciones.CodigoBarra ?? "";
+        if (string.IsNullOrWhiteSpace(desc) && string.IsNullOrWhiteSpace(barra))
+        {
+            _errorObservaciones = "El producto debe tener descripción o código de barras para buscar información.";
+            return;
+        }
+        _errorObservaciones = null;
+        _generandoObservaciones = true;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var query = $"{barra} {desc}".Trim();
+            IReadOnlyList<string> snippets;
+            try
+            {
+                snippets = await SerpApiOrganicSearch.GetOrganicSnippetsAsync(query, _serpApiKeyRaw.Trim(), maxSnippets: 10);
+            }
+            catch (Exception ex)
+            {
+                _errorObservaciones = "SerpAPI: " + ex.Message;
+                return;
+            }
+            var snippetsText = snippets.Count > 0
+                ? string.Join("\n\n", snippets.Select(s => "- " + s))
+                : "(No se encontraron resultados de búsqueda para este producto.)";
+            var prompt = $@"Eres un asistente que escribe observaciones de productos en formato RTF (Rich Text Format).
+Producto: {desc}. Código de barras: {barra}.
+
+Información obtenida de búsqueda en internet:
+{snippetsText}
+
+Escribe observaciones útiles para catálogo (descripción, uso, características) en RTF válido. Responde ÚNICAMENTE con el contenido RTF, sin explicaciones ni markdown. El RTF debe empezar por {{\rtf1 y usar comandos estándar como \par para párrafos. Si no hay información útil, escribe un párrafo breve con la descripción del producto en RTF.";
+            var result = await GeminiService.GenerateTextAsync(prompt, apiKeyGemini);
+            if (result.Success && !string.IsNullOrWhiteSpace(result.Text))
+            {
+                _observacionesRtf = result.Text.Trim();
+                if (_observacionesRtf.StartsWith("```", StringComparison.Ordinal))
+                {
+                    var first = _observacionesRtf.IndexOf('\n');
+                    var last = _observacionesRtf.LastIndexOf("```", StringComparison.Ordinal);
+                    if (first >= 0 && last > first)
+                        _observacionesRtf = _observacionesRtf.Substring(first + 1, last - first - 1).Trim();
+                }
+            }
+            else
+                _errorObservaciones = result?.ErrorMessage ?? "Gemini no devolvió texto.";
+        }
+        catch (Exception ex)
+        {
+            _errorObservaciones = ex.Message;
+        }
+        finally
+        {
+            _generandoObservaciones = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task MostrarToastAsync(string mensaje, bool esError)
+    {
+        _toastMessage = mensaje;
+        _toastIsError = esError;
+        var current = _toastMessage;
+        await InvokeAsync(StateHasChanged);
+
+        // Auto-cierre en ~3 segundos si el mensaje no cambió.
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(3000);
+            if (_toastMessage == current)
+            {
+                _toastMessage = null;
+                await InvokeAsync(StateHasChanged);
+            }
+        });
+    }
+
+    private void CerrarToast()
+    {
+        _toastMessage = null;
+        StateHasChanged();
+    }
+
+    private async Task GuardarObservacionesEnProductoAsync()
+    {
+        if (_productoObservaciones == null || string.IsNullOrWhiteSpace(_token))
+        {
+            CerrarModalObservaciones();
+            return;
+        }
+
+        var texto = string.IsNullOrWhiteSpace(_observacionesRtf) ? null : _observacionesRtf;
+
+        // Actualizar modelo en memoria para que la UI quede consistente inmediatamente.
+        var item = _items.FirstOrDefault(x => x.ProductoID == _productoObservaciones.ProductoID);
+        if (item != null)
+            item.Observaciones = texto;
+
+        var request = new ProductoPatchRequest
+        {
+            CodigoID = _productoObservaciones.ProductoID,
+            ImagenEspecified = false,
+            Imagen = "null",
+            ObservacionEspecified = true,
+            Observacion = texto
+        };
+
+        try
+        {
+            var result = await ProductoPatch.PatchProductoAsync(request, _token);
+            if (!result.Success)
+            {
+                _errorObservaciones = "No se pudo guardar las observaciones en la API.";
+                await MostrarToastAsync("No se pudo guardar las observaciones en la API.", true);
+                try
+                {
+                    await JS.InvokeVoidAsync("__logAsignarImagenes", "PATCH Observaciones ERROR", JsonSerializer.Serialize(new
+                    {
+                        request,
+                        result.StatusCode,
+                        result.ResponseBody,
+                        result.ErrorMessage
+                    }));
+                }
+                catch { }
+                return;
+            }
+            await MostrarToastAsync("Observaciones guardadas correctamente.", false);
+            try
+            {
+                await JS.InvokeVoidAsync("__logAsignarImagenes", "PATCH Observaciones OK", JsonSerializer.Serialize(new
+                {
+                    request,
+                    result.StatusCode,
+                    result.ResponseBody
+                }));
+            }
+            catch { }
+            CerrarModalObservaciones();
+        }
+        catch (Exception ex)
+        {
+            _errorObservaciones = ex.Message;
+            await MostrarToastAsync("Error guardando observaciones: " + ex.Message, true);
+            try
+            {
+                await JS.InvokeVoidAsync("__logAsignarImagenes", "PATCH Observaciones EXCEPCIÓN", JsonSerializer.Serialize(new { request, ex = ex.Message }));
+            }
+            catch { }
+        }
     }
 
     /// <summary>Abre el modal de búsqueda web para el producto indicado. Crea un estado nuevo (no reutiliza el anterior) para evitar asignar al producto equivocado.</summary>
@@ -636,7 +870,26 @@ public partial class AsignarImagenes
                 {
                     item.ImagenUrl = dataUrl;
                     item.ImagenCargada = true;
-                    CerrarBusquedaWeb();
+
+                    if (!string.IsNullOrWhiteSpace(_token))
+                    {
+                        var ok = await ProductImage.SaveProductImageAsync(item.ProductoID, dataUrl, _token);
+                        if (!ok)
+                        {
+                            _busquedaWeb.Error = "No se pudo guardar la imagen en la API.";
+                            await MostrarToastAsync("No se pudo guardar la imagen en la API.", true);
+                        }
+                        else
+                        {
+                            await MostrarToastAsync("Imagen guardada correctamente.", false);
+                            CerrarBusquedaWeb();
+                        }
+                    }
+                    else
+                    {
+                        _busquedaWeb.Error = "No hay token de autenticación para guardar la imagen.";
+                        await MostrarToastAsync("No hay token de autenticación para guardar la imagen.", true);
+                    }
                 }
                 else
                 {

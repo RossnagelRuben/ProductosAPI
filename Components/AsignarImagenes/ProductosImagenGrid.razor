@@ -69,19 +69,10 @@
                                 </button>
                             }
                             <button type="button"
-                                    class="btn-card btn-guardar"
-                                    disabled="@(!p.ImagenCargada || IsSavingImage == p.ProductoID)"
-                                    @onclick="() => OnGuardar.InvokeAsync(p)">
-                                @if (IsSavingImage == p.ProductoID)
-                                {
-                                    <span class="oi oi-loop spin" aria-hidden="true"></span>
-                                    <span>Guardando…</span>
-                                }
-                                else
-                                {
-                                    <span class="oi oi-check" aria-hidden="true"></span>
-                                    <span>Guardar</span>
-                                }
+                                    class="btn-card btn-observaciones"
+                                    @onclick="() => OnAbrirModalObservaciones.InvokeAsync(p)">
+                                <span class="oi oi-document" aria-hidden="true"></span>
+                                <span>Observaciones</span>
                             </button>
                         </div>
                     </div>
@@ -215,6 +206,13 @@
     }
     .btn-serpapi:hover:not(:disabled) {
         background: #0b5ed7;
+    }
+    .btn-observaciones {
+        background: #6f42c1;
+        color: #fff;
+    }
+    .btn-observaciones:hover:not(:disabled) {
+        background: #5a32a3;
     }
     .btn-guardar {
         background: #198754;
