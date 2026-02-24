@@ -20,6 +20,7 @@ builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.IGeminiService, Blazo
 builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.IColectorService, BlazorApp_ProductosAPI.Services.ColectorService>();
 builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.IJsInteropService, BlazorApp_ProductosAPI.Services.JsInteropService>();
 builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.IGoogleImageSearchService, BlazorApp_ProductosAPI.Services.GoogleImageSearchService>();
+builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.ISerpApiImageSearchService, BlazorApp_ProductosAPI.Services.SerpApiImageSearchService>();
 
 // Asignar imágenes (SOLID: interfaces y implementaciones)
 builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.AsignarImagenes.IProductoQueryService, BlazorApp_ProductosAPI.Services.AsignarImagenes.ProductoQueryService>();

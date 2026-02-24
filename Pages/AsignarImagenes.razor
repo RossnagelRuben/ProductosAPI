@@ -79,6 +79,13 @@
                                value="@_googleSearchKeysRaw"
                                @oninput="OnGoogleSearchKeysInput" />
                     </div>
+                    <div class="filter-field filter-field-full">
+                        <label for="serpapi-key">API key SerpAPI (búsqueda imágenes Google, ubicación Argentina)</label>
+                        <input id="serpapi-key" type="password" class="filter-input"
+                               placeholder="API key de SerpAPI (serpapi.com)"
+                               value="@_serpApiKeyRaw"
+                               @oninput="OnSerpApiKeyInput" />
+                    </div>
                 </div>
                 <div class="filters-actions">
                     <button type="button" class="btn-primary" @onclick="Buscar" disabled="@_loading">
@@ -115,6 +122,7 @@
                                 IsSavingImage="_savingImageId"
                                 OnAbrirModalImagen="AbrirModalImagenAsync"
                                 OnBuscarImagenWeb="BuscarImagenWebAsync"
+                                OnBuscarImagenSerpApi="BuscarImagenSerpApiAsync"
                                 OnGuardar="GuardarAsync" />
         </section>
 
@@ -191,7 +199,7 @@
                         <p class="modal-busqueda-info">@(_busquedaWeb.DescripcionLarga ?? "—") · @(_busquedaWeb.CodigoBarra ?? "")</p>
                         @if (_busquedaWeb.Loading)
                         {
-                            <div class="modal-loading"><span class="oi oi-loop spin"></span> Buscando en Google…</div>
+                            <div class="modal-loading"><span class="oi oi-loop spin"></span> @(_busquedaWeb.SourceLabel ?? "Buscando en Google")…</div>
                         }
                         else if (_busquedaWeb.TieneResultados)
                         {

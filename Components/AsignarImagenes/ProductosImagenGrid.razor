@@ -55,6 +55,12 @@
                                     <span class="oi oi-globe" aria-hidden="true"></span>
                                     <span>Buscar en web</span>
                                 </button>
+                                <button type="button"
+                                        class="btn-card btn-serpapi"
+                                        @onclick="() => OnBuscarImagenSerpApi.InvokeAsync(p)">
+                                    <span class="oi oi-image" aria-hidden="true"></span>
+                                    <span>SerpAPI</span>
+                                </button>
                             }
                             <button type="button"
                                     class="btn-card btn-guardar"
@@ -196,6 +202,13 @@
     }
     .btn-web:hover:not(:disabled) {
         background: #5a6268;
+    }
+    .btn-serpapi {
+        background: #0d6efd;
+        color: #fff;
+    }
+    .btn-serpapi:hover:not(:disabled) {
+        background: #0b5ed7;
     }
     .btn-guardar {
         background: #198754;

@@ -20,6 +20,7 @@ public partial class AsignarImagenes
     [Inject] private IGeminiService GeminiService { get; set; } = null!;
     [Inject] private ILocalStorageService LocalStorage { get; set; } = null!;
     [Inject] private IGoogleImageSearchService GoogleImageSearch { get; set; } = null!;
+    [Inject] private ISerpApiImageSearchService SerpApiImageSearch { get; set; } = null!;
 
     private const string PlaceholderSvg = "data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22 viewBox=%220 0 200 200%22%3E%3Crect fill=%22%23e9ecef%22 width=%22200%22 height=%22200%22/%3E%3Ctext x=%22100%22 y=%22105%22 text-anchor=%22middle%22 fill=%22%23999%22 font-size=%2214%22%3ESin imagen%3C/text%3E%3C/svg%3E";
 
@@ -44,8 +45,11 @@ public partial class AsignarImagenes
     private string _geminiApiKeyModal = "";
     private const string LsGeminiKey = "img_gkey";
     private const string LsGoogleSearchKeys = "google_search_keys";
+    private const string LsSerpApiKey = "serpapi_key";
 
     private string _googleSearchKeysRaw = "";
+    /// <summary>API key de SerpAPI para búsqueda de imágenes (Google Images, ubicación Argentina).</summary>
+    private string _serpApiKeyRaw = "";
     /// <summary>Estado del modal "Buscar imagen en la web". Null = cerrado. Evita referencias obsoletas al 2º/3er producto (SOLID: estado único).</summary>
     private BusquedaWebState? _busquedaWeb;
     /// <summary>Cancelación de la descarga actual para no quedar en "Descargando imagen" y poder elegir otra.</summary>
@@ -57,6 +61,7 @@ public partial class AsignarImagenes
     {
         await CargarTokenYCatalogos();
         _googleSearchKeysRaw = await LocalStorage.GetItemAsync(LsGoogleSearchKeys) ?? "";
+        _serpApiKeyRaw = await LocalStorage.GetItemAsync(LsSerpApiKey) ?? "";
     }
 
     private async Task OnGoogleSearchKeysInput(ChangeEventArgs e)
@@ -64,6 +69,13 @@ public partial class AsignarImagenes
         _googleSearchKeysRaw = e.Value?.ToString() ?? "";
         if (!string.IsNullOrWhiteSpace(_googleSearchKeysRaw))
             await LocalStorage.SetItemAsync(LsGoogleSearchKeys, _googleSearchKeysRaw);
+    }
+
+    private async Task OnSerpApiKeyInput(ChangeEventArgs e)
+    {
+        _serpApiKeyRaw = e.Value?.ToString() ?? "";
+        if (!string.IsNullOrWhiteSpace(_serpApiKeyRaw))
+            await LocalStorage.SetItemAsync(LsSerpApiKey, _serpApiKeyRaw);
     }
 
     private async Task CargarTokenYCatalogos()
@@ -413,7 +425,8 @@ public partial class AsignarImagenes
             Loading = true,
             Descargando = false,
             Error = null,
-            Urls = null
+            Urls = null,
+            SourceLabel = "Buscando en Google"
         };
         await InvokeAsync(StateHasChanged);
         try
@@ -426,6 +439,63 @@ public partial class AsignarImagenes
                 _busquedaWeb.Loading = false;
                 if (urls.Count == 0)
                     _busquedaWeb.Error = "No se encontraron imágenes. Probá con otras API keys o revisá el motor de búsqueda (cx).";
+                else
+                    await LogBusquedaWebUrlsAsync(urls);
+            }
+        }
+        catch (Exception ex)
+        {
+            if (_busquedaWeb != null)
+            {
+                _busquedaWeb.Error = ex.Message;
+                _busquedaWeb.Loading = false;
+            }
+        }
+        finally
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>Abre el modal de búsqueda web usando SerpAPI (Google Images, ubicación Argentina). Misma lógica que BuscarImagenWebAsync pero con SerpAPI.</summary>
+    private async Task BuscarImagenSerpApiAsync(ProductoConImagenDto? p)
+    {
+        if (p == null) return;
+        if (string.IsNullOrWhiteSpace(_serpApiKeyRaw?.Trim()))
+        {
+            _error = "Para buscar imágenes con SerpAPI, configurá la API key de SerpAPI en el filtro \"API key SerpAPI\".";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(p.CodigoBarra) || string.IsNullOrWhiteSpace(p.DescripcionLarga))
+        {
+            _error = "El producto debe tener descripción y código de barras para buscar con SerpAPI.";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+        _error = null;
+        _busquedaWeb = new BusquedaWebState
+        {
+            ProductoID = p.ProductoID,
+            DescripcionLarga = p.DescripcionLarga,
+            CodigoBarra = p.CodigoBarra,
+            Loading = true,
+            Descargando = false,
+            Error = null,
+            Urls = null,
+            SourceLabel = "Buscando con SerpAPI"
+        };
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var query = $"{p.CodigoBarra.Trim()} {p.DescripcionLarga.Trim()}";
+            var urls = await SerpApiImageSearch.SearchImageUrlsAsync(query, _serpApiKeyRaw.Trim(), "Argentina");
+            if (_busquedaWeb != null)
+            {
+                _busquedaWeb.Urls = urls.Count > 0 ? new List<string>(urls) : null;
+                _busquedaWeb.Loading = false;
+                if (urls.Count == 0)
+                    _busquedaWeb.Error = "No se encontraron imágenes con SerpAPI. Revisá la API key o probá con otro producto.";
                 else
                     await LogBusquedaWebUrlsAsync(urls);
             }

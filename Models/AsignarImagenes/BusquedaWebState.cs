@@ -19,6 +19,9 @@ public sealed class BusquedaWebState
 
     public bool TieneResultados => Urls != null && Urls.Count > 0;
 
+    /// <summary>Etiqueta del origen de la búsqueda para el mensaje del modal (ej.: "Google", "SerpAPI").</summary>
+    public string? SourceLabel { get; set; }
+
     public static BusquedaWebState Vacío => new() { ProductoID = 0 };
 
     public bool EsParaProducto(int productId) => ProductoID != 0 && ProductoID == productId;
