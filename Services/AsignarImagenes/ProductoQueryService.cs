@@ -44,6 +44,9 @@ public sealed class ProductoQueryService : IProductoQueryService
             qs.Add($"fechaModifHasta={filter.FechaModifHasta.Value:yyyy-MM-dd}");
         if (filter.FiltroImagen.HasValue)
             qs.Add($"Imagen={filter.FiltroImagen.Value.ToString().ToLowerInvariant()}");
+        // Si la API GetProducto acepta filtro por código de barras, lo enviamos para que el servidor filtre.
+        if (filter.FiltroCodigoBarra.HasValue)
+            qs.Add($"ConCodigoBarra={filter.FiltroCodigoBarra.Value.ToString().ToLowerInvariant()}");
 
         using var req = new HttpRequestMessage(HttpMethod.Get, $"{ApiUrl}?{string.Join("&", qs)}");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);

@@ -60,8 +60,10 @@
         display: block;
     }
 
+    /* El menú ocupa todo el alto del sidebar (flex) para que llegue hasta abajo en PC */
     .nav-scrollable {
-        height: calc(100vh - 3.5rem);
+        flex: 1;
+        min-height: 0;
         overflow-y: auto;
     }
 }

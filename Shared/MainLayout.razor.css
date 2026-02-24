@@ -58,13 +58,18 @@ main {
 @media (min-width: 641px) {
     .page {
         flex-direction: row;
+        align-items: stretch;
     }
 
+    /* Sidebar se estira hasta el final de la página para que el menú llegue abajo al hacer scroll */
     .sidebar {
         width: 250px;
-        height: 100vh;
+        min-height: 100vh;
         position: sticky;
         top: 0;
+        align-self: stretch;
+        display: flex;
+        flex-direction: column;
     }
 
     .top-row {

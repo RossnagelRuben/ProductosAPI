@@ -32,6 +32,16 @@ public partial class ProductosImagenGrid
     private static bool PuedeBuscarEnWeb(ProductoConImagenDto p) =>
         !string.IsNullOrWhiteSpace(p.CodigoBarra) && !string.IsNullOrWhiteSpace(p.DescripcionLarga);
 
+    /// <summary>True si el producto tiene una imagen real (no placeholder, no fallida). Solo entonces se habilita "Ver / Mejorar" (Gemini).</summary>
+    private bool TieneImagenReal(ProductoConImagenDto p)
+    {
+        if (string.IsNullOrWhiteSpace(p.ImagenUrl)) return false;
+        if (_imagenFallidaIds.Contains(p.ProductoID)) return false;
+        if (p.ImagenUrl.StartsWith("data:image/svg", StringComparison.OrdinalIgnoreCase)) return false;
+        if (EsPdf(p.ImagenUrl)) return false;
+        return true;
+    }
+
     protected override async Task OnParametersSetAsync()
     {
         if (BusquedaId != _lastBusquedaId)

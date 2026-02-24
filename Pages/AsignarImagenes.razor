@@ -72,6 +72,7 @@
                             <option value="Sin">Sin código</option>
                         </select>
                     </div>
+                    @* Google Search: oculto, solo se usa SerpAPI
                     <div class="filter-field filter-field-full">
                         <label for="google-keys">API key(s) Google (búsqueda imágenes)</label>
                         <input id="google-keys" type="password" class="filter-input"
@@ -79,6 +80,7 @@
                                value="@_googleSearchKeysRaw"
                                @oninput="OnGoogleSearchKeysInput" />
                     </div>
+                    *@
                     <div class="filter-field filter-field-full">
                         <label for="serpapi-key">API key SerpAPI (búsqueda imágenes Google, ubicación Argentina)</label>
                         <input id="serpapi-key" type="password" class="filter-input"

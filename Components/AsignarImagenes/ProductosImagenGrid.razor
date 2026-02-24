@@ -43,10 +43,12 @@
                         <div class="product-card-actions">
                             <button type="button"
                                     class="btn-card btn-obtener"
+                                    disabled="@(!TieneImagenReal(p))"
                                     @onclick="() => OnAbrirModalImagen.InvokeAsync(p)">
                                 <span class="oi oi-image" aria-hidden="true"></span>
                                 <span>Ver / Mejorar</span>
                             </button>
+                            @* Google Search (Buscar en web) oculto: solo se usa SerpAPI
                             @if (PuedeBuscarEnWeb(p))
                             {
                                 <button type="button"
@@ -55,6 +57,10 @@
                                     <span class="oi oi-globe" aria-hidden="true"></span>
                                     <span>Buscar en web</span>
                                 </button>
+                            }
+                            *@
+                            @if (PuedeBuscarEnWeb(p))
+                            {
                                 <button type="button"
                                         class="btn-card btn-serpapi"
                                         @onclick="() => OnBuscarImagenSerpApi.InvokeAsync(p)">

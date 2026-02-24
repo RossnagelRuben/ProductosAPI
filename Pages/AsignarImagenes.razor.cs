@@ -106,7 +106,9 @@ public partial class AsignarImagenes
         await CargarPaginaAsync();
     }
 
-    /// <summary>Carga la página actual según filtros; con "Con imagen" en página 1 puede pedir varias páginas API hasta completar PageSize.</summary>
+    /// <summary>Carga la página actual según filtros. Cuando hay filtro de imagen o de código de barras,
+    /// la API puede devolver menos de PageSize por página; por eso pedimos varias páginas API y acumulamos
+    /// hasta llenar la página actual (respetando PageNumber y PageSize). Sin filtros, una sola llamada por página.</summary>
     private async Task CargarPaginaAsync()
     {
         if (string.IsNullOrWhiteSpace(_token))
@@ -131,40 +133,61 @@ public partial class AsignarImagenes
         try
         {
             _busquedaId++;
-            if (_filtroImagenOption == "Con" && _filter.PageNumber == 1)
+            bool tieneFiltroImagenOCodigo = _filter.FiltroImagen.HasValue || _filter.FiltroCodigoBarra.HasValue;
+
+            if (tieneFiltroImagenOCodigo)
             {
-                // Respetar cantidad: pedir páginas API hasta reunir al menos PageSize productos con imagen
+                // Con filtros, la API puede devolver menos coincidencias por página; acumulamos páginas API
+                // hasta tener al menos (paginaUsuario * PageSize) ítems que cumplan el filtro, luego tomamos la rebanada de la página actual.
+                var paginaUsuario = _filter.PageNumber;
                 var acumulada = new List<ProductoConImagenDto>();
                 var apiPage = 1;
-                const int maxPages = 50;
-                while (acumulada.Count < _filter.PageSize && apiPage <= maxPages)
+                const int maxPages = 100;
+                var necesariosParaEstaPagina = paginaUsuario * _filter.PageSize;
+
+                while (acumulada.Count < necesariosParaEstaPagina && apiPage <= maxPages)
                 {
-                    _filter.PageNumber = apiPage;
+                    _filter.PageNumber = apiPage; // página que pedimos a la API en esta iteración
                     var chunk = (await ProductoQuery.GetProductosAsync(_filter, _token)).ToList();
                     if (chunk.Count == 0) break;
+
                     await CargarImagenesConTokenAsync(chunk);
-                    var conImagen = chunk.Where(p => !string.IsNullOrWhiteSpace(p.ImagenUrl)).ToList();
-                    acumulada.AddRange(conImagen);
-                    if (acumulada.Count >= _filter.PageSize)
-                    {
-                        _items = acumulada.Take(_filter.PageSize).ToList();
-                        break;
-                    }
-                    if (chunk.Count < _filter.PageSize) { _items = acumulada; break; }
+
+                    // Aplicar filtros en cliente (por si la API no los aplica o devuelve mezclado)
+                    var queCumplen = chunk.AsEnumerable();
+                    if (_filter.FiltroImagen == true)
+                        queCumplen = queCumplen.Where(p => !string.IsNullOrWhiteSpace(p.ImagenUrl));
+                    else if (_filter.FiltroImagen == false)
+                        queCumplen = queCumplen.Where(p => string.IsNullOrWhiteSpace(p.ImagenUrl));
+                    if (_filter.FiltroCodigoBarra == true)
+                        queCumplen = queCumplen.Where(p => !string.IsNullOrWhiteSpace(p.CodigoBarra));
+                    else if (_filter.FiltroCodigoBarra == false)
+                        queCumplen = queCumplen.Where(p => string.IsNullOrWhiteSpace(p.CodigoBarra));
+
+                    acumulada.AddRange(queCumplen.ToList());
+                    if (acumulada.Count >= necesariosParaEstaPagina) break;
+                    if (chunk.Count < _filter.PageSize) break; // la API no tiene más
                     apiPage++;
                 }
-                if (acumulada.Count < _filter.PageSize && acumulada.Count > 0)
-                    _items = acumulada;
-                _filter.PageNumber = 1; // la pantalla sigue siendo "página 1" para el usuario
-                if (_filter.FiltroCodigoBarra == true)
-                    _items = _items.Where(p => !string.IsNullOrWhiteSpace(p.CodigoBarra)).ToList();
-                else if (_filter.FiltroCodigoBarra == false)
-                    _items = _items.Where(p => string.IsNullOrWhiteSpace(p.CodigoBarra)).ToList();
+
+                // Rebanada correspondiente a la página del usuario (ej. página 2 y PageSize 25 → ítems 25..49)
+                _items = acumulada
+                    .Skip((paginaUsuario - 1) * _filter.PageSize)
+                    .Take(_filter.PageSize)
+                    .ToList();
+                // Restaurar en el filtro la página que ve el usuario (no la última apiPage usada internamente)
+                _filter.PageNumber = paginaUsuario;
             }
             else
             {
+                // Sin filtros de imagen/código: una llamada por página, la API devuelve hasta PageSize ítems
                 _items = (await ProductoQuery.GetProductosAsync(_filter, _token)).ToList();
                 await CargarImagenesConTokenAsync(_items);
+            }
+
+            // Con filtros "Todos" no aplicamos filtro en cliente; la API ya devolvió la página.
+            if (!tieneFiltroImagenOCodigo)
+            {
                 if (_filtroImagenOption == "Con")
                     _items = _items.Where(p => !string.IsNullOrWhiteSpace(p.ImagenUrl)).ToList();
                 else if (_filtroImagenOption == "Sin")
@@ -174,6 +197,7 @@ public partial class AsignarImagenes
                 else if (_filter.FiltroCodigoBarra == false)
                     _items = _items.Where(p => string.IsNullOrWhiteSpace(p.CodigoBarra)).ToList();
             }
+
             await LogProductosAlConsolaAsync();
         }
         catch (Exception ex)
