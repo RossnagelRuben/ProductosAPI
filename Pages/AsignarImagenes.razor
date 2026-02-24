@@ -64,6 +64,21 @@
                             <option value="Sin">Sin imagen</option>
                         </select>
                     </div>
+                    <div class="filter-field">
+                        <label for="filtro-codigo-barra">Código de barras</label>
+                        <select id="filtro-codigo-barra" class="filter-input" @bind="_filtroCodigoBarraOption">
+                            <option value="Todos">Todos</option>
+                            <option value="Con">Con código</option>
+                            <option value="Sin">Sin código</option>
+                        </select>
+                    </div>
+                    <div class="filter-field filter-field-full">
+                        <label for="google-keys">API key(s) Google (búsqueda imágenes)</label>
+                        <input id="google-keys" type="password" class="filter-input"
+                               placeholder="Una o más API keys separadas por coma (ej: key1, key2)"
+                               value="@_googleSearchKeysRaw"
+                               @oninput="OnGoogleSearchKeysInput" />
+                    </div>
                 </div>
                 <div class="filters-actions">
                     <button type="button" class="btn-primary" @onclick="Buscar" disabled="@_loading">
@@ -99,6 +114,7 @@
                                 IsLoadingImage="_loadingImageId"
                                 IsSavingImage="_savingImageId"
                                 OnAbrirModalImagen="AbrirModalImagenAsync"
+                                OnBuscarImagenWeb="BuscarImagenWebAsync"
                                 OnGuardar="GuardarAsync" />
         </section>
 
@@ -158,6 +174,66 @@
                         </button>
                         <button type="button" class="btn-modal btn-ghost" @onclick="CerrarModal">Cancelar</button>
                         <button type="button" class="btn-modal btn-save" @onclick="GuardarCambiosModal">Guardar cambios</button>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (_busquedaWeb != null)
+        {
+            <div class="modal-overlay">
+                <div class="modal-card modal-card-wide" @onkeydown="OnBusquedaWebKeyDown" tabindex="0">
+                    <div class="modal-header">
+                        <h3>Buscar imagen en la web</h3>
+                        <button type="button" class="modal-close" aria-label="Cerrar" @onclick="CerrarBusquedaWeb">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="modal-busqueda-info">@(_busquedaWeb.DescripcionLarga ?? "—") · @(_busquedaWeb.CodigoBarra ?? "")</p>
+                        @if (_busquedaWeb.Loading)
+                        {
+                            <div class="modal-loading"><span class="oi oi-loop spin"></span> Buscando en Google…</div>
+                        }
+                        else if (_busquedaWeb.TieneResultados)
+                        {
+                            @* productId desde estado actual del modal: el clic usa este ID para asignar (evita 2º/3er producto equivocado). *@
+                            var productIdParaAsignar = _busquedaWeb.ProductoID;
+                            @if (_busquedaWeb.Descargando)
+                            {
+                                <div class="modal-loading"><span class="oi oi-loop spin"></span> Descargando imagen…</div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(_busquedaWeb.Error))
+                            {
+                                <div class="modal-error">@_busquedaWeb.Error</div>
+                            }
+                            <div class="busqueda-web-grid">
+                                @{
+                                    var idx = 0;
+                                    foreach (var url in _busquedaWeb.Urls!)
+                                    {
+                                        var currentUrl = url;
+                                        var currentIdx = idx;
+                                        <button type="button" class="busqueda-web-item" disabled="@_busquedaWeb.Descargando"
+                                                @onclick="() => SeleccionarImagenWebAsync(currentUrl, productIdParaAsignar)">
+                                            <img src="@currentUrl" alt="" referrerpolicy="no-referrer" loading="lazy"
+                                                 @onerror="() => LogImagenWebFallida(currentUrl, currentIdx)" />
+                                        </button>
+                                        idx++;
+                                    }
+                                }
+                            </div>
+                            <p class="modal-hint">Hacé clic en una imagen para usarla como imagen del producto.</p>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(_busquedaWeb.Error))
+                        {
+                            <div class="modal-error">@_busquedaWeb.Error</div>
+                        }
+                        else
+                        {
+                            <p class="modal-hint">No se encontraron imágenes. Revisá las API keys o probá con otro producto.</p>
+                        }
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn-modal btn-ghost" @onclick="CerrarBusquedaWeb">Cerrar</button>
                     </div>
                 </div>
             </div>
@@ -224,6 +300,7 @@
         flex-direction: column;
         gap: 0.35rem;
     }
+    .filter-field-full { grid-column: 1 / -1; }
     .filter-field label {
         font-weight: 500;
         font-size: 0.9rem;
@@ -453,6 +530,29 @@
     .btn-ghost:hover { background: #dee2e6; }
     .btn-save { background: #198754; color: #fff; }
     .btn-save:hover { background: #157347; }
+    .modal-card-wide { max-width: 720px; }
+    .modal-busqueda-info { font-size: 0.9rem; color: #6c757d; margin-bottom: 1rem; }
+    .modal-hint { font-size: 0.85rem; color: #6c757d; margin-top: 0.75rem; }
+    .busqueda-web-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 0.75rem;
+    }
+    .busqueda-web-item {
+        padding: 0;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #f8f9fa;
+        cursor: pointer;
+        aspect-ratio: 1;
+    }
+    .busqueda-web-item:hover { border-color: #0d6efd; }
+    .busqueda-web-item img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
     @@media (max-width: 576px) {
         .filters-grid {
             grid-template-columns: 1fr;

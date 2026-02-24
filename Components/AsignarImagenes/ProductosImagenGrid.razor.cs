@@ -24,7 +24,11 @@ public partial class ProductosImagenGrid
     [Parameter] public int? IsLoadingImage { get; set; }
     [Parameter] public int? IsSavingImage { get; set; }
     [Parameter] public EventCallback<ProductoConImagenDto> OnAbrirModalImagen { get; set; }
+    [Parameter] public EventCallback<ProductoConImagenDto> OnBuscarImagenWeb { get; set; }
     [Parameter] public EventCallback<ProductoConImagenDto> OnGuardar { get; set; }
+
+    private static bool PuedeBuscarEnWeb(ProductoConImagenDto p) =>
+        !string.IsNullOrWhiteSpace(p.CodigoBarra) && !string.IsNullOrWhiteSpace(p.DescripcionLarga);
 
     protected override async Task OnParametersSetAsync()
     {

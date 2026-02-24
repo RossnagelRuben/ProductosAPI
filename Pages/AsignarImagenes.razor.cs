@@ -19,11 +19,13 @@ public partial class AsignarImagenes
     [Inject] private IJSRuntime JS { get; set; } = null!;
     [Inject] private IGeminiService GeminiService { get; set; } = null!;
     [Inject] private ILocalStorageService LocalStorage { get; set; } = null!;
+    [Inject] private IGoogleImageSearchService GoogleImageSearch { get; set; } = null!;
 
     private const string PlaceholderSvg = "data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22 viewBox=%220 0 200 200%22%3E%3Crect fill=%22%23e9ecef%22 width=%22200%22 height=%22200%22/%3E%3Ctext x=%22100%22 y=%22105%22 text-anchor=%22middle%22 fill=%22%23999%22 font-size=%2214%22%3ESin imagen%3C/text%3E%3C/svg%3E";
 
     private ProductoQueryFilter _filter = new();
     private string _filtroImagenOption = "Todos";
+    private string _filtroCodigoBarraOption = "Todos";
     private int _busquedaId;
     private List<ProductoConImagenDto> _items = new();
     private List<FamiliaItem> _familias = new();
@@ -41,12 +43,25 @@ public partial class AsignarImagenes
     private string? _errorModal;
     private string _geminiApiKeyModal = "";
     private const string LsGeminiKey = "img_gkey";
+    private const string LsGoogleSearchKeys = "google_search_keys";
+
+    private string _googleSearchKeysRaw = "";
+    /// <summary>Estado del modal "Buscar imagen en la web". Null = cerrado. Evita referencias obsoletas al 2º/3er producto (SOLID: estado único).</summary>
+    private BusquedaWebState? _busquedaWeb;
 
     private bool _tieneImagenEnModal => !string.IsNullOrWhiteSpace(_imagenModalDataUrl) && !_imagenModalDataUrl.StartsWith("data:image/svg", StringComparison.OrdinalIgnoreCase);
 
     protected override async Task OnInitializedAsync()
     {
         await CargarTokenYCatalogos();
+        _googleSearchKeysRaw = await LocalStorage.GetItemAsync(LsGoogleSearchKeys) ?? "";
+    }
+
+    private async Task OnGoogleSearchKeysInput(ChangeEventArgs e)
+    {
+        _googleSearchKeysRaw = e.Value?.ToString() ?? "";
+        if (!string.IsNullOrWhiteSpace(_googleSearchKeysRaw))
+            await LocalStorage.SetItemAsync(LsGoogleSearchKeys, _googleSearchKeysRaw);
     }
 
     private async Task CargarTokenYCatalogos()
@@ -93,6 +108,12 @@ public partial class AsignarImagenes
             "Sin" => false,
             _ => null
         };
+        _filter.FiltroCodigoBarra = _filtroCodigoBarraOption switch
+        {
+            "Con" => true,
+            "Sin" => false,
+            _ => null
+        };
         try
         {
             _busquedaId++;
@@ -121,6 +142,10 @@ public partial class AsignarImagenes
                 if (acumulada.Count < _filter.PageSize && acumulada.Count > 0)
                     _items = acumulada;
                 _filter.PageNumber = 1; // la pantalla sigue siendo "página 1" para el usuario
+                if (_filter.FiltroCodigoBarra == true)
+                    _items = _items.Where(p => !string.IsNullOrWhiteSpace(p.CodigoBarra)).ToList();
+                else if (_filter.FiltroCodigoBarra == false)
+                    _items = _items.Where(p => string.IsNullOrWhiteSpace(p.CodigoBarra)).ToList();
             }
             else
             {
@@ -130,6 +155,10 @@ public partial class AsignarImagenes
                     _items = _items.Where(p => !string.IsNullOrWhiteSpace(p.ImagenUrl)).ToList();
                 else if (_filtroImagenOption == "Sin")
                     _items = _items.Where(p => string.IsNullOrWhiteSpace(p.ImagenUrl)).ToList();
+                if (_filter.FiltroCodigoBarra == true)
+                    _items = _items.Where(p => !string.IsNullOrWhiteSpace(p.CodigoBarra)).ToList();
+                else if (_filter.FiltroCodigoBarra == false)
+                    _items = _items.Where(p => string.IsNullOrWhiteSpace(p.CodigoBarra)).ToList();
             }
             await LogProductosAlConsolaAsync();
         }
@@ -227,6 +256,7 @@ public partial class AsignarImagenes
     {
         _filter = new ProductoQueryFilter();
         _filtroImagenOption = "Todos";
+        _filtroCodigoBarraOption = "Todos";
         _filter.PageNumber = 1;
         _items = new List<ProductoConImagenDto>();
         _error = null;
@@ -358,6 +388,147 @@ public partial class AsignarImagenes
             item.ImagenCargada = true;
         }
         CerrarModal();
+    }
+
+    /// <summary>Abre el modal de búsqueda web para el producto indicado. Crea un estado nuevo (no reutiliza el anterior) para evitar asignar al producto equivocado.</summary>
+    private async Task BuscarImagenWebAsync(ProductoConImagenDto? p)
+    {
+        if (p == null) return;
+        var keysRaw = (_googleSearchKeysRaw ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        if (keysRaw.Count == 0)
+        {
+            _error = "Para buscar imágenes en la web, configurá una o más API keys de Google (Custom Search) en el filtro \"API key(s) Google (búsqueda imágenes)\".";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+        _error = null;
+        // Nuevo estado por producto: así el 2º y 3er producto no comparten estado con el anterior (SOLID: estado inmutable por sesión de modal).
+        _busquedaWeb = new BusquedaWebState
+        {
+            ProductoID = p.ProductoID,
+            DescripcionLarga = p.DescripcionLarga,
+            CodigoBarra = p.CodigoBarra,
+            Loading = true,
+            Descargando = false,
+            Error = null,
+            Urls = null
+        };
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var query = $"{p.CodigoBarra!.Trim()} | {p.DescripcionLarga!.Trim()}";
+            var urls = await GoogleImageSearch.SearchImageUrlsAsync(query, keysRaw);
+            if (_busquedaWeb != null)
+            {
+                _busquedaWeb.Urls = urls.Count > 0 ? new List<string>(urls) : null;
+                _busquedaWeb.Loading = false;
+                if (urls.Count == 0)
+                    _busquedaWeb.Error = "No se encontraron imágenes. Probá con otras API keys o revisá el motor de búsqueda (cx).";
+                else
+                    await LogBusquedaWebUrlsAsync(urls);
+            }
+        }
+        catch (Exception ex)
+        {
+            if (_busquedaWeb != null)
+            {
+                _busquedaWeb.Error = ex.Message;
+                _busquedaWeb.Loading = false;
+            }
+        }
+        finally
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void CerrarBusquedaWeb()
+    {
+        _busquedaWeb = null;
+        StateHasChanged();
+    }
+
+    private void OnBusquedaWebKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            CerrarBusquedaWeb();
+    }
+
+    private async Task LogBusquedaWebUrlsAsync(IReadOnlyList<string> urls)
+    {
+        try
+        {
+            var list = urls.Select((u, i) => new { indice = i, url = u.Length > 80 ? u.Substring(0, 80) + "…" : u, urlCompletaLongitud = u.Length }).ToList();
+            await JS.InvokeVoidAsync("__logAsignarImagenes", "Búsqueda web: URLs recibidas", JsonSerializer.Serialize(new { total = urls.Count, urls = list }));
+        }
+        catch { }
+    }
+
+    /// <summary>Proxy público para evitar CORS al cargar imágenes externas en &lt;img&gt;. Open/Closed: cambiar esta constante si se usa otro proxy.</summary>
+    private const string CorsProxyBase = "https://api.allorigins.win/raw?url=";
+
+    private async Task LogImagenWebFallida(string url, int indice)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("__logAsignarImagenes", "Imagen búsqueda web FALLÓ al cargar (onerror)", JsonSerializer.Serialize(new
+            {
+                indice,
+                urlPreview = url.Length > 100 ? url.Substring(0, 100) + "…" : url,
+                urlLongitud = url.Length,
+                posibleCausa = "CORS, 403 (hotlink), 404 o red. Intentando mostrar vía proxy CORS."
+            }));
+        }
+        catch { }
+
+        if (_busquedaWeb?.Urls == null || indice < 0 || indice >= _busquedaWeb.Urls.Count) return;
+        if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return;
+        _busquedaWeb.Urls[indice] = CorsProxyBase + Uri.EscapeDataString(url);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Asigna la imagen descargada al producto indicado por productId. El ID viene de la vista (closure) para no depender de _busquedaWeb en medio del await (evita 2º/3er producto equivocado).</summary>
+    private async Task SeleccionarImagenWebAsync(string imageUrl, int productId)
+    {
+        if (_busquedaWeb == null || productId == 0) return;
+        if (_busquedaWeb.Descargando) return;
+        // Bloqueo por sesión de modal: solo aceptamos clics del producto para el que está abierto este modal.
+        if (!_busquedaWeb.EsParaProducto(productId)) return;
+
+        _busquedaWeb.Descargando = true;
+        _busquedaWeb.Error = null;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var dataUrl = await GoogleImageSearch.FetchImageAsDataUrlAsync(imageUrl);
+            if (string.IsNullOrWhiteSpace(dataUrl) && imageUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase) && !imageUrl.StartsWith(CorsProxyBase, StringComparison.OrdinalIgnoreCase))
+                dataUrl = await GoogleImageSearch.FetchImageAsDataUrlAsync(CorsProxyBase + Uri.EscapeDataString(imageUrl));
+
+            if (!string.IsNullOrWhiteSpace(dataUrl))
+            {
+                var item = _items.FirstOrDefault(x => x.ProductoID == productId);
+                if (item != null)
+                {
+                    item.ImagenUrl = dataUrl;
+                    item.ImagenCargada = true;
+                    CerrarBusquedaWeb();
+                }
+                else
+                {
+                    _busquedaWeb.Error = "Producto no encontrado en la lista actual. Cerrando y recargando podés solucionarlo.";
+                }
+            }
+            else
+            {
+                _busquedaWeb.Error = "No se pudo descargar esta imagen (CORS, red o servidor). Probá con otra imagen.";
+            }
+        }
+        finally
+        {
+            if (_busquedaWeb != null)
+                _busquedaWeb.Descargando = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task GuardarAsync(ProductoConImagenDto? p)

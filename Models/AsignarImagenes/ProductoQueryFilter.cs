@@ -16,4 +16,6 @@ public sealed class ProductoQueryFilter
     public DateTime? FechaModifHasta { get; set; }
     /// <summary>Filtro por imagen principal: null = todos, true = solo con imagen, false = solo sin imagen.</summary>
     public bool? FiltroImagen { get; set; }
+    /// <summary>Filtro por código de barras: null = todos, true = solo con código, false = solo sin código.</summary>
+    public bool? FiltroCodigoBarra { get; set; }
 }

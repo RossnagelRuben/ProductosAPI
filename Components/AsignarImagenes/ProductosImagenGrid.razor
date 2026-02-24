@@ -47,6 +47,15 @@
                                 <span class="oi oi-image" aria-hidden="true"></span>
                                 <span>Ver / Mejorar</span>
                             </button>
+                            @if (PuedeBuscarEnWeb(p))
+                            {
+                                <button type="button"
+                                        class="btn-card btn-web"
+                                        @onclick="() => OnBuscarImagenWeb.InvokeAsync(p)">
+                                    <span class="oi oi-globe" aria-hidden="true"></span>
+                                    <span>Buscar en web</span>
+                                </button>
+                            }
                             <button type="button"
                                     class="btn-card btn-guardar"
                                     disabled="@(!p.ImagenCargada || IsSavingImage == p.ProductoID)"
@@ -180,6 +189,13 @@
     }
     .btn-obtener:hover:not(:disabled) {
         background: #0b5ed7;
+    }
+    .btn-web {
+        background: #6c757d;
+        color: #fff;
+    }
+    .btn-web:hover:not(:disabled) {
+        background: #5a6268;
     }
     .btn-guardar {
         background: #198754;

@@ -91,22 +91,11 @@ public sealed class ProductoQueryService : IProductoQueryService
             if (string.IsNullOrWhiteSpace(codigo))
                 codigo = codigoID.ToString();
             var descripcionLarga = el.TryGetProperty("descripcionLarga", out var dl) ? dl.GetString() : null;
-            string? codigoBarra = null;
+            string? codigoBarra = GetCodigoBarraFromElement(el);
             string? presentacion = "Unidad";
             if (el.TryGetProperty("presentaciones", out var pres) && pres.ValueKind == JsonValueKind.Array && pres.GetArrayLength() > 0)
             {
                 var first = pres[0];
-                if (first.TryGetProperty("listaCodigoBarra", out var lcb) && lcb.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var cb in lcb.EnumerateArray())
-                    {
-                        if (cb.TryGetProperty("codigoBarra", out var cbVal))
-                        {
-                            var s = cbVal.GetString();
-                            if (!string.IsNullOrWhiteSpace(s)) { codigoBarra = s; break; }
-                        }
-                    }
-                }
                 if (first.TryGetProperty("presentacionID", out var pid))
                     presentacion = pid.ValueKind == JsonValueKind.Number && pid.GetInt32() == 0 ? "Unidad" : pid.GetString() ?? "Unidad";
             }
@@ -127,6 +116,81 @@ public sealed class ProductoQueryService : IProductoQueryService
         {
             return null;
         }
+    }
+
+    /// <summary>Obtiene el código de barras probando varias rutas y nombres (camelCase y PascalCase) del JSON de la API.</summary>
+    private static string? GetCodigoBarraFromElement(JsonElement el)
+    {
+        var barraNames = new[] { "codigoBarra", "CodigoBarra", "codigo_de_barras", "codigoDeBarras", "ean", "Ean", "gtin", "Gtin", "barcode", "Barcode" };
+        foreach (var name in barraNames)
+        {
+            if (el.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.String)
+            {
+                var s = prop.GetString();
+                if (!string.IsNullOrWhiteSpace(s)) return s;
+            }
+        }
+        if (el.TryGetProperty("presentaciones", out var pres) && pres.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var pre in pres.EnumerateArray())
+            {
+                foreach (var name in barraNames)
+                {
+                    if (pre.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.String)
+                    {
+                        var s = prop.GetString();
+                        if (!string.IsNullOrWhiteSpace(s)) return s;
+                    }
+                }
+                var listNames = new[] { "listaCodigoBarra", "ListaCodigoBarra", "listaCodigoBarras", "codigosBarra" };
+                foreach (var listName in listNames)
+                {
+                    if (!pre.TryGetProperty(listName, out var lcb) || lcb.ValueKind != JsonValueKind.Array) continue;
+                    foreach (var cb in lcb.EnumerateArray())
+                    {
+                        foreach (var name in barraNames)
+                        {
+                            if (cb.TryGetProperty(name, out var cbVal) && cbVal.ValueKind == JsonValueKind.String)
+                            {
+                                var s = cbVal.GetString();
+                                if (!string.IsNullOrWhiteSpace(s)) return s;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (el.TryGetProperty("Presentaciones", out var presP) && presP.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var pre in presP.EnumerateArray())
+            {
+                foreach (var name in barraNames)
+                {
+                    if (pre.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.String)
+                    {
+                        var s = prop.GetString();
+                        if (!string.IsNullOrWhiteSpace(s)) return s;
+                    }
+                }
+                var listNames = new[] { "listaCodigoBarra", "ListaCodigoBarra" };
+                foreach (var listName in listNames)
+                {
+                    if (!pre.TryGetProperty(listName, out var lcb) || lcb.ValueKind != JsonValueKind.Array) continue;
+                    foreach (var cb in lcb.EnumerateArray())
+                    {
+                        foreach (var name in barraNames)
+                        {
+                            if (cb.TryGetProperty(name, out var cbVal) && cbVal.ValueKind == JsonValueKind.String)
+                            {
+                                var s = cbVal.GetString();
+                                if (!string.IsNullOrWhiteSpace(s)) return s;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     /// <summary>Obtiene la URL de imagen del producto: strings directos, objetos con url, o primer elemento de arrays (imagenes/Imagenes).</summary>
@@ -336,11 +400,24 @@ public sealed class ProductoQueryService : IProductoQueryService
                 resumenObj["camposImagen"] = camposImagen;
             await _jsRuntime.InvokeVoidAsync("__logAsignarImagenes", "Resumen imagen (1 línea)", JsonSerializer.Serialize(resumenObj));
 
+            var propsBarra = todasLasPropiedades.Where(x => x.IndexOf("barra", StringComparison.OrdinalIgnoreCase) >= 0 || x.IndexOf("codigo", StringComparison.OrdinalIgnoreCase) >= 0 || x.IndexOf("presentacion", StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+            var estructuraPresentaciones = new List<object>();
+            if (el.TryGetProperty("presentaciones", out var presLog) && presLog.ValueKind == JsonValueKind.Array && presLog.GetArrayLength() > 0)
+            {
+                var firstPre = presLog[0];
+                estructuraPresentaciones.Add(new { tipo = "presentaciones[0]", propiedades = firstPre.EnumerateObject().Select(p => p.Name + ": " + p.Value.ValueKind).ToList() });
+                if (firstPre.TryGetProperty("listaCodigoBarra", out var lcbLog) && lcbLog.ValueKind == JsonValueKind.Array && lcbLog.GetArrayLength() > 0)
+                    estructuraPresentaciones.Add(new { tipo = "listaCodigoBarra[0]", propiedades = lcbLog[0].EnumerateObject().Select(p => p.Name + ": " + p.Value.ValueKind).ToList() });
+                if (firstPre.TryGetProperty("ListaCodigoBarra", out var lcbP) && lcbP.ValueKind == JsonValueKind.Array && lcbP.GetArrayLength() > 0)
+                    estructuraPresentaciones.Add(new { tipo = "ListaCodigoBarra[0]", propiedades = lcbP[0].EnumerateObject().Select(p => p.Name + ": " + p.Value.ValueKind).ToList() });
+            }
             var payload = new
             {
                 mensaje = "Estructura del primer producto (API GetProducto) - revisar formato de imagen",
                 todasLasPropiedades = todasLasPropiedades.OrderBy(x => x).ToList(),
-                camposRelacionadosConImagen = camposImagen
+                camposRelacionadosConImagen = camposImagen,
+                propiedadesCodigoBarraPresentaciones = propsBarra,
+                estructuraPresentaciones = estructuraPresentaciones
             };
             var json = JsonSerializer.Serialize(payload);
             await _jsRuntime.InvokeVoidAsync("__logAsignarImagenes", "API JSON - formato imagen (primer producto)", json);
