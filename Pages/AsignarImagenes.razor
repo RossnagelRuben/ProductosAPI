@@ -9,7 +9,7 @@
     <div class="asignar-imagenes-page">
         <header class="page-header">
             <h1 class="page-title">Asignar imágenes</h1>
-            <p class="page-subtitle">Busca productos por API, obtén imágenes desde Centralizadora y guárdalas.</p>
+            <p class="page-subtitle">Busca productos por API.</p>
         </header>
 
         @if (!string.IsNullOrWhiteSpace(_error))
@@ -20,8 +20,15 @@
         }
 
         <section class="filters-section">
-            <div class="filters-card">
-                <h2 class="filters-title">Filtros</h2>
+            <div class="filters-card @(_filtersCollapsed ? "filters-card-collapsed" : "")">
+                <div class="filters-title-row">
+                    <h2 class="filters-title">Filtros</h2>
+                    <button type="button" class="btn-link-toggle" @onclick="ToggleFiltros">
+                        @(_filtersCollapsed ? "Mostrar filtros" : "Ocultar filtros")
+                    </button>
+                </div>
+                @if (!_filtersCollapsed)
+                {
                 <div class="filters-grid">
                     <div class="filter-field">
                         <label for="desc">Descripción</label>
@@ -104,17 +111,20 @@
                     </button>
                     <button type="button" class="btn-ghost" @onclick="Limpiar" disabled="@_loading">Limpiar</button>
                 </div>
+                }
             </div>
         </section>
 
         <section class="grid-section">
-            <div class="record-count"><strong>@(_items.Count) registro@(_items.Count == 1 ? "" : "s")</strong></div>
-            <div class="pager">
-                <button type="button" class="btn" @onclick="Primera" disabled="@(_filter.PageNumber <= 1 || _loading)">« Primero</button>
-                <button type="button" class="btn" @onclick="Anterior" disabled="@(_filter.PageNumber <= 1 || _loading)">‹ Anterior</button>
-                <span class="page-indicator">Página @_filter.PageNumber</span>
-                <button type="button" class="btn" @onclick="Siguiente" disabled="@(!PuedeSiguiente || _loading)">Siguiente ›</button>
-            </div>
+            @if (TienePaginacion)
+            {
+                <div class="pager">
+                    <button type="button" class="btn" @onclick="Primera" disabled="@(_filter.PageNumber <= 1 || _loading)">« Primero</button>
+                    <button type="button" class="btn" @onclick="Anterior" disabled="@(_filter.PageNumber <= 1 || _loading)">‹ Anterior</button>
+                    <span class="page-indicator">Página @_filter.PageNumber</span>
+                    <button type="button" class="btn" @onclick="Siguiente" disabled="@(!PuedeSiguiente || _loading)">Siguiente ›</button>
+                </div>
+            }
             <ProductosImagenGrid Items="_items"
                                 BusquedaId="_busquedaId"
                                 IsLoading="_loading"
@@ -132,13 +142,14 @@
         @if (_productoModal != null)
         {
             <div class="modal-overlay">
-                <div class="modal-card" @onkeydown="OnModalKeyDown" tabindex="0">
+                <div class="modal-card modal-card-imagen" @onkeydown="OnModalKeyDown" tabindex="0">
                     <div class="modal-header">
                         <h3>Imagen del producto</h3>
                         <button type="button" class="modal-close" aria-label="Cerrar" @onclick="CerrarModal">&times;</button>
                     </div>
                     <div class="modal-body">
-                        <div class="modal-image-wrap">
+                        <div class="modal-image-wrap @(!_mejorandoImagen && !string.IsNullOrWhiteSpace(_imagenModalDataUrl) ? "modal-image-wrap-clickable" : "")"
+                             @onclick="@(() => { if (!_mejorandoImagen && !string.IsNullOrWhiteSpace(_imagenModalDataUrl)) AbrirPreviewImagenModal(); })">
                             @if (_mejorandoImagen)
                             {
                                 <div class="modal-loading"><span class="oi oi-loop spin"></span> @(_tieneImagenEnModal ? "Mejorando…" : "Generando imagen…")</div>
@@ -173,7 +184,7 @@
                         }
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn-modal btn-mejorar" disabled="@_mejorandoImagen" @onclick="MejorarOGenerarImagenAsync">
+                        <button type="button" class="btn-modal btn-mejorar" disabled="@(_mejorandoImagen || _guardandoImagenModal)" @onclick="MejorarOGenerarImagenAsync">
                             @if (_tieneImagenEnModal)
                             {
                                 <span class="oi oi-wrench"></span><span>Mejorar imagen (Gemini)</span>
@@ -183,10 +194,40 @@
                                 <span class="oi oi-plus"></span><span>Generar imagen (Gemini)</span>
                             }
                         </button>
-                        <button type="button" class="btn-modal btn-ghost" @onclick="CerrarModal">Cancelar</button>
-                        <button type="button" class="btn-modal btn-save" @onclick="GuardarCambiosModal">Guardar cambios</button>
+                        <button type="button" class="btn-modal btn-ghost" disabled="@_guardandoImagenModal" @onclick="CerrarModal">Cancelar</button>
+                        <button type="button" class="btn-modal btn-save" disabled="@_guardandoImagenModal" @onclick="GuardarCambiosModal">
+                            @if (_guardandoImagenModal)
+                            {
+                                <span class="oi oi-loop spin" aria-hidden="true"></span>
+                                <span>Guardando…</span>
+                            }
+                            else
+                            {
+                                <span class="oi oi-check"></span>
+                                <span>Guardar cambios</span>
+                            }
+                        </button>
                     </div>
                 </div>
+
+                @* Vista previa en grande de la imagen (Nano Banana); Escape cierra solo esta. *@
+                @if (_imagenModalPreviewAbierto && !string.IsNullOrWhiteSpace(_imagenModalDataUrl))
+                {
+                    <div class="modal-overlay modal-overlay-preview" @onkeydown="OnModalKeyDown" tabindex="0">
+                        <div class="modal-card modal-preview-image" @onkeydown="OnModalKeyDown" tabindex="0">
+                            <div class="modal-header">
+                                <h3>Vista previa</h3>
+                                <button type="button" class="modal-close" aria-label="Cerrar (Escape)" @onclick="CerrarPreviewImagenModal">&times;</button>
+                            </div>
+                            <div class="modal-body modal-preview-body">
+                                <img src="@_imagenModalDataUrl" alt="Vista previa" class="modal-preview-img" />
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn-modal btn-ghost" @onclick="CerrarPreviewImagenModal">Volver</button>
+                            </div>
+                        </div>
+                    </div>
+                }
             </div>
         }
 
@@ -199,20 +240,19 @@
                         <button type="button" class="modal-close" aria-label="Cerrar" @onclick="CerrarBusquedaWeb">&times;</button>
                     </div>
                     <div class="modal-body">
-                        <p class="modal-busqueda-info">@(_busquedaWeb.DescripcionLarga ?? "—") · @(_busquedaWeb.CodigoBarra ?? "")</p>
+                        <p class="modal-busqueda-desc"><strong>@(_busquedaWeb.DescripcionLarga ?? "—")</strong></p>
                         @if (_busquedaWeb.Loading)
                         {
                             <div class="modal-loading"><span class="oi oi-loop spin"></span> @(_busquedaWeb.SourceLabel ?? "Buscando en Google")…</div>
                         }
                         else if (_busquedaWeb.TieneResultados)
                         {
-                            @* productId desde estado actual del modal: el clic usa este ID para asignar (evita 2º/3er producto equivocado). *@
                             var productIdParaAsignar = _busquedaWeb.ProductoID;
                             @if (_busquedaWeb.Descargando)
                             {
                                 <div class="modal-loading">
-                                    <span class="oi oi-loop spin"></span> Descargando imagen…
-                                    <button type="button" class="btn-link-cancelar" @onclick="CancelarDescargaImagen">Cancelar y elegir otra</button>
+                                    <span class="oi oi-loop spin"></span> Descargando y guardando imagen…
+                                    <button type="button" class="btn-link-cancelar" @onclick="CancelarDescargaImagen">Cancelar</button>
                                 </div>
                             }
                             @if (!string.IsNullOrWhiteSpace(_busquedaWeb.Error))
@@ -226,8 +266,9 @@
                                     {
                                         var currentUrl = url;
                                         var currentIdx = idx;
-                                        <button type="button" class="busqueda-web-item" disabled="@_busquedaWeb.Descargando"
-                                                @onclick="() => SeleccionarImagenWebAsync(currentUrl, productIdParaAsignar)">
+                                        var isSelected = _busquedaWeb.SelectedImageUrl == currentUrl;
+                                        <button type="button" class="busqueda-web-item @(isSelected ? "selected" : "")" disabled="@_busquedaWeb.Descargando"
+                                                @onclick="() => SeleccionarPreviewImagenSerpApi(currentUrl)">
                                             <img src="@currentUrl" alt="" referrerpolicy="no-referrer" loading="lazy"
                                                  @onerror="() => LogImagenWebFallida(currentUrl, currentIdx)" />
                                         </button>
@@ -235,7 +276,6 @@
                                     }
                                 }
                             </div>
-                            <p class="modal-hint">Hacé clic en una imagen para usarla como imagen del producto.</p>
                         }
                         else if (!string.IsNullOrWhiteSpace(_busquedaWeb.Error))
                         {
@@ -247,10 +287,44 @@
                         }
                     </div>
                     <div class="modal-footer">
+                        @if (_busquedaWeb != null && !string.IsNullOrWhiteSpace(_busquedaWeb.SelectedImageUrl))
+                        {
+                            <button type="button" class="btn-modal btn-save" disabled="@_busquedaWeb.Descargando" @onclick="GuardarImagenSeleccionadaSerpApiAsync">
+                                @if (_busquedaWeb.Descargando)
+                                {
+                                    <span class="oi oi-loop spin" aria-hidden="true"></span>
+                                    <span>Guardando…</span>
+                                }
+                                else
+                                {
+                                    <span class="oi oi-check"></span>
+                                    <span>Guardar</span>
+                                }
+                            </button>
+                        }
                         <button type="button" class="btn-modal btn-ghost" @onclick="CerrarBusquedaWeb">Cerrar</button>
                     </div>
                 </div>
             </div>
+
+            @* Modal de vista en grande de la imagen seleccionada (Escape cierra solo esta y vuelve a la de resultados SerpAPI). *@
+            @if (!string.IsNullOrWhiteSpace(_busquedaWebPreviewUrl))
+            {
+                <div class="modal-overlay modal-overlay-preview" @onkeydown="OnPreviewImagenKeyDown" tabindex="0">
+                    <div class="modal-card modal-preview-image" @onkeydown="OnPreviewImagenKeyDown" tabindex="0">
+                        <div class="modal-header">
+                            <h3>Vista previa</h3>
+                            <button type="button" class="modal-close" aria-label="Cerrar (Escape)" @onclick="CerrarPreviewImagenSerpApi">&times;</button>
+                        </div>
+                        <div class="modal-body modal-preview-body">
+                            <img src="@_busquedaWebPreviewUrl" alt="Vista previa" referrerpolicy="no-referrer" class="modal-preview-img" />
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn-modal btn-ghost" @onclick="CerrarPreviewImagenSerpApi">Volver a las imágenes</button>
+                        </div>
+                    </div>
+                </div>
+            }
         }
 
         @if (_productoObservaciones != null)
@@ -270,7 +344,7 @@
                             <button type="button" class="observaciones-tab @(_observacionesVistaCodigo ? "active" : "")" @onclick="() => { _observacionesVistaCodigo = true; StateHasChanged(); }">
                                 <span class="oi oi-code"></span> Código RTF
                             </button>
-                            <button type="button" class="observaciones-tab @(!_observacionesVistaCodigo ? "active" : "")" @onclick="() => { _observacionesVistaCodigo = false; StateHasChanged(); }">
+                            <button type="button" class="observaciones-tab @(!_observacionesVistaCodigo ? "active" : "")" @onclick="() => { _observacionesVistaCodigo = false; _observacionesPreviewNeedsSyncFromRtf = true; StateHasChanged(); }">
                                 <span class="oi oi-eye"></span> Vista previa
                             </button>
                         </div>
@@ -286,10 +360,11 @@
                             }
                             else
                             {
-                                <label>Vista previa (cómo se ve el RTF)</label>
-                                <div class="observaciones-preview-wrap">
-                                    @((MarkupString)ObservacionesPreviewHtml)
-                                </div>
+                                <label>Vista previa (editá aquí; al salir se guarda en RTF)</label>
+                                <div id="observaciones-preview-editable" class="observaciones-preview-wrap observaciones-preview-editable"
+                                     contenteditable="true"
+                                     @onblur="SyncPreviewToRtfAsync"
+                                     data-placeholder="Sin contenido.">@((MarkupString)ObservacionesPreviewHtml)</div>
                             }
                         </div>
                         <div class="modal-apikey">
@@ -318,7 +393,9 @@
                             }
                         </button>
                         <button type="button" class="btn-modal btn-ghost" @onclick="CerrarModalObservaciones">Cerrar</button>
-                        <button type="button" class="btn-modal btn-save" @onclick="GuardarObservacionesEnProductoAsync">Guardar observaciones</button>
+                        <button type="button" class="btn-modal btn-save" disabled="@(string.IsNullOrWhiteSpace(_observacionesRtf) || _guardandoObservaciones)" @onclick="GuardarObservacionesEnProductoAsync">
+                            @if (_guardandoObservaciones) { <span class="oi oi-loop spin"></span> <span>Guardando…</span> } else { <span>Guardar observaciones</span> }
+                        </button>
                     </div>
                 </div>
             </div>
@@ -352,7 +429,7 @@
         margin: 0 0 0.25rem 0;
     }
     .page-subtitle {
-        color: #6c757d;
+        color: #fff;
         margin: 0;
         font-size: 1rem;
     }
@@ -369,7 +446,7 @@
     }
     .alert-error .oi { flex-shrink: 0; }
     .filters-section {
-        margin-bottom: 1.5rem;
+        margin-bottom: 1rem;
     }
     .filters-card {
         background: #fff;
@@ -378,12 +455,34 @@
         box-shadow: 0 2px 12px rgba(0,0,0,0.06);
         padding: 1.25rem;
     }
+    .filters-card-collapsed {
+        padding: 0.5rem 1rem;
+    }
+    .filters-card-collapsed .filters-title-row {
+        margin-bottom: 0;
+    }
+    .filters-title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+    .filters-title-row .filters-title { margin: 0; }
     .filters-title {
         font-size: 1.1rem;
         font-weight: 600;
-        margin: 0 0 1rem 0;
         color: #343a40;
     }
+    .btn-link-toggle {
+        background: none;
+        border: none;
+        color: #0d6efd;
+        cursor: pointer;
+        font-size: 0.9rem;
+        padding: 0.25rem 0.5rem;
+    }
+    .btn-link-toggle:hover { text-decoration: underline; }
     .filters-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -406,6 +505,8 @@
         border: 1px solid #dee2e6;
         border-radius: 8px;
         font-size: 0.95rem;
+        width: 100%;
+        box-sizing: border-box;
     }
     .filter-input:focus {
         outline: none;
@@ -458,11 +559,6 @@
     .grid-section {
         margin-top: 0.5rem;
     }
-    .record-count {
-        margin-top: 8px;
-        margin-bottom: 4px;
-        text-align: right;
-    }
     .pager {
         display: flex;
         align-items: center;
@@ -498,6 +594,28 @@
         z-index: 1000;
         padding: 1rem;
     }
+    .modal-overlay-preview {
+        z-index: 1010;
+    }
+    .modal-preview-image {
+        max-width: 90vw;
+        max-height: 85vh;
+        display: flex;
+        flex-direction: column;
+    }
+    .modal-preview-body {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+        overflow: auto;
+    }
+    .modal-preview-img {
+        max-width: 100%;
+        max-height: 70vh;
+        object-fit: contain;
+    }
     .modal-card {
         background: #fff;
         border-radius: 12px;
@@ -507,6 +625,30 @@
         max-height: 90vh;
         overflow: auto;
         outline: none;
+    }
+    .modal-card-imagen {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+    .modal-card-imagen .modal-body {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+    }
+    .modal-card-imagen .modal-footer {
+        flex-shrink: 0;
+    }
+    .modal-card-imagen .modal-image-wrap {
+        max-height: 200px;
+        aspect-ratio: 1;
+    }
+    .modal-image-wrap-clickable {
+        cursor: pointer;
+    }
+    .modal-image-wrap-clickable:hover {
+        outline: 2px solid rgba(13, 110, 253, 0.4);
+        outline-offset: 2px;
     }
     .modal-header {
         display: flex;
@@ -687,6 +829,15 @@
     .observaciones-preview-wrap .rtf-preview p { margin: 0.5rem 0; }
     .observaciones-preview-wrap .rtf-preview-empty,
     .observaciones-preview-wrap .rtf-preview-plain { color: #6c757d; }
+    .observaciones-preview-editable:focus { outline: 1px solid var(--bs-primary, #0d6efd); outline-offset: 2px; }
+    .observaciones-edit-label {
+        display: block;
+        margin-top: 1rem;
+        margin-bottom: 0.35rem;
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: #495057;
+    }
     .toast-overlay {
         position: fixed;
         inset: 0;
@@ -729,6 +880,7 @@
         line-height: 1;
     }
     .modal-busqueda-info { font-size: 0.9rem; color: #6c757d; margin-bottom: 1rem; }
+    .modal-busqueda-desc { font-size: 1rem; margin: 0 0 1rem 0; color: #1a1a2e; }
     .modal-hint { font-size: 0.85rem; color: #6c757d; margin-top: 0.75rem; }
     .busqueda-web-grid {
         display: grid;
@@ -745,14 +897,64 @@
         aspect-ratio: 1;
     }
     .busqueda-web-item:hover { border-color: #0d6efd; }
+    .busqueda-web-item.selected { border-color: #0d6efd; box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.3); }
     .busqueda-web-item img {
         width: 100%;
         height: 100%;
         object-fit: contain;
     }
-    @@media (max-width: 576px) {
+    /* Tablets y pantallas medianas: una columna para que los campos no queden estrechos */
+    @@media (max-width: 768px) {
+        .asignar-imagenes-page {
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+        .filters-card {
+            padding: 1rem;
+        }
         .filters-grid {
             grid-template-columns: 1fr;
+            gap: 0.75rem;
+        }
+        .filter-field-full {
+            grid-column: 1;
+        }
+        .filter-input {
+            min-height: 44px;
+            font-size: 16px;
+        }
+        .filters-title-row {
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .filters-actions {
+            flex-direction: column;
+        }
+        .filters-actions .btn-primary,
+        .filters-actions .btn-ghost {
+            width: 100%;
+            justify-content: center;
+            min-height: 44px;
+        }
+    }
+    /* Móviles */
+    @@media (max-width: 576px) {
+        .asignar-imagenes-page {
+            padding-left: 0.75rem;
+            padding-right: 0.75rem;
+        }
+        .filters-card {
+            padding: 0.75rem;
+        }
+        .filters-grid {
+            grid-template-columns: 1fr;
+            gap: 0.65rem;
+        }
+        .filters-title {
+            font-size: 1rem;
+        }
+        .btn-link-toggle {
+            font-size: 0.85rem;
         }
     }
 </style>

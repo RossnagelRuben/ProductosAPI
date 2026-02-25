@@ -98,6 +98,27 @@ public sealed class ProductImageService : IProductImageService
         if (productoID <= 0) return false;
         if (string.IsNullOrWhiteSpace(imageUrlOrBase64)) return false;
 
+        var original = imageUrlOrBase64;
+
+        // Optimizar tamaño de la imagen en el navegador (canvas) antes de enviarla al backend.
+        // Solo aplica cuando viene como data URL (data:image/...;base64,AAAA).
+        if (imageUrlOrBase64.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                // Máximo 800x800, calidad alta (0.85) para reducir peso sin perder calidad visible.
+                var optimized = await _js.InvokeAsync<string>("__optimizarImagenAsignar", imageUrlOrBase64, 800, 800, 0.85);
+                if (!string.IsNullOrWhiteSpace(optimized))
+                {
+                    imageUrlOrBase64 = optimized;
+                }
+            }
+            catch
+            {
+                // Si falla la optimización, continuamos con la imagen original.
+            }
+        }
+
         // La API espera un string base64 (format: byte). Si viene un data URL ("data:image/...;base64,AAAA"),
         // recortamos el prefijo y enviamos solo la parte base64.
         var imagenParaApi = imageUrlOrBase64;

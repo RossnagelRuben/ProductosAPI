@@ -46,6 +46,9 @@ public partial class AsignarImagenes
     private bool _mejorandoImagen;
     private string? _errorModal;
     private string _geminiApiKeyModal = "";
+    private bool _guardandoImagenModal;
+    /// <summary>True = se muestra la modal de vista en grande de la imagen del producto (Nano Banana); Escape la cierra.</summary>
+    private bool _imagenModalPreviewAbierto;
     private const string LsGeminiKey = "img_gkey";
     private const string LsGoogleSearchKeys = "google_search_keys";
     private const string LsSerpApiKey = "serpapi_key";
@@ -55,6 +58,8 @@ public partial class AsignarImagenes
     private string _serpApiKeyRaw = "";
     /// <summary>Estado del modal "Buscar imagen en la web". Null = cerrado. Evita referencias obsoletas al 2º/3er producto (SOLID: estado único).</summary>
     private BusquedaWebState? _busquedaWeb;
+    /// <summary>Si está asignado, se muestra una modal encima con la imagen en grande (Escape cierra solo esta y vuelve a la de SerpAPI).</summary>
+    private string? _busquedaWebPreviewUrl;
     /// <summary>Cancelación de la descarga actual para no quedar en "Descargando imagen" y poder elegir otra.</summary>
     private CancellationTokenSource? _busquedaWebCts;
 
@@ -62,15 +67,23 @@ public partial class AsignarImagenes
     private ProductoConImagenDto? _productoObservaciones;
     private string _observacionesRtf = "";
     private bool _generandoObservaciones;
+    private bool _guardandoObservaciones;
     private string? _errorObservaciones;
     /// <summary>True = pestaña Código RTF, False = pestaña Vista previa.</summary>
     private bool _observacionesVistaCodigo = false;
+    /// <summary>Cuando es true, en OnAfterRender se rellena el contenteditable con el HTML del RTF (al abrir modal o al pasar a Vista previa).</summary>
+    private bool _observacionesPreviewNeedsSyncFromRtf = false;
+    /// <summary>Si true, el próximo blur del contenteditable no debe pisar _observacionesRtf (evita que el blur al hacer clic en Generar borre el resultado).</summary>
+    private bool _observacionesSkipNextSyncFromPreview = false;
 
     /// <summary>Mensaje de notificación (toast) para operaciones de guardado (éxito / error).</summary>
     private string? _toastMessage;
     private bool _toastIsError;
 
     private bool _tieneImagenEnModal => !string.IsNullOrWhiteSpace(_imagenModalDataUrl) && !_imagenModalDataUrl.StartsWith("data:image/svg", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>True = filtros colapsados después de buscar (solo se muestra el botón para expandir).</summary>
+    private bool _filtersCollapsed;
 
     protected override async Task OnInitializedAsync()
     {
@@ -223,11 +236,18 @@ public partial class AsignarImagenes
         finally
         {
             _loading = false;
+            if (_items.Count > 0)
+                _filtersCollapsed = true;
             await InvokeAsync(StateHasChanged);
         }
     }
 
+    private void ToggleFiltros() => _filtersCollapsed = !_filtersCollapsed;
+
     private bool PuedeSiguiente => _items.Count == _filter.PageSize;
+
+    /// <summary>True cuando hay más de una página o estamos en una página &gt; 1; entonces mostramos la barra de paginación.</summary>
+    private bool TienePaginacion => _items.Count > 0 && (_filter.PageNumber > 1 || PuedeSiguiente);
 
     private void Primera()
     {
@@ -343,14 +363,33 @@ public partial class AsignarImagenes
         _imagenModalDataUrl = null;
         _promptModal = "";
         _errorModal = null;
+        _imagenModalPreviewAbierto = false;
         _mejorandoImagen = false;
         StateHasChanged();
     }
 
     private void OnModalKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
     {
-        if (e.Key == "Escape")
-            CerrarModal();
+        if (e.Key != "Escape") return;
+        if (_imagenModalPreviewAbierto)
+        {
+            CerrarPreviewImagenModal();
+            return;
+        }
+        CerrarModal();
+    }
+
+    private void CerrarPreviewImagenModal()
+    {
+        _imagenModalPreviewAbierto = false;
+        StateHasChanged();
+    }
+
+    private void AbrirPreviewImagenModal()
+    {
+        if (string.IsNullOrWhiteSpace(_imagenModalDataUrl) || _imagenModalDataUrl.StartsWith("data:image/svg", StringComparison.OrdinalIgnoreCase)) return;
+        _imagenModalPreviewAbierto = true;
+        StateHasChanged();
     }
 
     private static (byte[]? bytes, string mime) DataUrlToBytes(string? dataUrl)
@@ -443,6 +482,9 @@ public partial class AsignarImagenes
         item.ImagenUrl = _imagenModalDataUrl;
         item.ImagenCargada = true;
 
+        _guardandoImagenModal = true;
+        await InvokeAsync(StateHasChanged);
+
         try
         {
             var ok = await ProductImage.SaveProductImageAsync(item.ProductoID, _imagenModalDataUrl, _token);
@@ -461,6 +503,11 @@ public partial class AsignarImagenes
             _errorModal = ex.Message;
             await MostrarToastAsync("Error guardando imagen: " + ex.Message, true);
         }
+        finally
+        {
+            _guardandoImagenModal = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task AbrirModalObservacionesAsync(ProductoConImagenDto? p)
@@ -472,6 +519,7 @@ public partial class AsignarImagenes
         _generandoObservaciones = false;
         _geminiApiKeyModal = await LocalStorage.GetItemAsync(LsGeminiKey) ?? "";
         _observacionesVistaCodigo = false; // por defecto mostrar Vista previa
+        _observacionesPreviewNeedsSyncFromRtf = true;
         await InvokeAsync(StateHasChanged);
     }
 
@@ -481,12 +529,48 @@ public partial class AsignarImagenes
         _observacionesRtf = "";
         _errorObservaciones = null;
         _generandoObservaciones = false;
+        _guardandoObservaciones = false;
         _observacionesVistaCodigo = true;
         StateHasChanged();
     }
 
     /// <summary>HTML generado desde el RTF para la vista previa (negritas, viñetas, etc.).</summary>
     private string ObservacionesPreviewHtml => RtfToHtmlConverter.ToHtml(_observacionesRtf);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_productoObservaciones != null && !_observacionesVistaCodigo && _observacionesPreviewNeedsSyncFromRtf)
+        {
+            _observacionesPreviewNeedsSyncFromRtf = false;
+            try
+            {
+                await Task.Delay(50);
+                await JS.InvokeVoidAsync("__setObservacionesPreviewContent", "observaciones-preview-editable", ObservacionesPreviewHtml);
+            }
+            catch
+            {
+                _observacionesPreviewNeedsSyncFromRtf = true;
+            }
+        }
+    }
+
+    /// <summary>Sincroniza el contenido del contenteditable (HTML) al RTF al perder foco. No sincroniza si está generando con IA o si se acaba de generar (evita pisar el resultado).</summary>
+    private async Task SyncPreviewToRtfAsync()
+    {
+        if (_productoObservaciones == null || _observacionesVistaCodigo || _generandoObservaciones) return;
+        try
+        {
+            var html = await JS.InvokeAsync<string>("__getObservacionesPreviewContent", "observaciones-preview-editable");
+            if (_generandoObservaciones) return;
+            if (_observacionesSkipNextSyncFromPreview) { _observacionesSkipNextSyncFromPreview = false; return; }
+            _observacionesRtf = HtmlToRtfConverter.ToRtf(html);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            // Ignorar errores de JS (ej. elemento no existe)
+        }
+    }
 
     private void OnModalObservacionesKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
     {
@@ -530,6 +614,8 @@ public partial class AsignarImagenes
             catch (Exception ex)
             {
                 _errorObservaciones = "SerpAPI: " + ex.Message;
+                _generandoObservaciones = false;
+                await InvokeAsync(StateHasChanged);
                 return;
             }
             var snippetsText = snippets.Count > 0
@@ -552,6 +638,17 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
                     var last = _observacionesRtf.LastIndexOf("```", StringComparison.Ordinal);
                     if (first >= 0 && last > first)
                         _observacionesRtf = _observacionesRtf.Substring(first + 1, last - first - 1).Trim();
+                }
+                // Actualizar la vista previa editable con el nuevo RTF generado (inmediato + flag por si hace falta otro render)
+                _observacionesPreviewNeedsSyncFromRtf = true;
+                _observacionesSkipNextSyncFromPreview = true; // el blur al hacer clic puede completarse después: no pisar el resultado
+                try
+                {
+                    await JS.InvokeVoidAsync("__setObservacionesPreviewContent", "observaciones-preview-editable", ObservacionesPreviewHtml);
+                }
+                catch
+                {
+                    // Si falla el JS, OnAfterRenderAsync lo intentará de nuevo
                 }
             }
             else
@@ -617,6 +714,9 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
             Observacion = texto
         };
 
+        _guardandoObservaciones = true;
+        _errorObservaciones = null;
+        await InvokeAsync(StateHasChanged);
         try
         {
             var result = await ProductoPatch.PatchProductoAsync(request, _token);
@@ -659,6 +759,11 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
                 await JS.InvokeVoidAsync("__logAsignarImagenes", "PATCH Observaciones EXCEPCIÓN", JsonSerializer.Serialize(new { request, ex = ex.Message }));
             }
             catch { }
+        }
+        finally
+        {
+            _guardandoObservaciones = false;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -725,9 +830,9 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
             await InvokeAsync(StateHasChanged);
             return;
         }
-        if (string.IsNullOrWhiteSpace(p.CodigoBarra) || string.IsNullOrWhiteSpace(p.DescripcionLarga))
+        if (string.IsNullOrWhiteSpace(p.DescripcionLarga))
         {
-            _error = "El producto debe tener descripción y código de barras para buscar con SerpAPI.";
+            _error = "El producto debe tener descripción para buscar con SerpAPI.";
             await InvokeAsync(StateHasChanged);
             return;
         }
@@ -741,12 +846,15 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
             Descargando = false,
             Error = null,
             Urls = null,
+            SelectedImageUrl = null,
             SourceLabel = "Buscando con SerpAPI"
         };
         await InvokeAsync(StateHasChanged);
         try
         {
-            var query = $"{p.CodigoBarra.Trim()} {p.DescripcionLarga.Trim()}";
+            var query = string.IsNullOrWhiteSpace(p.CodigoBarra)
+                ? p.DescripcionLarga.Trim()
+                : $"{p.CodigoBarra.Trim()} {p.DescripcionLarga.Trim()}";
             var urls = await SerpApiImageSearch.SearchImageUrlsAsync(query, _serpApiKeyRaw.Trim(), "Argentina");
             if (_busquedaWeb != null)
             {
@@ -778,13 +886,31 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
         _busquedaWebCts?.Dispose();
         _busquedaWebCts = null;
         _busquedaWeb = null;
+        _busquedaWebPreviewUrl = null;
+        StateHasChanged();
+    }
+
+    private void CerrarPreviewImagenSerpApi()
+    {
+        _busquedaWebPreviewUrl = null;
         StateHasChanged();
     }
 
     private void OnBusquedaWebKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
     {
+        if (e.Key != "Escape") return;
+        if (!string.IsNullOrWhiteSpace(_busquedaWebPreviewUrl))
+        {
+            CerrarPreviewImagenSerpApi();
+            return;
+        }
+        CerrarBusquedaWeb();
+    }
+
+    private void OnPreviewImagenKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
         if (e.Key == "Escape")
-            CerrarBusquedaWeb();
+            CerrarPreviewImagenSerpApi();
     }
 
     private async Task LogBusquedaWebUrlsAsync(IReadOnlyList<string> urls)
@@ -868,11 +994,14 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
                 var item = _items.FirstOrDefault(x => x.ProductoID == productId);
                 if (item != null)
                 {
+                    // Mostramos en UI la imagen tal cual viene (puede ser WebP, PNG, etc.).
                     item.ImagenUrl = dataUrl;
                     item.ImagenCargada = true;
 
                     if (!string.IsNullOrWhiteSpace(_token))
                     {
+                        // SaveProductImageAsync se encarga de optimizar y convertir a JPEG antes de llamar al PATCH,
+                        // así la API siempre recibe un formato soportado.
                         var ok = await ProductImage.SaveProductImageAsync(item.ProductoID, dataUrl, _token);
                         if (!ok)
                         {
@@ -919,6 +1048,103 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
     private void CancelarDescargaImagen()
     {
         _busquedaWebCts?.Cancel();
+    }
+
+    /// <summary>Al hacer clic en una miniatura de SerpAPI se selecciona y se abre la modal de vista en grande (Escape cierra esa modal y vuelve a la de resultados).</summary>
+    private void SeleccionarPreviewImagenSerpApi(string imageUrl)
+    {
+        if (_busquedaWeb == null) return;
+        _busquedaWeb.SelectedImageUrl = imageUrl;
+        _busquedaWeb.Error = null;
+        _busquedaWebPreviewUrl = imageUrl;
+        StateHasChanged();
+    }
+
+    /// <summary>Descarga la imagen seleccionada en el modal SerpAPI, la asigna al producto y la guarda en la API.</summary>
+    private async Task GuardarImagenSeleccionadaSerpApiAsync()
+    {
+        if (_busquedaWeb == null || string.IsNullOrWhiteSpace(_busquedaWeb.SelectedImageUrl) || _busquedaWeb.ProductoID == 0) return;
+        if (string.IsNullOrWhiteSpace(_token))
+        {
+            _busquedaWeb.Error = "No hay token de autenticación para guardar la imagen.";
+            await MostrarToastAsync("No hay token de autenticación para guardar la imagen.", true);
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        var imageUrl = _busquedaWeb.SelectedImageUrl;
+        var productId = _busquedaWeb.ProductoID;
+
+        _busquedaWebCts?.Cancel();
+        _busquedaWebCts?.Dispose();
+        _busquedaWebCts = new CancellationTokenSource();
+        _busquedaWeb.Descargando = true;
+        _busquedaWeb.Error = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var ct = _busquedaWebCts.Token;
+            string? dataUrl = null;
+            var yaEsProxy = imageUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase) && CorsProxyBases.Any(b => imageUrl.StartsWith(b, StringComparison.OrdinalIgnoreCase));
+            if (yaEsProxy)
+                dataUrl = await GoogleImageSearch.FetchImageAsDataUrlAsync(imageUrl, ct);
+            else if (imageUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            {
+                var encoded = Uri.EscapeDataString(imageUrl);
+                var t1 = GoogleImageSearch.FetchImageAsDataUrlAsync(CorsProxyBases[0] + encoded, ct);
+                var t2 = GoogleImageSearch.FetchImageAsDataUrlAsync(CorsProxyBases[1] + encoded, ct);
+                var primera = await Task.WhenAny(t1, t2);
+                dataUrl = await primera;
+                if (string.IsNullOrWhiteSpace(dataUrl))
+                    dataUrl = await (primera == t1 ? t2 : t1);
+            }
+            else
+                dataUrl = await GoogleImageSearch.FetchImageAsDataUrlAsync(imageUrl, ct);
+
+            if (!string.IsNullOrWhiteSpace(dataUrl) && dataUrl.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+            {
+                var item = _items.FirstOrDefault(x => x.ProductoID == productId);
+                if (item != null)
+                {
+                    item.ImagenUrl = dataUrl;
+                    item.ImagenCargada = true;
+                    var ok = await ProductImage.SaveProductImageAsync(item.ProductoID, dataUrl, _token);
+                    if (!ok)
+                    {
+                        _busquedaWeb.Error = "No se pudo guardar la imagen en la API.";
+                        await MostrarToastAsync("No se pudo guardar la imagen en la API.", true);
+                    }
+                    else
+                    {
+                        await MostrarToastAsync("Imagen guardada correctamente.", false);
+                        CerrarBusquedaWeb();
+                    }
+                }
+                else
+                {
+                    _busquedaWeb.Error = "Producto no encontrado en la lista actual.";
+                    await MostrarToastAsync("Producto no encontrado.", true);
+                }
+            }
+            else
+            {
+                _busquedaWeb.Error = "No se pudo descargar esta imagen. Probá con otra.";
+                await MostrarToastAsync("No se pudo descargar la imagen. Probá con otra.", true);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _busquedaWeb.Error = "Descarga cancelada.";
+        }
+        finally
+        {
+            _busquedaWebCts?.Dispose();
+            _busquedaWebCts = null;
+            if (_busquedaWeb != null)
+                _busquedaWeb.Descargando = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task GuardarAsync(ProductoConImagenDto? p)

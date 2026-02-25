@@ -34,7 +34,10 @@
                     <div class="product-card-body">
                         <div class="product-card-desc">@(p.DescripcionLarga ?? "—")</div>
                         <div class="product-card-meta">
-                            <span class="product-code">@(p.Codigo ?? "—")</span>
+                            @if (!string.IsNullOrWhiteSpace(p.RubroCodigo))
+                            {
+                                <strong class="product-rubro">@p.RubroCodigo</strong>
+                            }
                             @if (!string.IsNullOrWhiteSpace(p.CodigoBarra))
                             {
                                 <span class="product-barcode">@p.CodigoBarra</span>
@@ -43,10 +46,9 @@
                         <div class="product-card-actions">
                             <button type="button"
                                     class="btn-card btn-obtener"
-                                    disabled="@(!TieneImagenReal(p))"
                                     @onclick="() => OnAbrirModalImagen.InvokeAsync(p)">
                                 <span class="oi oi-image" aria-hidden="true"></span>
-                                <span>Ver / Mejorar</span>
+                                <span>@(TieneImagenReal(p) ? "Ver / Mejorar" : "Generar imagen")</span>
                             </button>
                             @* Google Search (Buscar en web) oculto: solo se usa SerpAPI
                             @if (PuedeBuscarEnWeb(p))
@@ -99,8 +101,16 @@
         color: #6c757d;
         gap: 0.75rem;
     }
+    .grid-empty {
+        color: #fff;
+    }
+    .grid-empty .oi {
+        opacity: 0.9;
+    }
     .grid-loading .oi.spin, .grid-empty .oi {
         font-size: 2.5rem;
+    }
+    .grid-loading .oi.spin {
         opacity: 0.6;
     }
     .oi.spin { animation: spin 0.8s linear infinite; }
@@ -162,7 +172,7 @@
         flex-wrap: wrap;
         gap: 0.5rem;
     }
-    .product-code { font-weight: 600; }
+    .product-rubro { font-weight: 700; color: #1a1a2e; }
     .product-barcode { font-family: monospace; }
     .product-card-actions {
         display: flex;

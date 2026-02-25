@@ -17,6 +17,9 @@ public sealed class BusquedaWebState
     public bool Descargando { get; set; }
     public string? Error { get; set; }
 
+    /// <summary>URL de la imagen seleccionada en el modal (preview); al hacer clic en Guardar se descarga y se asigna al producto.</summary>
+    public string? SelectedImageUrl { get; set; }
+
     public bool TieneResultados => Urls != null && Urls.Count > 0;
 
     /// <summary>Etiqueta del origen de la búsqueda para el mensaje del modal (ej.: "Google", "SerpAPI").</summary>

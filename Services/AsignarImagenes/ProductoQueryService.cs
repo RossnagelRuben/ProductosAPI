@@ -106,12 +106,14 @@ public sealed class ProductoQueryService : IProductoQueryService
             string? imagenUrl = GetImageUrlFromElement(el);
             imagenUrl = NormalizeImageUrl(imagenUrl);
             string? observaciones = GetObservacionesFromElement(el);
+            string? rubroCodigo = GetRubroCodigoFromElement(el);
             return new ProductoConImagenDto
             {
                 ProductoID = codigoID,
                 Codigo = codigo,
                 DescripcionLarga = descripcionLarga,
                 CodigoBarra = codigoBarra,
+                RubroCodigo = rubroCodigo,
                 Presentacion = presentacion,
                 ImagenUrl = imagenUrl,
                 ImagenCargada = !string.IsNullOrWhiteSpace(imagenUrl),
@@ -122,6 +124,43 @@ public sealed class ProductoQueryService : IProductoQueryService
         {
             return null;
         }
+    }
+
+    /// <summary>Obtiene el código de rubro del producto desde el JSON (rubroCodigo, RubroCodigo, rubro, familia, o desde objeto anidado producto/product).</summary>
+    private static string? GetRubroCodigoFromElement(JsonElement el)
+    {
+        var names = new[] { "rubroCodigo", "RubroCodigo", "rubro", "Rubro", "familiaCodigo", "FamiliaCodigo", "familiaDescripcion", "FamiliaDescripcion", "familia", "Familia" };
+        foreach (var name in names)
+        {
+            if (el.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.String)
+            {
+                var s = prop.GetString();
+                if (!string.IsNullOrWhiteSpace(s)) return s;
+            }
+        }
+        if (el.TryGetProperty("producto", out var prod) && prod.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var name in names)
+            {
+                if (prod.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.String)
+                {
+                    var s = prop.GetString();
+                    if (!string.IsNullOrWhiteSpace(s)) return s;
+                }
+            }
+        }
+        if (el.TryGetProperty("product", out var product) && product.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var name in names)
+            {
+                if (product.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.String)
+                {
+                    var s = prop.GetString();
+                    if (!string.IsNullOrWhiteSpace(s)) return s;
+                }
+            }
+        }
+        return null;
     }
 
     /// <summary>Obtiene el código de barras probando varias rutas y nombres (camelCase y PascalCase) del JSON de la API.</summary>

@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -24,7 +25,11 @@ public interface IProductoPatchService
 public sealed class ProductoPatchService : IProductoPatchService
 {
     private const string PatchUrl = "https://drrsystemas4.azurewebsites.net/Producto";
-    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = null };
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = null,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
     private readonly HttpClient _httpClient;
 
     public ProductoPatchService(HttpClient httpClient)

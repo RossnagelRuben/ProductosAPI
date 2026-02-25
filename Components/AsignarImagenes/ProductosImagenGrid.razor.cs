@@ -25,13 +25,13 @@ public partial class ProductosImagenGrid
     [Parameter] public int? IsSavingImage { get; set; }
     [Parameter] public EventCallback<ProductoConImagenDto> OnAbrirModalImagen { get; set; }
     [Parameter] public EventCallback<ProductoConImagenDto> OnBuscarImagenWeb { get; set; }
-    /// <summary>Callback para búsqueda de imágenes con SerpAPI (Google Images, Argentina). Se habilita con la misma condición que Buscar en web (descripción + código de barras).</summary>
+    /// <summary>Callback para búsqueda de imágenes con SerpAPI (Google Images, Argentina). Se habilita si tiene descripción (con o sin código de barras).</summary>
     [Parameter] public EventCallback<ProductoConImagenDto> OnBuscarImagenSerpApi { get; set; }
     [Parameter] public EventCallback<ProductoConImagenDto> OnAbrirModalObservaciones { get; set; }
     [Parameter] public EventCallback<ProductoConImagenDto> OnGuardar { get; set; }
 
     private static bool PuedeBuscarEnWeb(ProductoConImagenDto p) =>
-        !string.IsNullOrWhiteSpace(p.CodigoBarra) && !string.IsNullOrWhiteSpace(p.DescripcionLarga);
+        !string.IsNullOrWhiteSpace(p.DescripcionLarga);
 
     /// <summary>True si el producto tiene una imagen real (no placeholder, no fallida). Solo entonces se habilita "Ver / Mejorar" (Gemini).</summary>
     private bool TieneImagenReal(ProductoConImagenDto p)

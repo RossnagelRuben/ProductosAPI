@@ -115,6 +115,75 @@
                 })
                 .catch(function() { return null; });
         };
+
+        // Redimensiona/comprime una data URL de imagen para que pese menos sin perder calidad notable.
+        // Devuelve una Promise<string> con una nueva data URL (JPEG) o la original si algo falla.
+        window.__setObservacionesPreviewContent = function(id, html) {
+            function set() {
+                var el = document.getElementById(id);
+                if (el) el.innerHTML = html || '';
+            }
+            if (typeof requestAnimationFrame !== 'undefined')
+                requestAnimationFrame(function() { requestAnimationFrame(set); });
+            else
+                set();
+        };
+        window.__getObservacionesPreviewContent = function(id) {
+            var el = document.getElementById(id);
+            return el ? el.innerHTML : '';
+        };
+        window.__optimizarImagenAsignar = function(dataUrl, maxWidth, maxHeight, quality) {
+            return new Promise(function(resolve, reject) {
+                try {
+                    if (!dataUrl || typeof dataUrl !== 'string' || dataUrl.indexOf('data:image/') !== 0) {
+                        resolve(dataUrl);
+                        return;
+                    }
+
+                    var img = new Image();
+                    img.onload = function() {
+                        try {
+                            var w = img.naturalWidth || img.width;
+                            var h = img.naturalHeight || img.height;
+                            if (!w || !h) {
+                                resolve(dataUrl);
+                                return;
+                            }
+
+                            var maxW = (typeof maxWidth === 'number' && maxWidth > 0) ? maxWidth : 800;
+                            var maxH = (typeof maxHeight === 'number' && maxHeight > 0) ? maxHeight : 800;
+                            var ratio = Math.min(maxW / w, maxH / h, 1);
+
+                            // Si ya es más chica que el máximo, no tocamos la imagen.
+                            if (!isFinite(ratio) || ratio >= 1) {
+                                resolve(dataUrl);
+                                return;
+                            }
+
+                            var canvas = document.createElement('canvas');
+                            canvas.width = Math.round(w * ratio);
+                            canvas.height = Math.round(h * ratio);
+                            var ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                            var q = (typeof quality === 'number' && quality > 0 && quality <= 1) ? quality : 0.85;
+                            var out = canvas.toDataURL('image/jpeg', q);
+                            resolve(out || dataUrl);
+                        } catch (e) {
+                            console.error('Error en __optimizarImagenAsignar:', e);
+                            resolve(dataUrl);
+                        }
+                    };
+                    img.onerror = function() {
+                        resolve(dataUrl);
+                    };
+                    img.src = dataUrl;
+                } catch (e) {
+                    console.error('Error en __optimizarImagenAsignar:', e);
+                    resolve(dataUrl);
+                }
+            });
+        };
     </script>
     <script src="_framework/blazor.webassembly.js"></script>
     <script src="js/dom.js"></script>

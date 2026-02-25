@@ -10,6 +10,8 @@ public sealed class ProductoConImagenDto
     public string? Codigo { get; set; }
     public string? DescripcionLarga { get; set; }
     public string? CodigoBarra { get; set; }
+    /// <summary>Código de rubro del producto (ej. para etiquetado en el grid).</summary>
+    public string? RubroCodigo { get; set; }
     public string? Presentacion { get; set; }
     /// <summary>URL de imagen actual (API Centralizadora o guardada).</summary>
     public string? ImagenUrl { get; set; }
