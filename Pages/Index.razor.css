@@ -1,3 +1,10 @@
+/* Estado "Verificando sesión" al volver al Inicio (evita flash del formulario de login) */
+.checking-session {
+    color: rgba(255, 255, 255, 0.9);
+    margin: 1rem 0 0;
+    font-size: 0.95rem;
+}
+
 /* Fondo animado detrás de todo (solo dentro del contenido de Inicio) */
 .animated-background {
     position: fixed;
@@ -116,4 +123,26 @@
     font-size: 0.95rem;
     opacity: .9;
     transform: translateY(1px);
+}
+
+/* Acción mínima: ver datos de empresa */
+.empresa-actions {
+    margin-top: 0.5rem;
+    margin-bottom: 0;
+}
+.btn-empresa-minimal {
+    display: inline-block;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.875rem;
+    color: rgba(255, 255, 255, 0.95);
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    text-decoration: none;
+    transition: background 0.2s, border-color 0.2s;
+}
+.btn-empresa-minimal:hover {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.45);
+    color: #fff;
 }

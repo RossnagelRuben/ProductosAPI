@@ -1,14 +1,26 @@
-﻿@page "/"
+@page "/"
 @using BlazorApp_ProductosAPI.Services
 @using BlazorApp_ProductosAPI.Components
 @using BlazorApp_ProductosAPI.Models
+@using System.Net.Http.Headers
+@using System.Text.Json
 @inject IAuthService AuthService
 @inject NavigationManager Navigation
 @inject IJSRuntime JSRuntime
+@inject HttpClient Http
 
 <PageTitle>DRR SYSTEMAS</PageTitle>
 
-@if (isAuthenticated)
+@if (isLoading)
+{
+    <div class="animated-background"></div>
+    <div class="center-content stack-tight">
+        <img src="AlmaNet.png" alt="Logo AlmaNet" class="logo-alma" loading="eager" decoding="async" />
+        <img src="drr.png" alt="Logo DRR" class="logo-drr" loading="eager" decoding="async" />
+        <p class="checking-session">Verificando sesión…</p>
+    </div>
+}
+else if (isAuthenticated)
 {
     <div class="animated-background"></div>
 
@@ -18,7 +30,15 @@
 
         <div class="welcome-section">
             <h2>¡Bienvenido, @currentUser!</h2>
-            <p>Has iniciado sesión correctamente en @(string.IsNullOrEmpty(company) ? "DRR SYSTEMAS" : company)</p>
+            <p>Has iniciado sesión correctamente en <strong>@(string.IsNullOrEmpty(razonSocial) ? (string.IsNullOrEmpty(company) ? "DRR SYSTEMAS" : company) : razonSocial)</strong></p>
+            @if (!string.IsNullOrEmpty(tokenFINAL))
+            {
+                <p class="empresa-actions">
+                    <a class="btn-empresa-minimal" href="empresas" @onclick="GuardarTokenYIrEmpresas" @onclick:preventDefault>
+                        Ver todos los datos de empresa
+                    </a>
+                </p>
+            }
             
             @if (currentUser == "DRRSysRuben" && (!string.IsNullOrEmpty(tokenDEV) || !string.IsNullOrEmpty(tokenUSER) || !string.IsNullOrEmpty(tokenFINAL)))
             {
@@ -159,10 +179,14 @@ else
 }
 
 @code {
+    private const string EmpresaApiUrl = "https://drrsystemas4.azurewebsites.net/Empresa";
+    private const string EmpresasTokenStorageKey = "empresas_token";
+
     private bool isLoading = true;
     private bool isAuthenticated = false;
     private string currentUser = string.Empty;
     private string company = string.Empty;
+    private string? razonSocial = null;
     private string tokenDEV = string.Empty;
     private string tokenUSER = string.Empty;
     private string tokenFINAL = string.Empty;
@@ -202,6 +226,8 @@ else
                 tokenDEV = await AuthService.GetTokenDEVAsync() ?? string.Empty;
                 tokenUSER = await AuthService.GetTokenUSERAsync() ?? string.Empty;
                 tokenFINAL = await AuthService.GetTokenFINALAsync() ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(tokenFINAL))
+                    await CargarRazonSocialAsync();
             }
         }
         catch
@@ -229,6 +255,44 @@ else
             await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", token);
             // Aquí podrías agregar una notificación de que se copió
         }
+    }
+
+    private async Task CargarRazonSocialAsync()
+    {
+        if (string.IsNullOrWhiteSpace(tokenFINAL)) return;
+        try
+        {
+            var req = new HttpRequestMessage(HttpMethod.Get, EmpresaApiUrl);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokenFINAL.Trim());
+            var res = await Http.SendAsync(req);
+            var json = await res.Content.ReadAsStringAsync();
+            if (!res.IsSuccessStatusCode) return;
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var parsed = JsonSerializer.Deserialize<EmpresaApiResponse>(json, options);
+            if (parsed?.Status?.Equals("ok", StringComparison.OrdinalIgnoreCase) == true &&
+                parsed.Data is { Count: > 0 } && !string.IsNullOrWhiteSpace(parsed.Data[0].RazonSocial))
+                razonSocial = parsed.Data[0].RazonSocial!.Trim();
+        }
+        catch { /* ignorar */ }
+    }
+
+    private async Task GuardarTokenYIrEmpresas()
+    {
+        if (!string.IsNullOrWhiteSpace(tokenFINAL))
+        {
+            await JSRuntime.InvokeVoidAsync("localStorage.setItem", EmpresasTokenStorageKey, tokenFINAL);
+            Navigation.NavigateTo("empresas", forceLoad: false);
+        }
+    }
+
+    private sealed class EmpresaApiResponse
+    {
+        public string? Status { get; set; }
+        public List<EmpresaApiItem> Data { get; set; } = new();
+    }
+    private sealed class EmpresaApiItem
+    {
+        public string? RazonSocial { get; set; }
     }
 
     // Métodos para el login

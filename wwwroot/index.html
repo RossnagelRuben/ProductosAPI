@@ -31,6 +31,9 @@
     </div>
     <!-- Funciones críticas para Imagen.razor - deben estar antes de Blazor -->
     <script>
+        // DEPOSITOS (Stock por Ubicación): evitar error "initResponsiveListeners is undefined"
+        window.initResponsiveListeners = function() { };
+
         // Funciones para Imagen.razor - OCR y overlay SVG
         // Definir inmediatamente para que estén disponibles cuando Blazor las necesite
         window.getImageSizes = function(selector) {
