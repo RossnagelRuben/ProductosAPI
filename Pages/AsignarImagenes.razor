@@ -310,10 +310,11 @@
                     </div>
                     <div class="modal-body">
                         <p class="modal-busqueda-desc"><strong>@(_busquedaWeb.DescripcionLarga ?? "—")</strong></p>
+                        @* Campo editable: la API DRR busca por código de barra + descripción (ambos juntos). "Buscar de nuevo" usa exactamente este valor. *@
                         @if (_busquedaWeb.PermiteEditarQuery)
                         {
                             <div class="busqueda-web-query-edit">
-                                <label for="busqueda-web-query">Texto de búsqueda (código de barra y descripción)</label>
+                                <label for="busqueda-web-query">Texto de búsqueda (código de barra y descripción, ambos para la API DRR)</label>
                                 <div class="busqueda-web-query-row">
                                     <input id="busqueda-web-query" type="text" class="modal-input busqueda-web-query-input"
                                            placeholder="Código de barra y descripción del producto"

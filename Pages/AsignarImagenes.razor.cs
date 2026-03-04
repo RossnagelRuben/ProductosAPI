@@ -65,6 +65,8 @@ public partial class AsignarImagenes
     private string? _busquedaWebPreviewUrl;
     /// <summary>Cancelación de la descarga actual para no quedar en "Descargando imagen" y poder elegir otra.</summary>
     private CancellationTokenSource? _busquedaWebCts;
+    /// <summary>Si true, en el próximo OnAfterRender se fuerza el valor del input de búsqueda desde JS para que respete código de barra + descripción completa.</summary>
+    private bool _busquedaWebInputNeedsSync;
 
     /// <summary>Modal Observaciones: producto seleccionado y texto (RTF o plano).</summary>
     private ProductoConImagenDto? _productoObservaciones;
@@ -603,6 +605,17 @@ public partial class AsignarImagenes
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // Sincronizar input de búsqueda del modal: forzar valor en DOM para que no se trunque (código de barra + descripción completa).
+        if (_busquedaWebInputNeedsSync && _busquedaWeb != null)
+        {
+            _busquedaWebInputNeedsSync = false;
+            try
+            {
+                await JS.InvokeVoidAsync("__setBusquedaWebQueryInputValue", _busquedaWeb.TextoBusqueda ?? "");
+            }
+            catch { /* no crítico */ }
+        }
+
         // No usar __setObservacionesPreviewContent aquí: Blazor ya renderiza el contenido del contenteditable.
         // Si se reemplazaba con JS, en el siguiente diff Blazor intentaba removeChild sobre nodos ya eliminados -> "Cannot read properties of null (reading 'removeChild')".
         if (_productoObservaciones != null && _observacionesPreviewNeedsSyncFromRtf)
@@ -984,15 +997,32 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
 
         var barra = (p.CodigoBarra ?? "").Trim();
         var desc = (p.DescripcionLarga ?? "").Trim();
-        var queryInicial = string.IsNullOrWhiteSpace(barra) ? desc : $"{barra} {desc}";
+        // Query corta para la API y para el textbox: barra + primeras palabras (ej. "7791337601024 YOGURISIMO"), no la descripción completa.
+        var queryInicialCorta = ImageSearchQueryHelper.ConstruirQueryInicialCorta(barra, desc);
+
+        try
+        {
+            await JS.InvokeVoidAsync("__logAsignarImagenes", "MODAL_QUERY_INICIAL",
+                JsonSerializer.Serialize(new
+                {
+                    productoID = p.ProductoID,
+                    codigoBarra = string.IsNullOrWhiteSpace(barra) ? "(vacío)" : barra,
+                    descripcionLongitud = desc.Length,
+                    queryEnviadaALaApi = queryInicialCorta,
+                    mensaje = "Al abrir el modal se envía a la API exactamente esta query (barra + primeras palabras)."
+                }));
+        }
+        catch { /* logging no crítico */ }
 
         _error = null;
+        // Textbox muestra y envía a la API esta query corta; el usuario puede editarla y "Buscar de nuevo" enviará lo que escriba.
+        var textoBusquedaInicial = queryInicialCorta;
         _busquedaWeb = new BusquedaWebState
         {
             ProductoID = p.ProductoID,
             DescripcionLarga = p.DescripcionLarga,
             CodigoBarra = p.CodigoBarra,
-            TextoBusqueda = queryInicial,
+            TextoBusqueda = textoBusquedaInicial,
             PermiteEditarQuery = true,
             Loading = true,
             Descargando = false,
@@ -1001,6 +1031,7 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
             SelectedImageUrl = null,
             SourceLabel = "Buscando con API de imágenes"
         };
+        _busquedaWebInputNeedsSync = true;
         await InvokeAsync(StateHasChanged);
 
         // Si ya tenemos URLs en caché de una búsqueda anterior (ej. búsqueda masiva en lista), mostrarlas sin llamar a la API.
@@ -1015,15 +1046,25 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
 
         try
         {
-            var urls = await BuscarUrlsIntegracionConFallbackAsync(queryInicial, barra, desc);
+            // Primera llamada: exactamente la query corta que está en el textbox (ej. "7791337601024 YOGURISIMO").
+            IReadOnlyList<string>? urls = null;
+            if (!string.IsNullOrWhiteSpace(queryInicialCorta))
+            {
+                urls = await IntegrationImageSearch.SearchImageUrlsAsync(queryInicialCorta, _token!);
+            }
+            // Si no hay resultados con la query corta, reintentar con descripción completa y luego abreviada.
+            if ((urls == null || urls.Count == 0) && _busquedaWeb != null)
+            {
+                urls = await BuscarUrlsIntegracionPorProductoAsync(barra, desc);
+            }
             if (_busquedaWeb != null)
             {
-                _busquedaWeb.Urls = urls.Count > 0 ? new List<string>(urls) : null;
+                _busquedaWeb.Urls = urls != null && urls.Count > 0 ? new List<string>(urls) : null;
                 _busquedaWeb.Loading = false;
-                if (urls.Count > 0)
+                if (urls != null && urls.Count > 0)
                 {
                     _urlsBusquedaCachePorProducto[p.ProductoID] = new List<string>(urls);
-                    _busquedaWeb.TextoBusqueda = queryInicial;
+                    _busquedaWeb.TextoBusqueda = textoBusquedaInicial;
                     await LogBusquedaWebUrlsAsync(urls);
                 }
                 else
@@ -1045,56 +1086,88 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
     }
 
     /// <summary>
-    /// Prueba varias variantes de búsqueda (barra+desc, solo desc, solo barra) y devuelve la primera lista no vacía.
-    /// Así recuperamos el comportamiento que funcionaba cuando la API a veces solo acepta la descripción.
+    /// Busca URLs de imagen en la API de integración para un producto.
+    /// Primera llamada: código de barra + descripción (o solo descripción si no hay barra), según regla DRR.
+    /// Si no hay resultados y se usó barra+desc, reintenta solo con descripción.
     /// </summary>
-    private async Task<IReadOnlyList<string>> BuscarUrlsIntegracionConFallbackAsync(string queryInicial, string barra, string desc)
+    private async Task<IReadOnlyList<string>> BuscarUrlsIntegracionPorProductoAsync(string barra, string desc)
     {
-        var queries = new List<string>();
-        if (!string.IsNullOrWhiteSpace(queryInicial))
-            queries.Add(queryInicial);
-        if (!string.IsNullOrWhiteSpace(desc) && !queries.Contains(desc))
-            queries.Add(desc);
-        if (!string.IsNullOrWhiteSpace(barra) && !queries.Contains(barra))
-            queries.Add(barra);
+        // Siempre código de barra + descripción (o solo descripción si no hay barra). Construcción explícita para lista/masivo y modal.
+        var query = ImageSearchQueryHelper.ConstruirQuery(barra, desc);
+        if (string.IsNullOrWhiteSpace(query) || string.IsNullOrWhiteSpace(_token))
+            return Array.Empty<string>();
 
-        foreach (var q in queries)
+        // Garantía: si hay barra y desc, la query debe contener ambos (no solo barra).
+        var barraTrim = (barra ?? "").Trim();
+        var descTrim = (desc ?? "").Trim();
+        if (!string.IsNullOrWhiteSpace(barraTrim) && !string.IsNullOrWhiteSpace(descTrim) && !query.Contains(' '))
+            query = $"{barraTrim} {descTrim}";
+
+        // Log: query exacta que se envía a la API DRR (para "Buscar imagen (API) para seleccionados" y modal).
+        try
+        {
+            await JS.InvokeVoidAsync("__logAsignarImagenes", "API_IMAGEN QUERY_CONSTRUIDA",
+                JsonSerializer.Serialize(new
+                {
+                    codigoBarra = string.IsNullOrWhiteSpace(barra) ? "(vacío)" : barra,
+                    descripcion = descTrim.Length > 80 ? descTrim.Substring(0, 80) + "…" : descTrim,
+                    queryEnviadaALaApi = query,
+                    longitudQuery = query.Length,
+                    mensaje = "Query enviada a la API: código de barra y descripción (o solo descripción si no hay barra)."
+                }));
+        }
+        catch { }
+
+        var tieneBarra = !string.IsNullOrWhiteSpace(barra);
+
+        // Primera llamada: siempre según regla (barra+desc o solo desc).
+        try
+        {
+            var urls = await IntegrationImageSearch.SearchImageUrlsAsync(query, _token!);
+            if (urls != null && urls.Count > 0)
+                return urls;
+        }
+        catch
+        {
+            // La API puede devolver status "error" en body con HTTP 200; cae aquí.
+        }
+
+        // Fallback: si usamos barra+desc y no hubo resultados, probar solo descripción (la API a veces solo responde a desc).
+        if (tieneBarra && !string.IsNullOrWhiteSpace(desc))
         {
             try
             {
-                var urls = await IntegrationImageSearch.SearchImageUrlsAsync(q, _token!);
+                await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenIntegration FALLBACK_SOLO_DESC",
+                    JsonSerializer.Serialize(new { queryPrimera = query, queryFallback = desc.Trim(), mensaje = "Reintentando solo con descripción." }));
+            }
+            catch { }
+            try
+            {
+                var urls = await IntegrationImageSearch.SearchImageUrlsAsync(desc.Trim(), _token!);
                 if (urls != null && urls.Count > 0)
                     return urls;
             }
             catch
             {
-                // Probar la siguiente variante.
+                // Ignorar y devolver vacío al final.
             }
         }
+
         return Array.Empty<string>();
     }
 
     /// <summary>
-    /// Para "Buscar de nuevo" en el modal: intenta con el texto tal cual; si la API no devuelve resultados, prueba sin el primer token (código de barra).
+    /// Para "Buscar de nuevo" en el modal: usa exactamente el texto del textbox y, si no hay resultados,
+    /// prueba fallbacks (solo descripción, descripción abreviada) según <see cref="ImageSearchQueryHelper.ObtenerQueriesFallbackParaTextoLibre"/>.
+    /// Respeta lo que el usuario escribe en el textbox (leído desde el DOM).
     /// </summary>
     private async Task<IReadOnlyList<string>> BuscarUrlsIntegracionConFallbackTextoAsync(string texto)
     {
-        var queries = new List<string> { texto };
-        var rest = texto.Trim();
-        var firstSpace = rest.IndexOf(' ');
-        if (firstSpace > 0)
-        {
-            var firstToken = rest.Substring(0, firstSpace);
-            if (firstToken.Length >= 8 && firstToken.All(char.IsDigit))
-            {
-                var sinBarra = rest.Substring(firstSpace + 1).Trim();
-                if (!string.IsNullOrWhiteSpace(sinBarra) && !queries.Contains(sinBarra))
-                    queries.Add(sinBarra);
-            }
-        }
-
+        var queries = ImageSearchQueryHelper.ObtenerQueriesFallbackParaTextoLibre(texto);
         foreach (var q in queries)
         {
+            if (string.IsNullOrWhiteSpace(q))
+                continue;
             try
             {
                 var urls = await IntegrationImageSearch.SearchImageUrlsAsync(q, _token!);
@@ -1103,28 +1176,52 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
             }
             catch
             {
-                // Siguiente variante.
+                // Siguiente variante sin propagar error.
             }
         }
         return Array.Empty<string>();
     }
 
     /// <summary>
-    /// Busca de nuevo en la API de integración con el texto editado en el modal (_busquedaWeb.TextoBusqueda).
+    /// "Buscar de nuevo" en el modal: envía a la API DRR exactamente el texto del campo (código de barra y descripción).
+    /// Se usa el valor enlazado <see cref="BusquedaWebState.TextoBusqueda"/> (actualizado por @bind en cada tecla); solo si está vacío se lee del DOM.
+    /// Si no hay resultados, se prueban fallbacks en <see cref="BuscarUrlsIntegracionConFallbackTextoAsync"/>.
     /// </summary>
     private async Task BuscarDeNuevoIntegrationAsync()
     {
         if (_busquedaWeb == null || !_busquedaWeb.PermiteEditarQuery || string.IsNullOrWhiteSpace(_token)) return;
-        if (_busquedaWeb.Loading) return; // Evitar doble clic / segunda búsqueda superpuesta
+        if (_busquedaWeb.Loading) return;
+
+        // Usar SIEMPRE el valor del modelo (TextoBusqueda): @bind lo actualiza en cada tecla, así respetamos lo que el usuario escribió.
+        // Solo si está vacío, leer del DOM por si el binding no se aplicó.
         var texto = (_busquedaWeb.TextoBusqueda ?? "").Trim();
         if (string.IsNullOrWhiteSpace(texto))
         {
-            _busquedaWeb.Error = "Escribí un texto de búsqueda (código de barra y/o descripción).";
+            try
+            {
+                var fromDom = await JS.InvokeAsync<string>("__getBusquedaWebQueryInputValue");
+                texto = (fromDom ?? "").Trim();
+            }
+            catch { }
+        }
+        if (_busquedaWeb != null)
+            _busquedaWeb.TextoBusqueda = texto;
+
+        if (string.IsNullOrWhiteSpace(texto))
+        {
+            _busquedaWeb!.Error = "Escribí un texto de búsqueda (código de barra y descripción).";
             await InvokeAsync(StateHasChanged);
             return;
         }
 
-        var state = _busquedaWeb; // Referencia local por si se cierra el modal durante el await
+        try
+        {
+            await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarDeNuevo TEXTO_ENVIADO",
+                JsonSerializer.Serialize(new { longitud = texto.Length, textoCompleto = texto, mensaje = "Este es el texto exacto que se envía a la API." }));
+        }
+        catch { }
+
+        var state = _busquedaWeb;
         state.Loading = true;
         state.Error = null;
         state.Urls = null;
@@ -1133,7 +1230,7 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
 
         try
         {
-            // Intentar con el texto editado; si falla, probar solo la parte descripción (quitar posible código de barra al inicio).
+            // Primera petición: exactamente el texto del input (código de barra + descripción). Si falla, fallback solo descripción.
             var urls = await BuscarUrlsIntegracionConFallbackTextoAsync(texto);
             if (state == _busquedaWeb && _busquedaWeb != null)
             {
@@ -1162,13 +1259,13 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
 
     /// <summary>
     /// Obtiene URLs de imagen para un producto usando la API de integración.
-    /// Siempre busca con código de barra + descripción (una sola query).
+    /// Regla: con código de barra → "barra + descripción"; sin barra → solo descripción.
     /// </summary>
     private async Task<IReadOnlyList<string>> BuscarUrlsIntegracionAsync(ProductoConImagenDto p)
     {
-        var desc = (p.DescripcionLarga ?? "").Trim();
         var barra = (p.CodigoBarra ?? "").Trim();
-        var query = string.IsNullOrWhiteSpace(barra) ? desc : $"{barra} {desc}";
+        var desc = (p.DescripcionLarga ?? "").Trim();
+        var query = ImageSearchQueryHelper.ConstruirQuery(barra, desc);
         if (string.IsNullOrWhiteSpace(query))
             return Array.Empty<string>();
 
@@ -1566,10 +1663,57 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
                     ImagenEspecified = false,
                     Imagen = "null",
                     ObservacionEspecified = true,
+                    // Siempre normalizamos el RTF antes de enviarlo a la API para que WinForms lo interprete igual.
                     Observacion = NormalizeRtfForApi(item.Observaciones)
                 };
+                try
+                {
+                    // Log detallado por ítem para diagnosticar por qué algunas observaciones no se guardan.
+                    await JS.InvokeVoidAsync("__logAsignarImagenes", "PATCH Observaciones MASIVO ANTES", JsonSerializer.Serialize(new
+                    {
+                        indice = i + 1,
+                        total = pendientesObservaciones.Count,
+                        request.CodigoID,
+                        rtfLen = request.Observacion?.Length ?? 0
+                    }));
+                }
+                catch { }
+
                 var result = await ProductoPatch.PatchProductoAsync(request, _token);
-                if (result.Success) { item.ObservacionesPendienteGuardar = false; okObs++; } else failObs++;
+                if (result.Success)
+                {
+                    item.ObservacionesPendienteGuardar = false;
+                    okObs++;
+                    try
+                    {
+                        await JS.InvokeVoidAsync("__logAsignarImagenes", "PATCH Observaciones MASIVO OK", JsonSerializer.Serialize(new
+                        {
+                            indice = i + 1,
+                            total = pendientesObservaciones.Count,
+                            request.CodigoID,
+                            statusCode = result.StatusCode
+                        }));
+                    }
+                    catch { }
+                }
+                else
+                {
+                    failObs++;
+                    try
+                    {
+                        await JS.InvokeVoidAsync("__logAsignarImagenes", "PATCH Observaciones MASIVO ERROR", JsonSerializer.Serialize(new
+                        {
+                            indice = i + 1,
+                            total = pendientesObservaciones.Count,
+                            request.CodigoID,
+                            statusCode = result.StatusCode,
+                            error = result.ErrorMessage,
+                            body = result.ResponseBody
+                        }));
+                    }
+                    catch { }
+                }
+
                 await InvokeAsync(StateHasChanged);
             }
             var msg = new List<string>();
@@ -1687,9 +1831,9 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
     }
 
     /// <summary>
-    /// Para cada producto seleccionado, busca la primera imagen usando la API de integración,
-    /// la descarga como data URL y la asigna en memoria (ImagenPendienteGuardar = true).
-    /// Luego el usuario puede usar «Guardar cambios» para persistir todas en la API.
+    /// Asignación masiva de imágenes: para cada producto seleccionado busca en la API DRR (código de barra + descripción,
+    /// o solo descripción si no tiene código de barra). Si no encuentra imágenes, reintenta con descripción abreviada (8, 5, 3, 2 palabras).
+    /// Descarga la primera imagen válida y la asigna en memoria (ImagenPendienteGuardar); el usuario guarda con «Guardar cambios».
     /// </summary>
     private async Task BuscarImagenMasivoSerpApiAsync()
     {
@@ -1765,9 +1909,25 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
                     continue;
                 }
 
-                var desc = p.DescripcionLarga ?? "";
-                var barra = p.CodigoBarra ?? "";
-                var query = string.IsNullOrWhiteSpace(barra) ? desc.Trim() : $"{barra.Trim()} {desc.Trim()}";
+                var desc = (p.DescripcionLarga ?? "").Trim();
+                var barra = (p.CodigoBarra ?? "").Trim();
+                // Query para API DRR: siempre código de barra + descripción (o solo descripción si no hay barra).
+                var queryPrimera = ImageSearchQueryHelper.ConstruirQuery(barra, desc);
+                try
+                {
+                    await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration QUERY_POR_PRODUCTO",
+                        JsonSerializer.Serialize(new { productId = p.ProductoID, codigo = p.Codigo, barra, descCorta = desc.Length > 50 ? desc.Substring(0, 50) + "…" : desc, queryEnviadaALaApi = queryPrimera }));
+                }
+                catch { }
+                // Variantes: descripción completa y luego abreviada (8, 5, 3, 2 palabras) por si la API no responde a la completa.
+                var variantesDesc = ImageSearchQueryHelper.ObtenerVariantesDescripcion(desc);
+                if (variantesDesc.Count == 0)
+                {
+                    idsSinImagen.Add(new { productId = p.ProductoID, codigo = p.Codigo, motivo = "descripción vacía" });
+                    _bulkSearchingCurrent = i + 1;
+                    await InvokeAsync(StateHasChanged);
+                    continue;
+                }
 
                 try
                 {
@@ -1778,61 +1938,89 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
                             total,
                             productId = p.ProductoID,
                             codigo = p.Codigo,
+                            variantesDescripcion = variantesDesc.Count,
+                            tieneBarra = !string.IsNullOrWhiteSpace(barra),
                             descCorta = desc.Length > 40 ? desc.Substring(0, 40) + "…" : desc
                         }));
                 }
                 catch { }
 
-                // Misma lógica que en Grid: probar barra+desc, luego solo desc, luego solo barra (fallback).
-                IReadOnlyList<string> urls;
-                try
+                string? dataUrlAsignada = null;
+                int urlIndexUsada = -1;
+                IReadOnlyList<string>? urlsFinales = null;
+                var intentoVariante = 0;
+
+                foreach (var descVariante in variantesDesc)
                 {
-                    urls = await BuscarUrlsIntegracionConFallbackAsync(query, barra.Trim(), desc.Trim());
-                }
-                catch (Exception exApi)
-                {
+                    intentoVariante++;
+                    if (intentoVariante > 1)
+                    {
+                        try
+                        {
+                            await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration REINTENTO_DESC_ACORTADA",
+                                JsonSerializer.Serialize(new
+                                {
+                                    indice = i + 1,
+                                    total,
+                                    productId = p.ProductoID,
+                                    codigo = p.Codigo,
+                                    intento = intentoVariante,
+                                    descVariante = descVariante.Length > 60 ? descVariante.Substring(0, 60) + "…" : descVariante,
+                                    mensaje = "Reintentando búsqueda con descripción acortada para obtener otras URLs."
+                                }));
+                        }
+                        catch { }
+                    }
+
+                    IReadOnlyList<string> urls;
                     try
                     {
-                        await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration ERROR_API",
-                            JsonSerializer.Serialize(new { indice = i + 1, total, p.ProductoID, p.Codigo, query, error = exApi.Message }));
+                        urls = await BuscarUrlsIntegracionPorProductoAsync(barra, descVariante);
                     }
-                    catch { }
-                    idsSinImagen.Add(new { productId = p.ProductoID, codigo = p.Codigo, motivo = "ERROR_API: " + exApi.Message });
-                    _bulkSearchingCurrent = i + 1;
-                    await InvokeAsync(StateHasChanged);
-                    continue;
-                }
+                    catch (Exception exApi)
+                    {
+                        try
+                        {
+                            await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration ERROR_API",
+                                JsonSerializer.Serialize(new { indice = i + 1, total, p.ProductoID, p.Codigo, descVariante = descVariante.Length > 40 ? descVariante.Substring(0, 40) + "…" : descVariante, error = exApi.Message }));
+                        }
+                        catch { }
+                        continue; // Siguiente variante.
+                    }
 
-                if (urls == null || urls.Count == 0)
-                {
+                    if (urls == null || urls.Count == 0)
+                    {
+                        try
+                        {
+                            await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration SIN_URLS",
+                                JsonSerializer.Serialize(new { indice = i + 1, total, p.ProductoID, p.Codigo, descVariante = descVariante.Length > 40 ? descVariante.Substring(0, 40) + "…" : descVariante }));
+                        }
+                        catch { }
+                        continue;
+                    }
+
                     try
                     {
-                        await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration SIN_URLS",
-                            JsonSerializer.Serialize(new { indice = i + 1, total, p.ProductoID, p.Codigo, query }));
+                        await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration URLs_OBTENIDAS",
+                            JsonSerializer.Serialize(new { indice = i + 1, total, p.ProductoID, p.Codigo, urlsCount = urls.Count, intentoVariante, primeraUrl = urls[0] }));
                     }
                     catch { }
-                    idsSinImagen.Add(new { productId = p.ProductoID, codigo = p.Codigo, motivo = "SIN_URLS" });
-                    _bulkSearchingCurrent = i + 1;
-                    await InvokeAsync(StateHasChanged);
-                    continue;
+
+                    _urlsBusquedaCachePorProducto[p.ProductoID] = new List<string>(urls);
+                    var (dataUrl, urlIndex) = await IntentarDescargarAlgunaImagenDeUrlsAsync(p.ProductoID, p.Codigo, urls, i + 1, total);
+
+                    if (!string.IsNullOrWhiteSpace(dataUrl))
+                    {
+                        dataUrlAsignada = dataUrl;
+                        urlIndexUsada = urlIndex;
+                        urlsFinales = urls;
+                        break; // Éxito con esta variante.
+                    }
                 }
 
-                try
+                if (!string.IsNullOrWhiteSpace(dataUrlAsignada) && urlsFinales != null)
                 {
-                    await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration URLs_OBTENIDAS",
-                        JsonSerializer.Serialize(new { indice = i + 1, total, p.ProductoID, p.Codigo, urlsCount = urls.Count, primeraUrl = urls[0] }));
-                }
-                catch { }
-
-                // Guardar en caché para que al hacer clic en "Buscar imagen (API)" en lista se muestren estas mismas imágenes.
-                _urlsBusquedaCachePorProducto[p.ProductoID] = new List<string>(urls);
-
-                // SOLID: delegamos la descarga en IntentarDescargarAlgunaImagenDeUrlsAsync; prueba hasta MaxUrlsToTryPerProductoMasivo URLs hasta lograr una.
-                var (dataUrl, urlIndexUsed) = await IntentarDescargarAlgunaImagenDeUrlsAsync(p.ProductoID, p.Codigo, urls, i + 1, total);
-
-                if (!string.IsNullOrWhiteSpace(dataUrl))
-                {
-                    p.ImagenUrl = dataUrl;
+                    p.ImagenUrl = dataUrlAsignada;
                     p.ImagenCargada = true;
                     p.ImagenPendienteGuardar = true;
                     okCount++;
@@ -1846,16 +2034,17 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
                                 total,
                                 productId = p.ProductoID,
                                 codigo = p.Codigo,
-                                urlIndexUsada = urlIndexUsed,
-                                urlsDisponibles = urls.Count,
-                                mensaje = $"Imagen asignada correctamente (URL #{urlIndexUsed} de {urls.Count})."
+                                urlIndexUsada = urlIndexUsada,
+                                urlsDisponibles = urlsFinales.Count,
+                                intentoVariante,
+                                mensaje = $"Imagen asignada (URL #{urlIndexUsada} de {urlsFinales.Count}, variante #{intentoVariante})."
                             }));
                     }
                     catch { }
                 }
                 else
                 {
-                    var motivoFalla = $"No se pudo descargar ninguna de las {Math.Min(MaxUrlsToTryPerProductoMasivo, urls.Count)} URL(s) probadas.";
+                    var motivoFalla = $"Se probaron {variantesDesc.Count} variante(s) de descripción y ninguna permitió descargar una imagen.";
                     idsSinImagen.Add(new { productId = p.ProductoID, codigo = p.Codigo, motivo = motivoFalla });
                     try
                     {
@@ -1866,9 +2055,7 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
                                 total,
                                 p.ProductoID,
                                 p.Codigo,
-                                query,
-                                urlsCount = urls.Count,
-                                urlsIntentadas = Math.Min(MaxUrlsToTryPerProductoMasivo, urls.Count),
+                                variantesProbadas = variantesDesc.Count,
                                 motivo = motivoFalla
                             }));
                     }

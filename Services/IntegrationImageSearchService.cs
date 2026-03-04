@@ -31,12 +31,32 @@ public sealed class IntegrationImageSearchService : IIntegrationImageSearchServi
         if (string.IsNullOrWhiteSpace(query) || string.IsNullOrWhiteSpace(token))
             return Array.Empty<string>();
 
+        // Enviamos a la API exactamente el query recibido (solo trim); ej. "7791337601024 YOGURISIMO".
         var q = query.Trim();
         var bearer = token.Trim();
 
-        var url = $"{ApiUrl}?query={Uri.EscapeDataString(q)}";
+        // URL con query codificado: código de barra + descripción (ej. query=7791337601024%20YOGURISIMO).
+        // Usamos la URL como string en el request para que no se pierda nada al parsear a Uri.
+        var queryEncoded = Uri.EscapeDataString(q);
+        var urlString = $"{ApiUrl}?query={queryEncoded}";
 
-        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        // Log del parámetro que se envía (siempre código de barra + descripción en lista/masivo y modal).
+        try
+        {
+            var parametroPayload = new
+            {
+                tag = "IntegrationImageSearch PARAMETRO_ENVIADO",
+                parametroQuery = q,
+                longitud = q.Length,
+                urlCompleta = urlString,
+                mensaje = "Query enviado a la API (código de barra y descripción)."
+            };
+            await _jsRuntime.InvokeVoidAsync("__logAsignarImagenes", "IntegrationImageSearch PARAMETRO_ENVIADO", JsonSerializer.Serialize(parametroPayload, JsonOptions));
+        }
+        catch { }
+
+        // Request con la URL en string para que la petición use exactamente esta URL (evita truncado en Uri).
+        using var req = new HttpRequestMessage(HttpMethod.Get, urlString);
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer);
 
         using var resp = await _httpClient.SendAsync(req, cancellationToken);
@@ -49,7 +69,7 @@ public sealed class IntegrationImageSearchService : IIntegrationImageSearchServi
             var payload = new
             {
                 tag = "IntegrationImageSearch RESPONSE",
-                requestUrl = url,
+                requestUrl = urlString,
                 statusCode = (int)resp.StatusCode,
                 status = resp.StatusCode.ToString(),
                 contentLength = json.Length,

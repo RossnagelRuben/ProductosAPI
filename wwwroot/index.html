@@ -102,6 +102,17 @@
             }
         };
 
+        // Devuelve el valor actual del input de búsqueda del modal (código de barra + descripción) para que "Buscar de nuevo" use exactamente lo que ve el usuario.
+        window.__getBusquedaWebQueryInputValue = function() {
+            var el = document.getElementById('busqueda-web-query');
+            return (el && el.value) ? String(el.value).trim() : '';
+        };
+        // Fuerza el valor del input al abrir/actualizar el modal para que no se trunque por el binding.
+        window.__setBusquedaWebQueryInputValue = function(text) {
+            var el = document.getElementById('busqueda-web-query');
+            if (el) { el.value = (text == null) ? '' : String(text); }
+        };
+
         // Descarga una imagen por URL y devuelve data URL (evita CORS/HttpClient en Blazor WASM)
         window.__fetchImageAsDataUrl = function(url) {
             return fetch(url, { mode: 'cors', credentials: 'omit' })

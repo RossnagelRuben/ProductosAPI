@@ -97,7 +97,8 @@ public sealed class ProductoQueryService : IProductoQueryService
             var codigo = el.TryGetProperty("codigoFabrica", out var cf) ? cf.GetString() : null;
             if (string.IsNullOrWhiteSpace(codigo))
                 codigo = codigoID.ToString();
-            var descripcionLarga = el.TryGetProperty("descripcionLarga", out var dl) ? dl.GetString() : null;
+            // Usar la descripción más larga disponible (evita que descripcionLarga truncada provoque búsquedas como "YOG" en vez del producto).
+            var descripcionLarga = GetDescripcionMasLarga(el);
             string? codigoBarra = GetCodigoBarraFromElement(el);
             string? presentacion = "Unidad";
             if (el.TryGetProperty("presentaciones", out var pres) && pres.ValueKind == JsonValueKind.Array && pres.GetArrayLength() > 0)
@@ -127,6 +128,48 @@ public sealed class ProductoQueryService : IProductoQueryService
         {
             return null;
         }
+    }
+
+    /// <summary>Obtiene la descripción más larga disponible en el JSON (raíz y objetos anidados) para que la búsqueda use siempre código de barra + descripción completa.</summary>
+    private static string? GetDescripcionMasLarga(JsonElement el)
+    {
+        string? mejor = null;
+        ConsiderarTodasLasCadenasComoDescripcion(el, ref mejor);
+        if (el.TryGetProperty("producto", out var prod) && prod.ValueKind == JsonValueKind.Object)
+            ConsiderarTodasLasCadenasComoDescripcion(prod, ref mejor);
+        if (el.TryGetProperty("product", out var product) && product.ValueKind == JsonValueKind.Object)
+            ConsiderarTodasLasCadenasComoDescripcion(product, ref mejor);
+        if (el.TryGetProperty("presentaciones", out var pres) && pres.ValueKind == JsonValueKind.Array && pres.GetArrayLength() > 0)
+        {
+            foreach (var item in pres.EnumerateArray())
+                if (item.ValueKind == JsonValueKind.Object)
+                    ConsiderarTodasLasCadenasComoDescripcion(item, ref mejor);
+        }
+        return mejor;
+    }
+
+    /// <summary>Recorre todas las propiedades del elemento y toma la cadena más larga que parezca descripción (no URL, no base64). Prioriza claves con "descripcion" o "nombre".</summary>
+    private static void ConsiderarTodasLasCadenasComoDescripcion(JsonElement el, ref string? mejor)
+    {
+        string? mejorDeDescripcion = null;
+        string? mejorCualquiera = null;
+        foreach (var prop in el.EnumerateObject())
+        {
+            if (prop.Value.ValueKind != JsonValueKind.String) continue;
+            var s = prop.Value.GetString();
+            if (string.IsNullOrWhiteSpace(s) || s.Length < 4) continue;
+            if (s.Length > 2000) continue;
+            if (s.StartsWith("http", StringComparison.OrdinalIgnoreCase) || s.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) continue;
+            var key = prop.Name;
+            var esDescripcionONombre = key.Contains("descripcion", StringComparison.OrdinalIgnoreCase) || key.Contains("nombre", StringComparison.OrdinalIgnoreCase);
+            if (esDescripcionONombre && (mejorDeDescripcion == null || s.Length > mejorDeDescripcion.Length))
+                mejorDeDescripcion = s;
+            if (mejorCualquiera == null || s.Length > mejorCualquiera.Length)
+                mejorCualquiera = s;
+        }
+        var candidato = mejorDeDescripcion ?? mejorCualquiera;
+        if (candidato != null && (mejor == null || candidato.Length > mejor.Length))
+            mejor = candidato;
     }
 
     /// <summary>Obtiene el código de rubro del producto desde el JSON (rubroCodigo, RubroCodigo, rubro, familia, o desde objeto anidado producto/product).</summary>
