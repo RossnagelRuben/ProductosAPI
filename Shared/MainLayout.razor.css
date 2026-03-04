@@ -11,6 +11,8 @@ main {
 
 .sidebar {
     background-image: linear-gradient(180deg, rgb(5, 39, 103) 0%, #3a0647 70%);
+    display: flex;
+    flex-direction: column;
 }
 
 .top-row {
@@ -74,9 +76,9 @@ main {
         transition: width 0.2s ease;
     }
 
-    /* Sidebar colapsado en PC: se reduce el ancho pero mantiene la barra superior (logo + botón). */
+    /* Sidebar colapsado: ancho mínimo; el NavMenu muestra solo la barra con el botón. */
     .sidebar.sidebar-collapsed {
-        width: 72px;
+        width: 56px;
     }
 
     .top-row {

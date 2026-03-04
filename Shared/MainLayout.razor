@@ -7,7 +7,7 @@
     @if (isAuthenticated)
     {
         <div class="@GetSidebarCssClass()">
-            <NavMenu OnCollapsedChanged="OnSidebarCollapsedChanged" />
+            <NavMenu Collapsed="_sidebarCollapsed" OnCollapsedChanged="OnSidebarCollapsedChanged" />
         </div>
     }
 

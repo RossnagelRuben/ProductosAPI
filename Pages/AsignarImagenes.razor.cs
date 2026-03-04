@@ -1736,13 +1736,16 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
 
     /// <summary>
     /// Cantidad máxima de URLs a intentar descargar por producto en búsqueda masiva.
-    /// Si la primera falla (CORS, red, etc.), se prueba la siguiente hasta asignar alguna imagen por producto.
+    /// Actualmente solo se intenta la primera URL devuelta por la API para respetar el orden de resultados,
+    /// pero se deja este valor para posibles ajustes futuros.
     /// </summary>
     private const int MaxUrlsToTryPerProductoMasivo = 20;
 
     /// <summary>
     /// Intenta descargar una imagen desde una lista de URLs (SOLID: responsabilidad única).
-    /// Prueba en orden hasta que una descarga correctamente o se agotan los intentos.
+    /// Requisito de negocio: en modo lista + búsqueda masiva, se debe usar SIEMPRE la primera imagen de la
+    /// respuesta de la API (posición 0). Por eso acá solo se intenta descargar la primera URL; si falla,
+    /// no se prueban alternativas para respetar exactamente el orden devuelto por la API.
     /// </summary>
     /// <param name="productId">ID del producto (para logs).</param>
     /// <param name="codigo">Código del producto (para logs).</param>
@@ -1757,10 +1760,18 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
         int indice,
         int total)
     {
-        var toTry = Math.Min(MaxUrlsToTryPerProductoMasivo, urls.Count);
+        // Sin URLs, no hay nada que descargar.
+        if (urls == null || urls.Count == 0)
+            return (null, -1);
+
+        // Regla de negocio: solo se intenta la PRIMERA URL de la respuesta.
+        var imageUrl = urls[0];
+        if (string.IsNullOrWhiteSpace(imageUrl))
+            return (null, -1);
+
         try
         {
-            await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration INTENTO_DESCARGA",
+            await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration INTENTO_PRIMERA_URL",
                 JsonSerializer.Serialize(new
                 {
                     indice,
@@ -1768,65 +1779,60 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
                     productId,
                     codigo,
                     urlsDisponibles = urls.Count,
-                    urlsAProbar = toTry,
-                    mensaje = $"Se intentará descargar hasta {toTry} imagen(es) hasta asignar una al producto."
+                    urlIndex = 1,
+                    mensaje = "Se intentará descargar solo la primera URL devuelta por la API para respetar el orden de resultados."
                 }));
         }
         catch { }
 
-        for (int u = 0; u < toTry; u++)
+        try
         {
-            var imageUrl = urls[u];
-            if (string.IsNullOrWhiteSpace(imageUrl)) continue;
-
-            try
-            {
-                var dataUrl = await GoogleImageSearch.FetchImageAsDataUrlAsync(imageUrl);
-                if (!string.IsNullOrWhiteSpace(dataUrl) && dataUrl.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
-                {
-                    try
-                    {
-                        await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration FETCH_OK",
-                            JsonSerializer.Serialize(new { indice, total, productId, codigo, urlIndex = u + 1, totalUrlsProbadas = u + 1 }));
-                    }
-                    catch { }
-                    return (dataUrl, u + 1);
-                }
-            }
-            catch (Exception exFetch)
+            var dataUrl = await GoogleImageSearch.FetchImageAsDataUrlAsync(imageUrl);
+            if (!string.IsNullOrWhiteSpace(dataUrl) && dataUrl.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
             {
                 try
                 {
-                    await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration ERROR_FETCH",
-                        JsonSerializer.Serialize(new
-                        {
-                            indice,
-                            total,
-                            productId,
-                            codigo,
-                            urlIndex = u + 1,
-                            error = exFetch.Message,
-                            imageUrlPreview = imageUrl.Length > 100 ? imageUrl.Substring(0, 100) + "…" : imageUrl
-                        }));
+                    await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration FETCH_OK_PRIMERA_URL",
+                        JsonSerializer.Serialize(new { indice, total, productId, codigo, urlIndex = 1 }));
                 }
                 catch { }
+                return (dataUrl, 1);
             }
+        }
+        catch (Exception exFetch)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration ERROR_FETCH_PRIMERA_URL",
+                    JsonSerializer.Serialize(new
+                    {
+                        indice,
+                        total,
+                        productId,
+                        codigo,
+                        urlIndex = 1,
+                        error = exFetch.Message,
+                        imageUrlPreview = imageUrl.Length > 100 ? imageUrl.Substring(0, 100) + "…" : imageUrl
+                    }));
+            }
+            catch { }
         }
 
         try
         {
-            await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration FALLA_TODAS_URLS",
+            await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration FALLA_PRIMERA_URL",
                 JsonSerializer.Serialize(new
                 {
                     indice,
                     total,
                     productId,
                     codigo,
-                    urlsIntentadas = toTry,
-                    mensaje = $"No se pudo descargar ninguna de las {toTry} URL(s) probadas para este producto."
+                    urlsDisponibles = urls.Count,
+                    mensaje = "No se pudo descargar la primera URL; no se probarán alternativas para respetar el orden de la API."
                 }));
         }
         catch { }
+
         return (null, -1);
     }
 
@@ -2015,6 +2021,66 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
                         urlIndexUsada = urlIndex;
                         urlsFinales = urls;
                         break; // Éxito con esta variante.
+                    }
+                }
+
+                // Fallback extra: si después de probar todas las variantes (completa, 8, 5, 3, 2 palabras)
+                // no se pudo asignar ninguna imagen, intentar una última búsqueda con descripción mínima (1 palabra).
+                if (string.IsNullOrWhiteSpace(dataUrlAsignada) && !string.IsNullOrWhiteSpace(desc))
+                {
+                    var palabrasDesc = desc.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+                    var descMinima = palabrasDesc.Length > 0 ? palabrasDesc[0].Trim() : string.Empty;
+                    if (!string.IsNullOrWhiteSpace(descMinima))
+                    {
+                        var intentoFallback = variantesDesc.Count + 1;
+                        try
+                        {
+                            await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration REINTENTO_DESC_MINIMA",
+                                JsonSerializer.Serialize(new
+                                {
+                                    indice = i + 1,
+                                    total,
+                                    productId = p.ProductoID,
+                                    codigo = p.Codigo,
+                                    intento = intentoFallback,
+                                    descMinima,
+                                    mensaje = "Reintentando búsqueda con descripción mínima (1 palabra) para intentar obtener al menos una imagen."
+                                }));
+                        }
+                        catch { }
+
+                        try
+                        {
+                            var urlsFallback = await BuscarUrlsIntegracionPorProductoAsync(barra, descMinima);
+                            if (urlsFallback != null && urlsFallback.Count > 0)
+                            {
+                                try
+                                {
+                                    await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration URLs_OBTENIDAS_DESC_MINIMA",
+                                        JsonSerializer.Serialize(new { indice = i + 1, total, p.ProductoID, p.Codigo, urlsCount = urlsFallback.Count, intento = intentoFallback, primeraUrl = urlsFallback[0] }));
+                                }
+                                catch { }
+
+                                _urlsBusquedaCachePorProducto[p.ProductoID] = new List<string>(urlsFallback);
+                                var (dataUrlFallback, urlIndexFallback) = await IntentarDescargarAlgunaImagenDeUrlsAsync(p.ProductoID, p.Codigo, urlsFallback, i + 1, total);
+                                if (!string.IsNullOrWhiteSpace(dataUrlFallback))
+                                {
+                                    dataUrlAsignada = dataUrlFallback;
+                                    urlIndexUsada = urlIndexFallback;
+                                    urlsFinales = urlsFallback;
+                                    intentoVariante = intentoFallback;
+                                }
+                            }
+                        }
+                        catch (Exception exApiMin)
+                        {
+                            try
+                            {
+                                await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration ERROR_API_DESC_MINIMA",
+                                    JsonSerializer.Serialize(new { indice = i + 1, total, p.ProductoID, p.Codigo, descMinima, error = exApiMin.Message }));
+                            }
+                            catch { }
+                        }
                     }
                 }
 

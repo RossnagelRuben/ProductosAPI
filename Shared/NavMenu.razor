@@ -1,13 +1,13 @@
-<div class="top-row ps-3 navbar navbar-dark">
+<div class="top-row ps-3 navbar navbar-dark @(Collapsed ? "top-row-collapsed" : "")">
     <div class="container-fluid">
         <a class="navbar-brand" href="">Alma NET APIs</a>
-        <button class="navbar-toggler nav-expander" type="button" aria-label="Alternar navegación" @onclick="ToggleNavMenu">
-            <span class="nav-toggle-icon">@(_isCollapsed ? "☰" : "⮜")</span>
+        <button type="button" class="nav-toggle-btn" aria-label="Alternar menú" @onclick="ToggleMenu">
+            <span class="nav-toggle-icon">@(Collapsed ? "☰" : "⮜")</span>
         </button>
     </div>
 </div>
 
-<div class="@NavMenuCssClass nav-scrollable">
+<div class="nav-scrollable @(Collapsed ? "collapse" : "")">
     <nav class="flex-column">
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="" Match="NavLinkMatch.All" @onclick="CollapseNav">
@@ -54,25 +54,18 @@
 </div>
 
 @code {
+    [Parameter] public bool Collapsed { get; set; }
     [Parameter] public EventCallback<bool> OnCollapsedChanged { get; set; }
 
-    // Menú visible por defecto; se puede ocultar con el botón.
-    private bool collapseNavMenu = false;
-    private bool _isCollapsed => collapseNavMenu;
-
-    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
-
-    private async Task ToggleNavMenu()
+    private async Task ToggleMenu()
     {
-        collapseNavMenu = !collapseNavMenu;
         if (OnCollapsedChanged.HasDelegate)
-            await OnCollapsedChanged.InvokeAsync(collapseNavMenu);
+            await OnCollapsedChanged.InvokeAsync(!Collapsed);
     }
 
     private async Task CollapseNav()
     {
-        collapseNavMenu = true;
         if (OnCollapsedChanged.HasDelegate)
-            await OnCollapsedChanged.InvokeAsync(collapseNavMenu);
+            await OnCollapsedChanged.InvokeAsync(true);
     }
 }
