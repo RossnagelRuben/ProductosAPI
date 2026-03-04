@@ -25,6 +25,12 @@ public sealed class BusquedaWebState
     /// <summary>Etiqueta del origen de la búsqueda para el mensaje del modal (ej.: "Google", "SerpAPI").</summary>
     public string? SourceLabel { get; set; }
 
+    /// <summary>Texto de búsqueda enviado a la API (código de barra + descripción). Editable en el modal para buscar de nuevo.</summary>
+    public string? TextoBusqueda { get; set; }
+
+    /// <summary>Si true, el modal muestra el campo editable y el botón "Buscar de nuevo" (solo para búsqueda con API de integración).</summary>
+    public bool PermiteEditarQuery { get; set; }
+
     public static BusquedaWebState Vacío => new() { ProductoID = 0 };
 
     public bool EsParaProducto(int productId) => ProductoID != 0 && ProductoID == productId;

@@ -4,6 +4,7 @@ using BlazorApp_ProductosAPI.Models;
 using BlazorApp_ProductosAPI.Models.AsignarImagenes;
 using BlazorApp_ProductosAPI.Services;
 using System.Text.Json;
+using System.Text;
 using BlazorApp_ProductosAPI.Services.AsignarImagenes;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
@@ -20,10 +21,12 @@ public partial class AsignarImagenes
     [Inject] private IGeminiService GeminiService { get; set; } = null!;
     [Inject] private ILocalStorageService LocalStorage { get; set; } = null!;
     [Inject] private IGoogleImageSearchService GoogleImageSearch { get; set; } = null!;
-    [Inject] private ISerpApiImageSearchService SerpApiImageSearch { get; set; } = null!;
+    [Inject] private ISerpApiImageSearchService SerpApiImageSearch { get; set; } = null!; // legado SerpAPI
     /// <summary>Servicio de patch de producto para guardar imagen y/u observaciones en la API.</summary>
     [Inject] private Services.AsignarImagenes.IProductoPatchService ProductoPatch { get; set; } = null!;
     [Inject] private ISerpApiOrganicSearchService SerpApiOrganicSearch { get; set; } = null!;
+    /// <summary>Servicio de búsqueda de imágenes usando la API propia /Integration/ImageSearch.</summary>
+    [Inject] private IIntegrationImageSearchService IntegrationImageSearch { get; set; } = null!;
 
     private const string PlaceholderSvg = "data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22 viewBox=%220 0 200 200%22%3E%3Crect fill=%22%23e9ecef%22 width=%22200%22 height=%22200%22/%3E%3Ctext x=%22100%22 y=%22105%22 text-anchor=%22middle%22 fill=%22%23999%22 font-size=%2214%22%3ESin imagen%3C/text%3E%3C/svg%3E";
 
@@ -80,7 +83,39 @@ public partial class AsignarImagenes
     private string? _toastMessage;
     private bool _toastIsError;
 
+    /// <summary>Vista actual: "Grid" (tarjetas) o "Lista" (tabla con selección y acciones masivas).</summary>
+    private string _vistaModo = "Grid";
+    /// <summary>IDs de productos seleccionados en la vista lista (para búsqueda/generación masiva).</summary>
+    private HashSet<int> _seleccionados = new();
+    /// <summary>Búsqueda masiva SerpAPI en curso.</summary>
+    private bool _bulkSearching;
+    /// <summary>Índice actual (1-based) y total al buscar imágenes masivamente. Ej.: 5 de 25.</summary>
+    private int _bulkSearchingCurrent;
+    private int _bulkSearchingTotal;
+    /// <summary>Generación masiva con Gemini en curso.</summary>
+    private bool _bulkGenerating;
+    /// <summary>Índice actual (1-based) y total al generar imágenes masivamente.</summary>
+    private int _bulkGeneratingCurrent;
+    private int _bulkGeneratingTotal;
+    /// <summary>Generación masiva de observaciones en curso.</summary>
+    private bool _bulkGeneratingObservaciones;
+    private int _bulkGeneratingObservacionesCurrent;
+    private int _bulkGeneratingObservacionesTotal;
+    /// <summary>Guardado masivo de cambios pendientes en curso (PATCH uno a uno).</summary>
+    private bool _guardandoTodos;
+    /// <summary>Modal de solo vista: imagen en grande al hacer clic en miniatura en la lista (sin edición).</summary>
+    private string? _previewSoloImagenUrl;
+    private string? _previewSoloImagenDesc;
+
+    /// <summary>Últimas URLs de búsqueda por producto (API integración). Al abrir "Buscar imagen (API)" de nuevo, se muestran desde acá si existen.</summary>
+    private readonly Dictionary<int, List<string>> _urlsBusquedaCachePorProducto = new();
+
     private bool _tieneImagenEnModal => !string.IsNullOrWhiteSpace(_imagenModalDataUrl) && !_imagenModalDataUrl.StartsWith("data:image/svg", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Cantidad de productos con imagen pendiente de guardar en la API (solo en memoria).</summary>
+    private int CantidadPendienteGuardar => _items.Count(p => p.ImagenPendienteGuardar);
+    /// <summary>Cantidad de productos con observaciones pendientes de guardar.</summary>
+    private int CantidadObservacionesPendienteGuardar => _items.Count(p => p.ObservacionesPendienteGuardar);
 
     /// <summary>True = filtros colapsados después de buscar (solo se muestra el botón para expandir).</summary>
     private bool _filtersCollapsed;
@@ -161,6 +196,7 @@ public partial class AsignarImagenes
         try
         {
             _busquedaId++;
+            _seleccionados.Clear(); // Nueva búsqueda: limpia selección en vista lista (SOLID: estado coherente).
             bool tieneFiltroImagenOCodigo = _filter.FiltroImagen.HasValue || _filter.FiltroCodigoBarra.HasValue;
 
             if (tieneFiltroImagenOCodigo)
@@ -243,6 +279,12 @@ public partial class AsignarImagenes
     }
 
     private void ToggleFiltros() => _filtersCollapsed = !_filtersCollapsed;
+
+    /// <summary>Cambia la vista a Grid (tarjetas).</summary>
+    private void SetVistaGrid() { _vistaModo = "Grid"; StateHasChanged(); }
+
+    /// <summary>Cambia la vista a Lista (tabla con selección y acciones masivas).</summary>
+    private void SetVistaLista() { _vistaModo = "Lista"; StateHasChanged(); }
 
     private bool PuedeSiguiente => _items.Count == _filter.PageSize;
 
@@ -470,9 +512,10 @@ public partial class AsignarImagenes
         }
     }
 
+    /// <summary>Guarda en memoria la imagen del modal (Ver/Mejorar). No llama a la API; el usuario confirma con "Guardar cambios" en la página.</summary>
     private async Task GuardarCambiosModal()
     {
-        if (_productoModal == null || string.IsNullOrWhiteSpace(_token)) return;
+        if (_productoModal == null) return;
         if (string.IsNullOrWhiteSpace(_imagenModalDataUrl) || _imagenModalDataUrl.StartsWith("data:image/svg", StringComparison.OrdinalIgnoreCase))
             return;
 
@@ -481,33 +524,11 @@ public partial class AsignarImagenes
 
         item.ImagenUrl = _imagenModalDataUrl;
         item.ImagenCargada = true;
+        item.ImagenPendienteGuardar = true;
 
-        _guardandoImagenModal = true;
+        await MostrarToastAsync("Imagen guardada en memoria. Usá «Guardar cambios» para enviar a la API.", false);
+        CerrarModal();
         await InvokeAsync(StateHasChanged);
-
-        try
-        {
-            var ok = await ProductImage.SaveProductImageAsync(item.ProductoID, _imagenModalDataUrl, _token);
-            if (!ok)
-            {
-                _errorModal = "No se pudo guardar la imagen en la API.";
-                await MostrarToastAsync("No se pudo guardar la imagen en la API.", true);
-                return;
-            }
-
-            await MostrarToastAsync("Imagen guardada correctamente.", false);
-            CerrarModal();
-        }
-        catch (Exception ex)
-        {
-            _errorModal = ex.Message;
-            await MostrarToastAsync("Error guardando imagen: " + ex.Message, true);
-        }
-        finally
-        {
-            _guardandoImagenModal = false;
-            await InvokeAsync(StateHasChanged);
-        }
     }
 
     private async Task AbrirModalObservacionesAsync(ProductoConImagenDto? p)
@@ -534,27 +555,78 @@ public partial class AsignarImagenes
         StateHasChanged();
     }
 
-    /// <summary>HTML generado desde el RTF para la vista previa (negritas, viñetas, etc.).</summary>
+    /// <summary>HTML generado desde el RTF para la vista previa (negritas, viñetas, etc.). ToHtml no lanza y sanea la entrada.</summary>
     private string ObservacionesPreviewHtml => RtfToHtmlConverter.ToHtml(_observacionesRtf);
+
+    /// <summary>Quita caracteres nulos y sustitutos que rompen la vista previa cuando el RTF viene de generación masiva.</summary>
+    private static string SanitizeRtfForPreview(string? rtf)
+    {
+        if (string.IsNullOrEmpty(rtf)) return rtf ?? "";
+        var sb = new StringBuilder(rtf.Length);
+        foreach (var c in rtf)
+        {
+            if (c == '\0') continue;
+            if (char.IsSurrogate(c)) continue;
+            sb.Append(c);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Normaliza el RTF para enviarlo a la API: cualquier carácter no ASCII se convierte a secuencias RTF estándar
+    /// (\'xx para Latin‑1 y \uNNN? para el resto). De esta forma el texto viaja sólo con ASCII y
+    /// evita problemas de codificación (acentos/ñ) al guardar y leer desde otras aplicaciones (WinForms, etc.).
+    /// No modifica comandos RTF ya existentes como \'f3 o \u241?.
+    /// </summary>
+    private static string NormalizeRtfForApi(string? rtf)
+    {
+        if (string.IsNullOrEmpty(rtf)) return rtf ?? "";
+        var sb = new StringBuilder(rtf.Length * 2);
+        foreach (var c in rtf)
+        {
+            var code = (int)c;
+            if (code <= 0x7F)
+            {
+                sb.Append(c);
+            }
+            else if (code >= 0x80 && code <= 0xFF)
+            {
+                sb.Append("\\'").Append(code.ToString("x2"));
+            }
+            else
+            {
+                sb.Append("\\u").Append(code).Append('?');
+            }
+        }
+        return sb.ToString();
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_productoObservaciones != null && !_observacionesVistaCodigo && _observacionesPreviewNeedsSyncFromRtf)
-        {
+        // No usar __setObservacionesPreviewContent aquí: Blazor ya renderiza el contenido del contenteditable.
+        // Si se reemplazaba con JS, en el siguiente diff Blazor intentaba removeChild sobre nodos ya eliminados -> "Cannot read properties of null (reading 'removeChild')".
+        if (_productoObservaciones != null && _observacionesPreviewNeedsSyncFromRtf)
             _observacionesPreviewNeedsSyncFromRtf = false;
+
+        if (!string.IsNullOrWhiteSpace(_previewSoloImagenUrl))
+        {
             try
             {
-                await Task.Delay(50);
-                await JS.InvokeVoidAsync("__setObservacionesPreviewContent", "observaciones-preview-editable", ObservacionesPreviewHtml);
+                await JS.InvokeVoidAsync("eval", "var el = document.getElementById('preview-solo-imagen-overlay'); if (el) { el.focus(); }");
             }
-            catch
+            catch { }
+        }
+        if (_productoObservaciones != null)
+        {
+            try
             {
-                _observacionesPreviewNeedsSyncFromRtf = true;
+                await JS.InvokeVoidAsync("eval", "var el = document.getElementById('modal-observaciones-overlay'); if (el) { el.focus(); }");
             }
+            catch { }
         }
     }
 
-    /// <summary>Sincroniza el contenido del contenteditable (HTML) al RTF al perder foco. No sincroniza si está generando con IA o si se acaba de generar (evita pisar el resultado).</summary>
+    /// <summary>Sincroniza el contenido del contenteditable (HTML) al RTF al perder foco. No sincroniza si está generando con IA o si se acaba de generar (evita pisar el resultado). Nunca propaga excepciones para evitar "An unhandled error has occurred".</summary>
     private async Task SyncPreviewToRtfAsync()
     {
         if (_productoObservaciones == null || _observacionesVistaCodigo || _generandoObservaciones) return;
@@ -563,12 +635,13 @@ public partial class AsignarImagenes
             var html = await JS.InvokeAsync<string>("__getObservacionesPreviewContent", "observaciones-preview-editable");
             if (_generandoObservaciones) return;
             if (_observacionesSkipNextSyncFromPreview) { _observacionesSkipNextSyncFromPreview = false; return; }
-            _observacionesRtf = HtmlToRtfConverter.ToRtf(html);
+            if (html != null)
+                _observacionesRtf = HtmlToRtfConverter.ToRtf(html);
             await InvokeAsync(StateHasChanged);
         }
-        catch
+        catch (Exception)
         {
-            // Ignorar errores de JS (ej. elemento no existe)
+            // Ignorar: JS (elemento no existe), serialización, o cualquier fallo al convertir HTML→RTF
         }
     }
 
@@ -582,6 +655,8 @@ public partial class AsignarImagenes
     private async Task GenerarObservacionesConIAAsync()
     {
         if (_productoObservaciones == null) return;
+        var productId = _productoObservaciones.ProductoID;
+        try { await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarObservacionesModal INICIO", JsonSerializer.Serialize(new { productId })); } catch { }
         var apiKeyGemini = _geminiApiKeyModal?.Trim();
         if (string.IsNullOrWhiteSpace(apiKeyGemini))
         {
@@ -605,6 +680,7 @@ public partial class AsignarImagenes
         await InvokeAsync(StateHasChanged);
         try
         {
+            if (_productoObservaciones == null) { _generandoObservaciones = false; await InvokeAsync(StateHasChanged); return; }
             var query = $"{barra} {desc}".Trim();
             IReadOnlyList<string> snippets;
             try
@@ -613,12 +689,15 @@ public partial class AsignarImagenes
             }
             catch (Exception ex)
             {
+                try { await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarObservacionesModal SerpAPI ERROR", JsonSerializer.Serialize(new { productId, mensaje = ex.Message })); } catch { }
                 _errorObservaciones = "SerpAPI: " + ex.Message;
                 _generandoObservaciones = false;
                 await InvokeAsync(StateHasChanged);
                 return;
             }
-            var snippetsText = snippets.Count > 0
+            if (_productoObservaciones == null) { _generandoObservaciones = false; await InvokeAsync(StateHasChanged); return; }
+            try { await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarObservacionesModal SerpAPI OK", JsonSerializer.Serialize(new { productId, snippetsCount = snippets?.Count ?? 0 })); } catch { }
+            var snippetsText = snippets != null && snippets.Count > 0
                 ? string.Join("\n\n", snippets.Select(s => "- " + s))
                 : "(No se encontraron resultados de búsqueda para este producto.)";
             var prompt = $@"Eres un asistente que escribe observaciones de productos en formato RTF (Rich Text Format).
@@ -627,36 +706,36 @@ Producto: {desc}. Código de barras: {barra}.
 Información obtenida de búsqueda en internet:
 {snippetsText}
 
-Escribe observaciones útiles para catálogo (descripción, uso, características) en RTF válido. Responde ÚNICAMENTE con el contenido RTF, sin explicaciones ni markdown. El RTF debe empezar por {{\rtf1 y usar comandos estándar como \par para párrafos. Si no hay información útil, escribe un párrafo breve con la descripción del producto en RTF.";
+Escribe observaciones útiles para catálogo (descripción, uso, características) en RTF válido. Responde ÚNICAMENTE con el contenido RTF, sin explicaciones ni markdown. El RTF debe empezar por {{\rtf1 y usar comandos estándar como \par para párrafos. Para acentos y la letra ñ en español usa secuencias Unicode RTF: \u243? para ó, \u241? para ñ, \u225? para á, \u233? para é, \u237? para í, \u250? para ú, \u252? para ü (siempre seguido del signo ?). Escribe el texto en español correcto con todos los acentos y la ñ. Si no hay información útil, escribe un párrafo breve con la descripción del producto en RTF.";
             var result = await GeminiService.GenerateTextAsync(prompt, apiKeyGemini);
-            if (result.Success && !string.IsNullOrWhiteSpace(result.Text))
+            if (_productoObservaciones == null) { _generandoObservaciones = false; await InvokeAsync(StateHasChanged); return; }
+            if (result != null && result.Success && !string.IsNullOrWhiteSpace(result.Text))
             {
-                _observacionesRtf = result.Text.Trim();
-                if (_observacionesRtf.StartsWith("```", StringComparison.Ordinal))
+                var raw = result.Text.Trim();
+                if (raw.StartsWith("```", StringComparison.Ordinal))
                 {
-                    var first = _observacionesRtf.IndexOf('\n');
-                    var last = _observacionesRtf.LastIndexOf("```", StringComparison.Ordinal);
-                    if (first >= 0 && last > first)
-                        _observacionesRtf = _observacionesRtf.Substring(first + 1, last - first - 1).Trim();
+                    var first = raw.IndexOf('\n');
+                    var last = raw.LastIndexOf("```", StringComparison.Ordinal);
+                    if (first >= 0 && last > first + 1)
+                        raw = raw.Substring(first + 1, last - first - 1).Trim();
                 }
-                // Actualizar la vista previa editable con el nuevo RTF generado (inmediato + flag por si hace falta otro render)
+                // Normalizar acentos/ñ a secuencias RTF estándar antes de guardar/enviar a la API.
+                _observacionesRtf = NormalizeRtfForApi(raw);
                 _observacionesPreviewNeedsSyncFromRtf = true;
-                _observacionesSkipNextSyncFromPreview = true; // el blur al hacer clic puede completarse después: no pisar el resultado
-                try
-                {
-                    await JS.InvokeVoidAsync("__setObservacionesPreviewContent", "observaciones-preview-editable", ObservacionesPreviewHtml);
-                }
-                catch
-                {
-                    // Si falla el JS, OnAfterRenderAsync lo intentará de nuevo
-                }
+                _observacionesSkipNextSyncFromPreview = true;
+                try { await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarObservacionesModal Gemini OK", JsonSerializer.Serialize(new { productId, rtfLen = _observacionesRtf.Length })); } catch { }
+                // La vista previa se actualiza con el re-render (StateHasChanged en finally); no usar __setObservacionesPreviewContent para evitar removeChild.
             }
             else
+            {
                 _errorObservaciones = result?.ErrorMessage ?? "Gemini no devolvió texto.";
+                try { await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarObservacionesModal Gemini sin texto", JsonSerializer.Serialize(new { productId, error = _errorObservaciones })); } catch { }
+            }
         }
         catch (Exception ex)
         {
             _errorObservaciones = ex.Message;
+            try { await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarObservacionesModal EXCEPCIÓN", JsonSerializer.Serialize(new { productId, mensaje = ex.Message, stack = ex.StackTrace })); } catch { }
         }
         finally
         {
@@ -698,12 +777,15 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
             return;
         }
 
-        var texto = string.IsNullOrWhiteSpace(_observacionesRtf) ? null : _observacionesRtf;
+        var texto = string.IsNullOrWhiteSpace(_observacionesRtf) ? null : NormalizeRtfForApi(_observacionesRtf);
 
         // Actualizar modelo en memoria para que la UI quede consistente inmediatamente.
         var item = _items.FirstOrDefault(x => x.ProductoID == _productoObservaciones.ProductoID);
         if (item != null)
+        {
             item.Observaciones = texto;
+            item.ObservacionesPendienteGuardar = false; // Se guarda ya en la API desde este modal.
+        }
 
         var request = new ProductoPatchRequest
         {
@@ -877,6 +959,249 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
         finally
         {
             await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>
+    /// Abre el modal de búsqueda web usando la API propia /Integration/ImageSearch.
+    /// Reutiliza el mismo estado y UI que SerpAPI, pero sin depender de API keys externas.
+    /// </summary>
+    private async Task BuscarImagenIntegrationAsync(ProductoConImagenDto? p)
+    {
+        if (p == null) return;
+        if (string.IsNullOrWhiteSpace(_token))
+        {
+            _error = "Debes iniciar sesión para buscar imágenes.";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(p.DescripcionLarga))
+        {
+            _error = "El producto debe tener descripción para buscar imágenes.";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        var barra = (p.CodigoBarra ?? "").Trim();
+        var desc = (p.DescripcionLarga ?? "").Trim();
+        var queryInicial = string.IsNullOrWhiteSpace(barra) ? desc : $"{barra} {desc}";
+
+        _error = null;
+        _busquedaWeb = new BusquedaWebState
+        {
+            ProductoID = p.ProductoID,
+            DescripcionLarga = p.DescripcionLarga,
+            CodigoBarra = p.CodigoBarra,
+            TextoBusqueda = queryInicial,
+            PermiteEditarQuery = true,
+            Loading = true,
+            Descargando = false,
+            Error = null,
+            Urls = null,
+            SelectedImageUrl = null,
+            SourceLabel = "Buscando con API de imágenes"
+        };
+        await InvokeAsync(StateHasChanged);
+
+        // Si ya tenemos URLs en caché de una búsqueda anterior (ej. búsqueda masiva en lista), mostrarlas sin llamar a la API.
+        if (_urlsBusquedaCachePorProducto.TryGetValue(p.ProductoID, out var cached) && cached != null && cached.Count > 0)
+        {
+            _busquedaWeb.Urls = new List<string>(cached);
+            _busquedaWeb.Loading = false;
+            await LogBusquedaWebUrlsAsync(cached);
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        try
+        {
+            var urls = await BuscarUrlsIntegracionConFallbackAsync(queryInicial, barra, desc);
+            if (_busquedaWeb != null)
+            {
+                _busquedaWeb.Urls = urls.Count > 0 ? new List<string>(urls) : null;
+                _busquedaWeb.Loading = false;
+                if (urls.Count > 0)
+                {
+                    _urlsBusquedaCachePorProducto[p.ProductoID] = new List<string>(urls);
+                    _busquedaWeb.TextoBusqueda = queryInicial;
+                    await LogBusquedaWebUrlsAsync(urls);
+                }
+                else
+                    _busquedaWeb.Error = "No se encontraron imágenes en la API de integración. Probá editando el texto y «Buscar de nuevo».";
+            }
+        }
+        catch (Exception ex)
+        {
+            if (_busquedaWeb != null)
+            {
+                _busquedaWeb.Error = ex.Message;
+                _busquedaWeb.Loading = false;
+            }
+        }
+        finally
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>
+    /// Prueba varias variantes de búsqueda (barra+desc, solo desc, solo barra) y devuelve la primera lista no vacía.
+    /// Así recuperamos el comportamiento que funcionaba cuando la API a veces solo acepta la descripción.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> BuscarUrlsIntegracionConFallbackAsync(string queryInicial, string barra, string desc)
+    {
+        var queries = new List<string>();
+        if (!string.IsNullOrWhiteSpace(queryInicial))
+            queries.Add(queryInicial);
+        if (!string.IsNullOrWhiteSpace(desc) && !queries.Contains(desc))
+            queries.Add(desc);
+        if (!string.IsNullOrWhiteSpace(barra) && !queries.Contains(barra))
+            queries.Add(barra);
+
+        foreach (var q in queries)
+        {
+            try
+            {
+                var urls = await IntegrationImageSearch.SearchImageUrlsAsync(q, _token!);
+                if (urls != null && urls.Count > 0)
+                    return urls;
+            }
+            catch
+            {
+                // Probar la siguiente variante.
+            }
+        }
+        return Array.Empty<string>();
+    }
+
+    /// <summary>
+    /// Para "Buscar de nuevo" en el modal: intenta con el texto tal cual; si la API no devuelve resultados, prueba sin el primer token (código de barra).
+    /// </summary>
+    private async Task<IReadOnlyList<string>> BuscarUrlsIntegracionConFallbackTextoAsync(string texto)
+    {
+        var queries = new List<string> { texto };
+        var rest = texto.Trim();
+        var firstSpace = rest.IndexOf(' ');
+        if (firstSpace > 0)
+        {
+            var firstToken = rest.Substring(0, firstSpace);
+            if (firstToken.Length >= 8 && firstToken.All(char.IsDigit))
+            {
+                var sinBarra = rest.Substring(firstSpace + 1).Trim();
+                if (!string.IsNullOrWhiteSpace(sinBarra) && !queries.Contains(sinBarra))
+                    queries.Add(sinBarra);
+            }
+        }
+
+        foreach (var q in queries)
+        {
+            try
+            {
+                var urls = await IntegrationImageSearch.SearchImageUrlsAsync(q, _token!);
+                if (urls != null && urls.Count > 0)
+                    return urls;
+            }
+            catch
+            {
+                // Siguiente variante.
+            }
+        }
+        return Array.Empty<string>();
+    }
+
+    /// <summary>
+    /// Busca de nuevo en la API de integración con el texto editado en el modal (_busquedaWeb.TextoBusqueda).
+    /// </summary>
+    private async Task BuscarDeNuevoIntegrationAsync()
+    {
+        if (_busquedaWeb == null || !_busquedaWeb.PermiteEditarQuery || string.IsNullOrWhiteSpace(_token)) return;
+        if (_busquedaWeb.Loading) return; // Evitar doble clic / segunda búsqueda superpuesta
+        var texto = (_busquedaWeb.TextoBusqueda ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(texto))
+        {
+            _busquedaWeb.Error = "Escribí un texto de búsqueda (código de barra y/o descripción).";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        var state = _busquedaWeb; // Referencia local por si se cierra el modal durante el await
+        state.Loading = true;
+        state.Error = null;
+        state.Urls = null;
+        state.SelectedImageUrl = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            // Intentar con el texto editado; si falla, probar solo la parte descripción (quitar posible código de barra al inicio).
+            var urls = await BuscarUrlsIntegracionConFallbackTextoAsync(texto);
+            if (state == _busquedaWeb && _busquedaWeb != null)
+            {
+                _busquedaWeb.Urls = urls != null && urls.Count > 0 ? new List<string>(urls) : null;
+                if (urls == null || urls.Count == 0)
+                    _busquedaWeb.Error = "No se encontraron imágenes con ese texto. Probá modificando la búsqueda.";
+                else
+                {
+                    _urlsBusquedaCachePorProducto[_busquedaWeb.ProductoID] = new List<string>(urls);
+                    await LogBusquedaWebUrlsAsync(urls);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            if (state == _busquedaWeb && _busquedaWeb != null)
+                _busquedaWeb.Error = ex.Message;
+        }
+        finally
+        {
+            if (state == _busquedaWeb && _busquedaWeb != null)
+                _busquedaWeb.Loading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>
+    /// Obtiene URLs de imagen para un producto usando la API de integración.
+    /// Siempre busca con código de barra + descripción (una sola query).
+    /// </summary>
+    private async Task<IReadOnlyList<string>> BuscarUrlsIntegracionAsync(ProductoConImagenDto p)
+    {
+        var desc = (p.DescripcionLarga ?? "").Trim();
+        var barra = (p.CodigoBarra ?? "").Trim();
+        var query = string.IsNullOrWhiteSpace(barra) ? desc : $"{barra} {desc}";
+        if (string.IsNullOrWhiteSpace(query))
+            return Array.Empty<string>();
+
+        try
+        {
+            var urls = await IntegrationImageSearch.SearchImageUrlsAsync(query, _token!);
+            if (urls != null && urls.Count > 0)
+            {
+                try
+                {
+                    await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenIntegration QUERY_OK",
+                        JsonSerializer.Serialize(new { p.ProductoID, p.Codigo, query, urlsCount = urls.Count }));
+                }
+                catch { }
+                return urls;
+            }
+            try
+            {
+                await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenIntegration QUERY_SIN_URLS",
+                    JsonSerializer.Serialize(new { p.ProductoID, p.Codigo, query }));
+            }
+            catch { }
+            return urls ?? Array.Empty<string>();
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenIntegration QUERY_ERROR",
+                    JsonSerializer.Serialize(new { p.ProductoID, p.Codigo, query, error = ex.Message }));
+            }
+            catch { }
+            throw;
         }
     }
 
@@ -1060,17 +1385,10 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
         StateHasChanged();
     }
 
-    /// <summary>Descarga la imagen seleccionada en el modal SerpAPI, la asigna al producto y la guarda en la API.</summary>
+    /// <summary>Descarga la imagen seleccionada en el modal SerpAPI y la asigna al producto en memoria (ImagenPendienteGuardar = true). No llama a la API.</summary>
     private async Task GuardarImagenSeleccionadaSerpApiAsync()
     {
         if (_busquedaWeb == null || string.IsNullOrWhiteSpace(_busquedaWeb.SelectedImageUrl) || _busquedaWeb.ProductoID == 0) return;
-        if (string.IsNullOrWhiteSpace(_token))
-        {
-            _busquedaWeb.Error = "No hay token de autenticación para guardar la imagen.";
-            await MostrarToastAsync("No hay token de autenticación para guardar la imagen.", true);
-            await InvokeAsync(StateHasChanged);
-            return;
-        }
 
         var imageUrl = _busquedaWeb.SelectedImageUrl;
         var productId = _busquedaWeb.ProductoID;
@@ -1109,17 +1427,9 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
                 {
                     item.ImagenUrl = dataUrl;
                     item.ImagenCargada = true;
-                    var ok = await ProductImage.SaveProductImageAsync(item.ProductoID, dataUrl, _token);
-                    if (!ok)
-                    {
-                        _busquedaWeb.Error = "No se pudo guardar la imagen en la API.";
-                        await MostrarToastAsync("No se pudo guardar la imagen en la API.", true);
-                    }
-                    else
-                    {
-                        await MostrarToastAsync("Imagen guardada correctamente.", false);
-                        CerrarBusquedaWeb();
-                    }
+                    item.ImagenPendienteGuardar = true;
+                    await MostrarToastAsync("Imagen guardada en memoria. Usá «Guardar cambios» para enviar a la API.", false);
+                    CerrarBusquedaWeb();
                 }
                 else
                 {
@@ -1157,10 +1467,659 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
             var ok = await ProductImage.SaveProductImageAsync(p.ProductoID, p.ImagenUrl, _token);
             if (!ok)
                 _error = "Guardado de imagen no disponible (API pendiente).";
+            else
+                p.ImagenPendienteGuardar = false;
         }
         finally
         {
             _savingImageId = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // ---------- Vista lista: selección y acciones masivas ----------
+
+    /// <summary>Conmuta la selección de un producto en la vista lista.</summary>
+    private void ToggleSeleccionAsync(ProductoConImagenDto p)
+    {
+        if (p == null) return;
+        if (_seleccionados.Contains(p.ProductoID))
+            _seleccionados.Remove(p.ProductoID);
+        else
+            _seleccionados.Add(p.ProductoID);
+        StateHasChanged();
+    }
+
+    /// <summary>Selecciona todos o ninguno según el estado actual (vista lista).</summary>
+    private void ToggleTodosAsync()
+    {
+        if (_items.Count == 0) return;
+        var todosSeleccionados = _items.All(p => _seleccionados.Contains(p.ProductoID));
+        if (todosSeleccionados)
+            _seleccionados.Clear();
+        else
+            _seleccionados = _items.Select(p => p.ProductoID).ToHashSet();
+        StateHasChanged();
+    }
+
+    /// <summary>Abre el modal de solo vista (imagen en grande) al hacer clic en la miniatura en la lista.</summary>
+    private void AbrirPreviewSoloImagenAsync(ProductoConImagenDto? p)
+    {
+        if (p == null || string.IsNullOrWhiteSpace(p.ImagenUrl) || p.ImagenUrl.StartsWith("data:image/svg", StringComparison.OrdinalIgnoreCase))
+            return;
+        _previewSoloImagenUrl = p.ImagenUrl;
+        _previewSoloImagenDesc = p.DescripcionLarga ?? p.Codigo ?? "—";
+        StateHasChanged();
+    }
+
+    /// <summary>Cierra el modal de vista de imagen (miniatura en lista).</summary>
+    private void CerrarPreviewSoloImagen()
+    {
+        _previewSoloImagenUrl = null;
+        _previewSoloImagenDesc = null;
+        StateHasChanged();
+    }
+
+    private void OnPreviewSoloImagenKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            CerrarPreviewSoloImagen();
+    }
+
+    /// <summary>Envía a la API (PATCH) todos los productos con imagen u observaciones pendientes, uno por uno.
+    /// Imágenes: SaveProductImageAsync (reducción en cliente + PATCH). Observaciones: PATCH solo Observacion.</summary>
+    private async Task GuardarTodosLosCambiosAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_token))
+        {
+            await MostrarToastAsync("Debes iniciar sesión para guardar.", true);
+            return;
+        }
+        var pendientesImagen = _items.Where(p => p.ImagenPendienteGuardar && !string.IsNullOrWhiteSpace(p.ImagenUrl)).ToList();
+        var pendientesObservaciones = _items.Where(p => p.ObservacionesPendienteGuardar).ToList();
+        if (pendientesImagen.Count == 0 && pendientesObservaciones.Count == 0)
+        {
+            await MostrarToastAsync("No hay cambios pendientes de guardar.", false);
+            return;
+        }
+        _guardandoTodos = true;
+        await InvokeAsync(StateHasChanged);
+        var okImg = 0;
+        var failImg = 0;
+        var okObs = 0;
+        var failObs = 0;
+        try
+        {
+            for (int i = 0; i < pendientesImagen.Count; i++)
+            {
+                var item = pendientesImagen[i];
+                var ok = await ProductImage.SaveProductImageAsync(item.ProductoID, item.ImagenUrl!, _token);
+                if (ok) { item.ImagenPendienteGuardar = false; okImg++; } else failImg++;
+                await InvokeAsync(StateHasChanged);
+            }
+            for (int i = 0; i < pendientesObservaciones.Count; i++)
+            {
+                var item = pendientesObservaciones[i];
+                var request = new ProductoPatchRequest
+                {
+                    CodigoID = item.ProductoID,
+                    ImagenEspecified = false,
+                    Imagen = "null",
+                    ObservacionEspecified = true,
+                    Observacion = NormalizeRtfForApi(item.Observaciones)
+                };
+                var result = await ProductoPatch.PatchProductoAsync(request, _token);
+                if (result.Success) { item.ObservacionesPendienteGuardar = false; okObs++; } else failObs++;
+                await InvokeAsync(StateHasChanged);
+            }
+            var msg = new List<string>();
+            if (okImg > 0 || failImg > 0) msg.Add($"{okImg} imagen(es)" + (failImg > 0 ? $", {failImg} fallo(s)" : ""));
+            if (okObs > 0 || failObs > 0) msg.Add($"{okObs} observación(es)" + (failObs > 0 ? $", {failObs} fallo(s)" : ""));
+            if (msg.Count > 0)
+                await MostrarToastAsync((failImg + failObs) == 0 ? "Guardado correctamente: " + string.Join("; ", msg) : "Guardado: " + string.Join("; ", msg), (failImg + failObs) > 0);
+        }
+        catch (Exception ex)
+        {
+            await MostrarToastAsync("Error guardando: " + ex.Message, true);
+        }
+        finally
+        {
+            _guardandoTodos = false;
+            _seleccionados.Clear(); // Deseleccionar todo al finalizar guardado.
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>
+    /// Cantidad máxima de URLs a intentar descargar por producto en búsqueda masiva.
+    /// Si la primera falla (CORS, red, etc.), se prueba la siguiente hasta asignar alguna imagen por producto.
+    /// </summary>
+    private const int MaxUrlsToTryPerProductoMasivo = 20;
+
+    /// <summary>
+    /// Intenta descargar una imagen desde una lista de URLs (SOLID: responsabilidad única).
+    /// Prueba en orden hasta que una descarga correctamente o se agotan los intentos.
+    /// </summary>
+    /// <param name="productId">ID del producto (para logs).</param>
+    /// <param name="codigo">Código del producto (para logs).</param>
+    /// <param name="urls">Lista de URLs devueltas por la API de búsqueda.</param>
+    /// <param name="indice">Índice 1-based del producto en el lote (para logs).</param>
+    /// <param name="total">Total de productos en el lote (para logs).</param>
+    /// <returns>Tupla (dataUrl, urlIndex): si se descargó una imagen, (dataUrl, índice 1-based de la URL usada); si no, (null, -1).</returns>
+    private async Task<(string? dataUrl, int urlIndexUsed)> IntentarDescargarAlgunaImagenDeUrlsAsync(
+        int productId,
+        string? codigo,
+        IReadOnlyList<string> urls,
+        int indice,
+        int total)
+    {
+        var toTry = Math.Min(MaxUrlsToTryPerProductoMasivo, urls.Count);
+        try
+        {
+            await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration INTENTO_DESCARGA",
+                JsonSerializer.Serialize(new
+                {
+                    indice,
+                    total,
+                    productId,
+                    codigo,
+                    urlsDisponibles = urls.Count,
+                    urlsAProbar = toTry,
+                    mensaje = $"Se intentará descargar hasta {toTry} imagen(es) hasta asignar una al producto."
+                }));
+        }
+        catch { }
+
+        for (int u = 0; u < toTry; u++)
+        {
+            var imageUrl = urls[u];
+            if (string.IsNullOrWhiteSpace(imageUrl)) continue;
+
+            try
+            {
+                var dataUrl = await GoogleImageSearch.FetchImageAsDataUrlAsync(imageUrl);
+                if (!string.IsNullOrWhiteSpace(dataUrl) && dataUrl.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration FETCH_OK",
+                            JsonSerializer.Serialize(new { indice, total, productId, codigo, urlIndex = u + 1, totalUrlsProbadas = u + 1 }));
+                    }
+                    catch { }
+                    return (dataUrl, u + 1);
+                }
+            }
+            catch (Exception exFetch)
+            {
+                try
+                {
+                    await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration ERROR_FETCH",
+                        JsonSerializer.Serialize(new
+                        {
+                            indice,
+                            total,
+                            productId,
+                            codigo,
+                            urlIndex = u + 1,
+                            error = exFetch.Message,
+                            imageUrlPreview = imageUrl.Length > 100 ? imageUrl.Substring(0, 100) + "…" : imageUrl
+                        }));
+                }
+                catch { }
+            }
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration FALLA_TODAS_URLS",
+                JsonSerializer.Serialize(new
+                {
+                    indice,
+                    total,
+                    productId,
+                    codigo,
+                    urlsIntentadas = toTry,
+                    mensaje = $"No se pudo descargar ninguna de las {toTry} URL(s) probadas para este producto."
+                }));
+        }
+        catch { }
+        return (null, -1);
+    }
+
+    /// <summary>
+    /// Para cada producto seleccionado, busca la primera imagen usando la API de integración,
+    /// la descarga como data URL y la asigna en memoria (ImagenPendienteGuardar = true).
+    /// Luego el usuario puede usar «Guardar cambios» para persistir todas en la API.
+    /// </summary>
+    private async Task BuscarImagenMasivoSerpApiAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_token))
+        {
+            await MostrarToastAsync("Debes iniciar sesión para buscar imágenes.", true);
+            return;
+        }
+
+        var idsToProcess = _items
+            .Where(p => _seleccionados.Contains(p.ProductoID) && !string.IsNullOrWhiteSpace(p.DescripcionLarga))
+            .Select(p => p.ProductoID)
+            .ToList();
+
+        if (idsToProcess.Count == 0)
+        {
+            await MostrarToastAsync("Seleccioná al menos un producto con descripción.", false);
+            return;
+        }
+
+        // Log de inicio (diagnóstico)
+        try
+        {
+            var seleccionadosInfo = _items
+                .Where(p => idsToProcess.Contains(p.ProductoID))
+                .Select(p => new
+                {
+                    p.ProductoID,
+                    p.Codigo,
+                    desc = p.DescripcionLarga,
+                    barra = p.CodigoBarra
+                })
+                .ToList();
+            await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration INICIO",
+                JsonSerializer.Serialize(new
+                {
+                    totalSeleccionados = idsToProcess.Count,
+                    ids = idsToProcess,
+                    seleccionados = seleccionadosInfo
+                }));
+        }
+        catch { }
+
+        _error = null;
+        _bulkSearching = true;
+        _bulkSearchingTotal = idsToProcess.Count;
+        _bulkSearchingCurrent = 0;
+        await InvokeAsync(StateHasChanged);
+
+        var okCount = 0;
+        var total = idsToProcess.Count;
+        var idsConImagen = new List<int>();
+        var idsSinImagen = new List<object>(); // { productId, codigo, motivo }
+
+        try
+        {
+            for (int i = 0; i < total; i++)
+            {
+                // Resolver siempre desde _items para que la vista lista muestre las actualizaciones (misma referencia que Items).
+                var productId = idsToProcess[i];
+                var p = _items.FirstOrDefault(x => x.ProductoID == productId);
+                if (p == null)
+                {
+                    try
+                    {
+                        await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration SKIP",
+                            JsonSerializer.Serialize(new { indice = i + 1, total, productId = idsToProcess[i], motivo = "producto no encontrado en _items" }));
+                    }
+                    catch { }
+                    idsSinImagen.Add(new { productId, codigo = (string?)null, motivo = "no encontrado" });
+                    _bulkSearchingCurrent = i + 1;
+                    await InvokeAsync(StateHasChanged);
+                    continue;
+                }
+
+                var desc = p.DescripcionLarga ?? "";
+                var barra = p.CodigoBarra ?? "";
+                var query = string.IsNullOrWhiteSpace(barra) ? desc.Trim() : $"{barra.Trim()} {desc.Trim()}";
+
+                try
+                {
+                    await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration PROCESANDO",
+                        JsonSerializer.Serialize(new
+                        {
+                            indice = i + 1,
+                            total,
+                            productId = p.ProductoID,
+                            codigo = p.Codigo,
+                            descCorta = desc.Length > 40 ? desc.Substring(0, 40) + "…" : desc
+                        }));
+                }
+                catch { }
+
+                // Misma lógica que en Grid: probar barra+desc, luego solo desc, luego solo barra (fallback).
+                IReadOnlyList<string> urls;
+                try
+                {
+                    urls = await BuscarUrlsIntegracionConFallbackAsync(query, barra.Trim(), desc.Trim());
+                }
+                catch (Exception exApi)
+                {
+                    try
+                    {
+                        await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration ERROR_API",
+                            JsonSerializer.Serialize(new { indice = i + 1, total, p.ProductoID, p.Codigo, query, error = exApi.Message }));
+                    }
+                    catch { }
+                    idsSinImagen.Add(new { productId = p.ProductoID, codigo = p.Codigo, motivo = "ERROR_API: " + exApi.Message });
+                    _bulkSearchingCurrent = i + 1;
+                    await InvokeAsync(StateHasChanged);
+                    continue;
+                }
+
+                if (urls == null || urls.Count == 0)
+                {
+                    try
+                    {
+                        await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration SIN_URLS",
+                            JsonSerializer.Serialize(new { indice = i + 1, total, p.ProductoID, p.Codigo, query }));
+                    }
+                    catch { }
+                    idsSinImagen.Add(new { productId = p.ProductoID, codigo = p.Codigo, motivo = "SIN_URLS" });
+                    _bulkSearchingCurrent = i + 1;
+                    await InvokeAsync(StateHasChanged);
+                    continue;
+                }
+
+                try
+                {
+                    await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration URLs_OBTENIDAS",
+                        JsonSerializer.Serialize(new { indice = i + 1, total, p.ProductoID, p.Codigo, urlsCount = urls.Count, primeraUrl = urls[0] }));
+                }
+                catch { }
+
+                // Guardar en caché para que al hacer clic en "Buscar imagen (API)" en lista se muestren estas mismas imágenes.
+                _urlsBusquedaCachePorProducto[p.ProductoID] = new List<string>(urls);
+
+                // SOLID: delegamos la descarga en IntentarDescargarAlgunaImagenDeUrlsAsync; prueba hasta MaxUrlsToTryPerProductoMasivo URLs hasta lograr una.
+                var (dataUrl, urlIndexUsed) = await IntentarDescargarAlgunaImagenDeUrlsAsync(p.ProductoID, p.Codigo, urls, i + 1, total);
+
+                if (!string.IsNullOrWhiteSpace(dataUrl))
+                {
+                    p.ImagenUrl = dataUrl;
+                    p.ImagenCargada = true;
+                    p.ImagenPendienteGuardar = true;
+                    okCount++;
+                    idsConImagen.Add(p.ProductoID);
+                    try
+                    {
+                        await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration ASIGNACIÓN_OK",
+                            JsonSerializer.Serialize(new
+                            {
+                                indice = i + 1,
+                                total,
+                                productId = p.ProductoID,
+                                codigo = p.Codigo,
+                                urlIndexUsada = urlIndexUsed,
+                                urlsDisponibles = urls.Count,
+                                mensaje = $"Imagen asignada correctamente (URL #{urlIndexUsed} de {urls.Count})."
+                            }));
+                    }
+                    catch { }
+                }
+                else
+                {
+                    var motivoFalla = $"No se pudo descargar ninguna de las {Math.Min(MaxUrlsToTryPerProductoMasivo, urls.Count)} URL(s) probadas.";
+                    idsSinImagen.Add(new { productId = p.ProductoID, codigo = p.Codigo, motivo = motivoFalla });
+                    try
+                    {
+                        await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration FALLA_ITEM",
+                            JsonSerializer.Serialize(new
+                            {
+                                indice = i + 1,
+                                total,
+                                p.ProductoID,
+                                p.Codigo,
+                                query,
+                                urlsCount = urls.Count,
+                                urlsIntentadas = Math.Min(MaxUrlsToTryPerProductoMasivo, urls.Count),
+                                motivo = motivoFalla
+                            }));
+                    }
+                    catch { }
+                }
+
+                _bulkSearchingCurrent = i + 1;
+                await InvokeAsync(StateHasChanged);
+            }
+
+            // Log resumen detallado
+            try
+            {
+                await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration RESUMEN",
+                    JsonSerializer.Serialize(new
+                    {
+                        totalProcesados = total,
+                        okCount,
+                        idsConImagen,
+                        idsSinImagen,
+                        mensaje = $"{okCount} de {total} producto(s) con imagen asignada. Con imagen: [{string.Join(", ", idsConImagen)}]. Sin imagen: {idsSinImagen.Count} (ver idsSinImagen en este log)."
+                    }));
+            }
+            catch { }
+
+            await MostrarToastAsync(
+                okCount > 0
+                    ? $"Se asignaron {okCount} imagen(es) en memoria. Usá «Guardar cambios»."
+                    : "No se pudo asignar ninguna imagen con la API de integración.",
+                okCount == 0);
+        }
+        finally
+        {
+            _bulkSearching = false;
+            _bulkSearchingCurrent = 0;
+            _bulkSearchingTotal = 0;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>Para cada producto seleccionado, genera una imagen con Gemini y la asigna en memoria (ImagenPendienteGuardar = true).
+    /// Usa lista fija de IDs; hasta 3 intentos por producto (reintentos con pausa) para respetar la cantidad seleccionada.</summary>
+    private async Task GenerarImagenMasivoAsync()
+    {
+        var apiKey = _geminiApiKeyModal?.Trim();
+        if (string.IsNullOrWhiteSpace(apiKey))
+            apiKey = await LocalStorage.GetItemAsync(LsGeminiKey);
+        if (string.IsNullOrWhiteSpace(apiKey?.Trim()))
+        {
+            await MostrarToastAsync("Configurá la API key de Gemini (abrí «Ver / Mejorar» en un producto y guardala).", true);
+            return;
+        }
+        // Lista fija de IDs a procesar: así se respeta exactamente la cantidad seleccionada aunque haya re-renders.
+        var idsToProcess = _items.Where(p => _seleccionados.Contains(p.ProductoID)).Select(p => p.ProductoID).ToList();
+        if (idsToProcess.Count == 0)
+        {
+            await MostrarToastAsync("Seleccioná al menos un producto.", false);
+            return;
+        }
+        try
+        {
+            await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarImagenMasivo INICIO", JsonSerializer.Serialize(new
+            {
+                totalSeleccionados = idsToProcess.Count,
+                ids = idsToProcess
+            }));
+        }
+        catch { }
+        _bulkGenerating = true;
+        _bulkGeneratingTotal = idsToProcess.Count;
+        _bulkGeneratingCurrent = 0;
+        await InvokeAsync(StateHasChanged);
+        var okCount = 0;
+        var total = idsToProcess.Count;
+        var fallidos = new List<object>();
+        try
+        {
+            for (int i = 0; i < total; i++)
+            {
+                var productId = idsToProcess[i];
+                var p = _items.FirstOrDefault(x => x.ProductoID == productId);
+                if (p == null)
+                {
+                    try { await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarImagenMasivo SKIP (no encontrado)", JsonSerializer.Serialize(new { indice = i + 1, total, productId })); } catch { }
+                    _bulkGeneratingCurrent = i + 1;
+                    await InvokeAsync(StateHasChanged);
+                    continue;
+                }
+                var descCorta = (p.DescripcionLarga ?? "—").Length > 50 ? (p.DescripcionLarga ?? "—").Substring(0, 50) + "…" : (p.DescripcionLarga ?? "—");
+                var prompt = $"Crea una imagen de producto profesional para catálogo. Fondo blanco o neutro, iluminación de estudio. Producto: {p.DescripcionLarga ?? "—"}. Código: {p.Codigo ?? "—"}. Código de barra: {p.CodigoBarra ?? "—"}. La imagen debe ser realista, solo el producto, estilo fotografía comercial.";
+                var result = await GeminiService.ImproveOrCreateProductImageAsync(prompt, apiKey!, null, null);
+                var intento = 1;
+                if (result == null || !result.Success || result.ImageBytes == null || result.ImageBytes.Length == 0)
+                {
+                    try
+                    {
+                        await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarImagenMasivo intento 1 falló", JsonSerializer.Serialize(new
+                        {
+                            indice = i + 1,
+                            total,
+                            productId,
+                            descCorta,
+                            resultNull = result == null,
+                            success = result?.Success ?? false,
+                            errorMessage = result?.ErrorMessage ?? "(null)",
+                            imageBytesLength = result?.ImageBytes?.Length ?? 0
+                        }));
+                    }
+                    catch { }
+                    await Task.Delay(1500);
+                    result = await GeminiService.ImproveOrCreateProductImageAsync(prompt, apiKey!, null, null);
+                    intento = 2;
+                }
+                if (result == null || !result.Success || result.ImageBytes == null || result.ImageBytes.Length == 0)
+                {
+                    try
+                    {
+                        await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarImagenMasivo intento 2 falló", JsonSerializer.Serialize(new
+                        {
+                            indice = i + 1,
+                            total,
+                            productId,
+                            descCorta,
+                            resultNull = result == null,
+                            success = result?.Success ?? false,
+                            errorMessage = result?.ErrorMessage ?? "(null)",
+                            imageBytesLength = result?.ImageBytes?.Length ?? 0
+                        }));
+                    }
+                    catch { }
+                    await Task.Delay(2500);
+                    result = await GeminiService.ImproveOrCreateProductImageAsync(prompt, apiKey!, null, null);
+                    intento = 3;
+                }
+                if (result != null && result.Success && result.ImageBytes != null && result.ImageBytes.Length > 0)
+                {
+                    var mimeOut = result.MimeType ?? "image/png";
+                    p.ImagenUrl = "data:" + mimeOut + ";base64," + Convert.ToBase64String(result.ImageBytes);
+                    p.ImagenCargada = true;
+                    p.ImagenPendienteGuardar = true;
+                    okCount++;
+                    try { await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarImagenMasivo OK", JsonSerializer.Serialize(new { indice = i + 1, total, productId, descCorta, intento, imageBytesLength = result.ImageBytes.Length })); } catch { }
+                }
+                else
+                {
+                    fallidos.Add(new { productId, descCorta, errorMessage = result?.ErrorMessage ?? "(resultado nulo o sin imagen)" });
+                    try { await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarImagenMasivo FALLÓ (3 intentos)", JsonSerializer.Serialize(new { indice = i + 1, total, productId, descCorta, errorMessage = result?.ErrorMessage ?? "(null)" })); } catch { }
+                }
+                _bulkGeneratingCurrent = i + 1;
+                await InvokeAsync(StateHasChanged);
+            }
+            try
+            {
+                await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarImagenMasivo RESUMEN", JsonSerializer.Serialize(new { totalProcesados = total, okCount, fallidosCount = fallidos.Count, fallidos }));
+            }
+            catch { }
+            await MostrarToastAsync(okCount > 0 ? $"Se generaron {okCount} imagen(es) en memoria. Usá «Guardar cambios»." : "No se pudo generar ninguna imagen.", okCount == 0);
+        }
+        finally
+        {
+            _bulkGenerating = false;
+            _bulkGeneratingCurrent = 0;
+            _bulkGeneratingTotal = 0;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>Genera observaciones con IA (SerpAPI + Gemini) para cada producto seleccionado y las deja en memoria (ObservacionesPendienteGuardar = true).</summary>
+    private async Task GenerarObservacionesMasivoAsync()
+    {
+        var apiKeyGemini = _geminiApiKeyModal?.Trim();
+        if (string.IsNullOrWhiteSpace(apiKeyGemini))
+            apiKeyGemini = await LocalStorage.GetItemAsync(LsGeminiKey);
+        if (string.IsNullOrWhiteSpace(apiKeyGemini?.Trim()))
+        {
+            await MostrarToastAsync("Configurá la API key de Gemini (abrí «Observaciones» en un producto y guardala).", true);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_serpApiKeyRaw?.Trim()))
+        {
+            await MostrarToastAsync("Configurá la API key de SerpAPI en Filtros para generar observaciones.", true);
+            return;
+        }
+        var idsToProcess = _items.Where(p => _seleccionados.Contains(p.ProductoID) && (!string.IsNullOrWhiteSpace(p.DescripcionLarga) || !string.IsNullOrWhiteSpace(p.CodigoBarra))).Select(p => p.ProductoID).ToList();
+        if (idsToProcess.Count == 0)
+        {
+            await MostrarToastAsync("Seleccioná al menos un producto con descripción o código de barras.", false);
+            return;
+        }
+        _bulkGeneratingObservaciones = true;
+        _bulkGeneratingObservacionesTotal = idsToProcess.Count;
+        _bulkGeneratingObservacionesCurrent = 0;
+        await InvokeAsync(StateHasChanged);
+        var okCount = 0;
+        var total = idsToProcess.Count;
+        try
+        {
+            for (int i = 0; i < total; i++)
+            {
+                var p = _items.FirstOrDefault(x => x.ProductoID == idsToProcess[i]);
+                if (p == null) { _bulkGeneratingObservacionesCurrent = i + 1; await InvokeAsync(StateHasChanged); continue; }
+                var desc = p.DescripcionLarga ?? "";
+                var barra = p.CodigoBarra ?? "";
+                var query = $"{barra} {desc}".Trim();
+                IReadOnlyList<string> snippets;
+                try
+                {
+                    snippets = await SerpApiOrganicSearch.GetOrganicSnippetsAsync(query, _serpApiKeyRaw.Trim(), maxSnippets: 10);
+                }
+                catch
+                {
+                    _bulkGeneratingObservacionesCurrent = i + 1;
+                    await InvokeAsync(StateHasChanged);
+                    continue;
+                }
+                var snippetsText = snippets.Count > 0 ? string.Join("\n\n", snippets.Select(s => "- " + s)) : "(No se encontraron resultados de búsqueda para este producto.)";
+                var prompt = $@"Eres un asistente que escribe observaciones de productos en formato RTF (Rich Text Format).
+Producto: {desc}. Código de barras: {barra}.
+
+Información obtenida de búsqueda en internet:
+{snippetsText}
+
+Escribe observaciones útiles para catálogo (descripción, uso, características) en RTF válido. Responde ÚNICAMENTE con el contenido RTF, sin explicaciones ni markdown. El RTF debe empezar por {{\rtf1 y usar comandos estándar como \par para párrafos. Para acentos y la letra ñ en español usa secuencias Unicode RTF: \u243? para ó, \u241? para ñ, \u225? para á, \u233? para é, \u237? para í, \u250? para ú, \u252? para ü (siempre seguido del signo ?). Escribe el texto en español correcto con todos los acentos y la ñ. Si no hay información útil, escribe un párrafo breve con la descripción del producto en RTF.";
+                var result = await GeminiService.GenerateTextAsync(prompt, apiKeyGemini!);
+                if (result != null && result.Success && !string.IsNullOrWhiteSpace(result.Text))
+                {
+                    var rtf = result.Text.Trim();
+                    if (rtf.StartsWith("```", StringComparison.Ordinal))
+                    {
+                        var first = rtf.IndexOf('\n');
+                        var last = rtf.LastIndexOf("```", StringComparison.Ordinal);
+                        if (first >= 0 && last > first + 1)
+                            rtf = rtf.Substring(first + 1, last - first - 1).Trim();
+                    }
+                    // Normalizar a RTF ASCII‑safe para que la API y WinForms respeten los acentos.
+                    var normalizedRtf = NormalizeRtfForApi(rtf);
+                    p.Observaciones = SanitizeRtfForPreview(normalizedRtf);
+                    p.ObservacionesPendienteGuardar = true;
+                    okCount++;
+                    try { await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarObservacionesMasivo item OK", JsonSerializer.Serialize(new { indice = i + 1, total, productId = p.ProductoID, rtfLen = p.Observaciones?.Length ?? 0 })); } catch { }
+                }
+                _bulkGeneratingObservacionesCurrent = i + 1;
+                await InvokeAsync(StateHasChanged);
+            }
+            await MostrarToastAsync(okCount > 0 ? $"Se generaron {okCount} observación(es) en memoria. Usá «Guardar cambios»." : "No se pudo generar ninguna observación.", okCount == 0);
+        }
+        finally
+        {
+            _bulkGeneratingObservaciones = false;
+            _bulkGeneratingObservacionesCurrent = 0;
+            _bulkGeneratingObservacionesTotal = 0;
             await InvokeAsync(StateHasChanged);
         }
     }

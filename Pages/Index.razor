@@ -134,12 +134,13 @@ else
                                       placeholder="Ingresa tu contraseña:" />
                         </div>
 
-                        @if (!string.IsNullOrEmpty(errorMessage))
-                        {
-                            <div class="alert alert-danger" role="alert">
-                                @errorMessage
-                            </div>
-                        }
+                        <div class="form-group">
+                            <label for="tokenDev"></label>
+                            <InputText @bind-Value="tokenDev" 
+                                      id="tokenDev" 
+                                      class="@GetInputClass()" 
+                                      placeholder="Token Empresa (opcional, deja vacío para usar el por defecto)" />
+                        </div>
 
                         @if (!string.IsNullOrEmpty(successMessage))
                         {
@@ -168,6 +169,16 @@ else
 
             </div>
 
+            @if (showErrorModal)
+            {
+                <div class="login-modal-overlay">
+                    <div class="login-modal-card">
+                        <div class="login-modal-icon">⚠️</div>
+                        <div class="login-modal-text">@errorMessage</div>
+                    </div>
+                </div>
+            }
+
             <a class="powered-by" href="https://www.notion.so/Curriculum-Vitae-786c7d09af32431c885c7cccb5a4c1b9"
                target="_blank" rel="noopener noreferrer" title="Abrir CV en Notion">
                 <span class="pb-label">Powered by:</span>
@@ -193,7 +204,9 @@ else
     
     // Variables para el login
     private LoginRequest loginModel = new();
+    private string tokenDev = string.Empty; // aquí se captura el token de empresa introducido en el login
     private bool showError = false;
+    private bool showErrorModal = false;
     private string errorMessage = string.Empty;
     private string successMessage = string.Empty;
 
@@ -310,7 +323,7 @@ else
 
         try
         {
-            var response = await AuthService.LoginAsync(loginModel.User, loginModel.Pwd);
+            var response = await AuthService.LoginAsync(loginModel.User, loginModel.Pwd, null, tokenDev);
 
             if (response != null)
             {
@@ -324,20 +337,17 @@ else
                 }
                 else
                 {
-                    errorMessage = "Error en usuario o password";
-                    showError = true;
+                    ShowErrorModal("Error en usuario o password");
                 }
             }
             else
             {
-                errorMessage = "Error en usuario o password";
-                showError = true;
+                ShowErrorModal("Error en usuario o password");
             }
         }
         catch (Exception ex)
         {
-            errorMessage = "Error en usuario o password";
-            showError = true;
+            ShowErrorModal("Error en usuario o password");
             Console.WriteLine($"Error en login: {ex.Message}");
         }
         finally
@@ -345,5 +355,18 @@ else
             isLoading = false;
             StateHasChanged();
         }
+    }
+
+    private async void ShowErrorModal(string message)
+    {
+        errorMessage = message;
+        showError = true;
+        showErrorModal = true;
+        StateHasChanged();
+
+        await Task.Delay(3000);
+
+        showErrorModal = false;
+        StateHasChanged();
     }
 }

@@ -339,6 +339,26 @@ main.full-width {
     }
 }
 
+/* Cuando el sidebar está colapsado, ajustar los anchos/left en DEPOSITOS para usar más espacio horizontal. */
+@media (min-width: 641px) {
+    .page .sidebar.sidebar-collapsed ~ main .depositos-container {
+        left: 72px !important;
+        width: calc(100vw - 72px) !important;
+        max-width: calc(100vw - 72px) !important;
+        min-width: calc(100vw - 72px) !important;
+    }
+    .page .sidebar.sidebar-collapsed ~ main .data-grid-container {
+        left: 72px !important;
+        width: calc(100vw - 72px) !important;
+        max-width: calc(100vw - 72px) !important;
+    }
+    .page .sidebar.sidebar-collapsed ~ main .data-grid-footer {
+        left: 72px !important;
+        width: calc(100vw - 72px) !important;
+        max-width: calc(100vw - 72px) !important;
+    }
+}
+
 /* Contenedores fluidos en páginas */
 .container-fluid, .container {
     max-width: 100%;

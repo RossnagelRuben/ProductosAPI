@@ -1,8 +1,8 @@
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
         <a class="navbar-brand" href="">Alma NET APIs</a>
-        <button class="navbar-toggler" type="button" aria-label="Alternar navegación" @onclick="ToggleNavMenu">
-            <span class="navbar-toggler-icon"></span>
+        <button class="navbar-toggler nav-expander" type="button" aria-label="Alternar navegación" @onclick="ToggleNavMenu">
+            <span class="nav-toggle-icon">@(_isCollapsed ? "☰" : "⮜")</span>
         </button>
     </div>
 </div>
@@ -54,17 +54,25 @@
 </div>
 
 @code {
-    private bool collapseNavMenu = true;
+    [Parameter] public EventCallback<bool> OnCollapsedChanged { get; set; }
+
+    // Menú visible por defecto; se puede ocultar con el botón.
+    private bool collapseNavMenu = false;
+    private bool _isCollapsed => collapseNavMenu;
 
     private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
 
-    private void ToggleNavMenu()
+    private async Task ToggleNavMenu()
     {
         collapseNavMenu = !collapseNavMenu;
+        if (OnCollapsedChanged.HasDelegate)
+            await OnCollapsedChanged.InvokeAsync(collapseNavMenu);
     }
 
-    private void CollapseNav()
+    private async Task CollapseNav()
     {
         collapseNavMenu = true;
+        if (OnCollapsedChanged.HasDelegate)
+            await OnCollapsedChanged.InvokeAsync(collapseNavMenu);
     }
 }

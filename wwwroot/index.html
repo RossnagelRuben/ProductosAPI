@@ -139,51 +139,98 @@
             return new Promise(function(resolve, reject) {
                 try {
                     if (!dataUrl || typeof dataUrl !== 'string' || dataUrl.indexOf('data:image/') !== 0) {
+                        if (window.__logAsignarImagenes) window.__logAsignarImagenes('optimizarImagen SKIP', JSON.stringify({ motivo: 'no-data-url' }));
                         resolve(dataUrl);
                         return;
                     }
-
+                    var formatoEntrada = dataUrl.substring(0, dataUrl.indexOf(';') + 1) || 'data:image/';
                     var img = new Image();
+                    img.crossOrigin = 'anonymous';
                     img.onload = function() {
                         try {
                             var w = img.naturalWidth || img.width;
                             var h = img.naturalHeight || img.height;
                             if (!w || !h) {
+                                if (window.__logAsignarImagenes) window.__logAsignarImagenes('optimizarImagen FALLBACK', JSON.stringify({ motivo: 'w o h cero' }));
                                 resolve(dataUrl);
                                 return;
                             }
-
                             var maxW = (typeof maxWidth === 'number' && maxWidth > 0) ? maxWidth : 800;
                             var maxH = (typeof maxHeight === 'number' && maxHeight > 0) ? maxHeight : 800;
                             var ratio = Math.min(maxW / w, maxH / h, 1);
-
-                            // Si ya es más chica que el máximo, no tocamos la imagen.
-                            if (!isFinite(ratio) || ratio >= 1) {
-                                resolve(dataUrl);
-                                return;
-                            }
-
+                            if (!isFinite(ratio) || ratio < 0) ratio = 1;
                             var canvas = document.createElement('canvas');
                             canvas.width = Math.round(w * ratio);
                             canvas.height = Math.round(h * ratio);
                             var ctx = canvas.getContext('2d');
                             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
                             var q = (typeof quality === 'number' && quality > 0 && quality <= 1) ? quality : 0.85;
                             var out = canvas.toDataURL('image/jpeg', q);
+                            if (window.__logAsignarImagenes) window.__logAsignarImagenes('optimizarImagen OK', JSON.stringify({ formatoEntrada, outFormat: 'image/jpeg', w: canvas.width, h: canvas.height }));
                             resolve(out || dataUrl);
                         } catch (e) {
                             console.error('Error en __optimizarImagenAsignar:', e);
+                            if (window.__logAsignarImagenes) window.__logAsignarImagenes('optimizarImagen ERROR', JSON.stringify({ error: e.message }));
                             resolve(dataUrl);
                         }
                     };
                     img.onerror = function() {
+                        if (window.__logAsignarImagenes) window.__logAsignarImagenes('optimizarImagen ONERROR', JSON.stringify({ formatoEntrada: formatoEntrada }));
                         resolve(dataUrl);
                     };
                     img.src = dataUrl;
                 } catch (e) {
                     console.error('Error en __optimizarImagenAsignar:', e);
                     resolve(dataUrl);
+                }
+            });
+        };
+        window.__convertirImagenAJpeg = function(dataUrl, quality) {
+            return new Promise(function(resolve) {
+                function fallback(msg) {
+                    if (window.__logAsignarImagenes) window.__logAsignarImagenes('convertirImagenAJpeg FALLBACK', JSON.stringify({ motivo: msg }));
+                    resolve(dataUrl || '');
+                }
+                try {
+                    if (!dataUrl || typeof dataUrl !== 'string' || dataUrl.indexOf('data:image/') !== 0) {
+                        resolve(dataUrl || '');
+                        return;
+                    }
+                    var img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    img.onload = function() {
+                        function drawAndResolve() {
+                            try {
+                                var w = img.naturalWidth || img.width;
+                                var h = img.naturalHeight || img.height;
+                                if (!w || !h) { fallback('w o h cero'); return; }
+                                var canvas = document.createElement('canvas');
+                                canvas.width = w;
+                                canvas.height = h;
+                                var ctx = canvas.getContext('2d');
+                                ctx.fillStyle = '#FFFFFF';
+                                ctx.fillRect(0, 0, w, h);
+                                ctx.drawImage(img, 0, 0);
+                                var q = (typeof quality === 'number' && quality > 0 && quality <= 1) ? quality : 0.92;
+                                var out = canvas.toDataURL('image/jpeg', q);
+                                if (out && out.indexOf('data:image/jpeg') === 0) {
+                                    if (window.__logAsignarImagenes) window.__logAsignarImagenes('convertirImagenAJpeg OK', JSON.stringify({ w: w, h: h }));
+                                    resolve(out);
+                                } else { fallback('toDataURL no devolvió jpeg'); }
+                            } catch (e) {
+                                fallback('draw: ' + (e && e.message));
+                            }
+                        }
+                        if (typeof img.decode === 'function') {
+                            img.decode().then(drawAndResolve).catch(function() { drawAndResolve(); });
+                        } else {
+                            drawAndResolve();
+                        }
+                    };
+                    img.onerror = function() { fallback('img.onerror'); };
+                    img.src = dataUrl;
+                } catch (e) {
+                    fallback('ex: ' + (e && e.message));
                 }
             });
         };

@@ -10,101 +10,114 @@ public static class HtmlToRtfConverter
 {
     private const string RtfHeader = "{\\rtf1\\ansi\\deff0 {\\fonttbl{\\f0 Arial;}} \\pard\\sa200\\sl276\\slmult1\\f0\\fs24 ";
 
-    /// <summary>Convierte HTML a RTF (negritas, cursivas, subrayado, párrafos, viñetas). Caracteres especiales y no-ASCII se escapan correctamente.</summary>
+    /// <summary>Convierte HTML a RTF (negritas, cursivas, subrayado, párrafos, viñetas). Caracteres especiales y no-ASCII se escapan correctamente. Nunca lanza; en caso de error devuelve RTF mínimo.</summary>
     public static string ToRtf(string? html)
     {
         if (string.IsNullOrWhiteSpace(html))
             return "";
 
-        var s = UnescapeHtml(html);
-        // Quitar div.rtf-preview y tags que no usamos
-        s = System.Text.RegularExpressions.Regex.Replace(s, @"</?div[^>]*>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        s = System.Text.RegularExpressions.Regex.Replace(s, @"<p[^>]*class=""[^""]*""[^>]*>", "<p>", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-        var sb = new StringBuilder();
-        sb.Append(RtfHeader);
-
-        var i = 0;
-        while (i < s.Length)
+        try
         {
-            if (s[i] == '<')
+            var s = UnescapeHtml(html);
+            // Limitar tamaño para evitar timeouts o memoria con contenido pegado muy grande
+            const int maxLen = 500_000;
+            if (s.Length > maxLen)
+                s = s.Substring(0, maxLen);
+
+            // Quitar div.rtf-preview y tags que no usamos
+            s = System.Text.RegularExpressions.Regex.Replace(s, @"</?div[^>]*>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(500));
+            s = System.Text.RegularExpressions.Regex.Replace(s, @"<p[^>]*class=""[^""]*""[^>]*>", "<p>", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(500));
+
+            var sb = new StringBuilder();
+            sb.Append(RtfHeader);
+
+            var i = 0;
+            while (i < s.Length)
             {
-                if (TryConsumeTag(s, i, "strong", false, out var end) || TryConsumeTag(s, i, "b", false, out end))
+                if (s[i] == '<')
                 {
-                    sb.Append("\\b ");
-                    i = end;
-                    continue;
+                    if (TryConsumeTag(s, i, "strong", false, out var end) || TryConsumeTag(s, i, "b", false, out end))
+                    {
+                        sb.Append("\\b ");
+                        i = end;
+                        continue;
+                    }
+                    if (TryConsumeTag(s, i, "/strong", true, out end) || TryConsumeTag(s, i, "/b", true, out end))
+                    {
+                        sb.Append("\\b0 ");
+                        i = end;
+                        continue;
+                    }
+                    if (TryConsumeTag(s, i, "em", false, out end) || TryConsumeTag(s, i, "i", false, out end))
+                    {
+                        sb.Append("\\i ");
+                        i = end;
+                        continue;
+                    }
+                    if (TryConsumeTag(s, i, "/em", true, out end) || TryConsumeTag(s, i, "/i", true, out end))
+                    {
+                        sb.Append("\\i0 ");
+                        i = end;
+                        continue;
+                    }
+                    if (TryConsumeTag(s, i, "u", false, out end))
+                    {
+                        sb.Append("\\ul ");
+                        i = end;
+                        continue;
+                    }
+                    if (TryConsumeTag(s, i, "/u", true, out end))
+                    {
+                        sb.Append("\\ulnone ");
+                        i = end;
+                        continue;
+                    }
+                    if (TryConsumeTag(s, i, "br", true, out end) || TryConsumeTag(s, i, "br/", true, out end))
+                    {
+                        sb.Append("\\par ");
+                        i = end;
+                        continue;
+                    }
+                    if (TryConsumeTag(s, i, "p", false, out end) || TryConsumeTag(s, i, "/p", true, out end))
+                    {
+                        sb.Append("\\par ");
+                        i = end;
+                        continue;
+                    }
+                    if (TryConsumeTag(s, i, "li", false, out end))
+                    {
+                        sb.Append("\\bullet ");
+                        i = end;
+                        continue;
+                    }
+                    if (TryConsumeTag(s, i, "/li", true, out end))
+                    {
+                        sb.Append("\\par ");
+                        i = end;
+                        continue;
+                    }
+                    if (TryConsumeTag(s, i, "ul", false, out end) || TryConsumeTag(s, i, "/ul", true, out end))
+                    {
+                        i = end;
+                        continue;
+                    }
+                    // Tag desconocido: saltar hasta >
+                    var gt = s.IndexOf('>', i);
+                    if (gt >= 0) { i = gt + 1; continue; }
                 }
-                if (TryConsumeTag(s, i, "/strong", true, out end) || TryConsumeTag(s, i, "/b", true, out end))
-                {
-                    sb.Append("\\b0 ");
-                    i = end;
-                    continue;
-                }
-                if (TryConsumeTag(s, i, "em", false, out end) || TryConsumeTag(s, i, "i", false, out end))
-                {
-                    sb.Append("\\i ");
-                    i = end;
-                    continue;
-                }
-                if (TryConsumeTag(s, i, "/em", true, out end) || TryConsumeTag(s, i, "/i", true, out end))
-                {
-                    sb.Append("\\i0 ");
-                    i = end;
-                    continue;
-                }
-                if (TryConsumeTag(s, i, "u", false, out end))
-                {
-                    sb.Append("\\ul ");
-                    i = end;
-                    continue;
-                }
-                if (TryConsumeTag(s, i, "/u", true, out end))
-                {
-                    sb.Append("\\ulnone ");
-                    i = end;
-                    continue;
-                }
-                if (TryConsumeTag(s, i, "br", true, out end) || TryConsumeTag(s, i, "br/", true, out end))
-                {
-                    sb.Append("\\par ");
-                    i = end;
-                    continue;
-                }
-                if (TryConsumeTag(s, i, "p", false, out end) || TryConsumeTag(s, i, "/p", true, out end))
-                {
-                    sb.Append("\\par ");
-                    i = end;
-                    continue;
-                }
-                if (TryConsumeTag(s, i, "li", false, out end))
-                {
-                    sb.Append("\\bullet ");
-                    i = end;
-                    continue;
-                }
-                if (TryConsumeTag(s, i, "/li", true, out end))
-                {
-                    sb.Append("\\par ");
-                    i = end;
-                    continue;
-                }
-                if (TryConsumeTag(s, i, "ul", false, out end) || TryConsumeTag(s, i, "/ul", true, out end))
-                {
-                    i = end;
-                    continue;
-                }
-                // Tag desconocido: saltar hasta >
-                var gt = s.IndexOf('>', i);
-                if (gt >= 0) { i = gt + 1; continue; }
+
+                AppendCharToRtf(sb, s[i]);
+                i++;
             }
 
-            AppendCharToRtf(sb, s[i]);
-            i++;
+            sb.Append("}");
+            return sb.ToString();
         }
-
-        sb.Append("}");
-        return sb.ToString();
+        catch
+        {
+            // Ante cualquier error (Regex, memoria, HTML inesperado), devolver RTF mínimo para no romper el flujo ni mostrar "An unhandled error"
+            return RtfHeader + "\\par ";
+        }
     }
 
     private static bool TryConsumeTag(string s, int start, string tagName, bool selfClosing, out int end)

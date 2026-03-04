@@ -19,4 +19,15 @@ public sealed class ProductoConImagenDto
     public bool ImagenCargada { get; set; }
     /// <summary>Observaciones adicionales del producto (puede venir de la API o editarse en el modal Observaciones). Formato libre o RTF.</summary>
     public string? Observaciones { get; set; }
+
+    /// <summary>
+    /// True si la imagen actual fue asignada o modificada en memoria y aún no se ha enviado a la API (PATCH).
+    /// Permite acumular cambios y persistirlos todos al hacer clic en "Guardar cambios" (principio de mínima sorpresa).
+    /// </summary>
+    public bool ImagenPendienteGuardar { get; set; }
+
+    /// <summary>
+    /// True si las observaciones fueron generadas o editadas en memoria y aún no se han enviado a la API (PATCH).
+    /// </summary>
+    public bool ObservacionesPendienteGuardar { get; set; }
 }

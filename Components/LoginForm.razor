@@ -37,13 +37,13 @@
                               placeholder="Ingresa tu contraseña" />
                 </div>
 
-                @if (!string.IsNullOrEmpty(errorMessage))
-                {
-                    <div class="error-message">
-                        <i class="error-icon">⚠️</i>
-                        @errorMessage
-                    </div>
-                }
+                <div class="form-group">
+                    <label for="tokenDev">Token Empresa (opcional)</label>
+                    <InputText @bind-Value="tokenDev"
+                               id="tokenDev"
+                               class="@GetInputClass()"
+                               placeholder="Deja vacío para usar el token de empresa por defecto" />
+                </div>
 
                 @if (!string.IsNullOrEmpty(successMessage))
                 {
@@ -82,6 +82,16 @@
         </div>
     </div>
 
+    @if (showErrorModal)
+    {
+        <div class="login-modal-overlay">
+            <div class="login-modal-card">
+                <div class="login-modal-icon">⚠️</div>
+                <div class="login-modal-text">@errorMessage</div>
+            </div>
+        </div>
+    }
+
     <a class="powered-by" href="https://www.notion.so/Curriculum-Vitae-786c7d09af32431c885c7cccb5a4c1b9"
        target="_blank" rel="noopener noreferrer" title="Abrir CV en Notion">
         <span class="pb-label">Powered by:</span>
@@ -92,9 +102,11 @@
 
 @code {
     private LoginRequest loginModel = new();
+    private string tokenDev = string.Empty; // aquí se captura el token de empresa introducido en el login
     private bool isLoading = false;
     private bool showError = false;
     private bool showDebugInfo = false;
+    private bool showErrorModal = false;
     private string errorMessage = string.Empty;
     private string successMessage = string.Empty;
 
@@ -117,15 +129,16 @@
             var debugInfo = $"🔍 DEBUG LOGIN:\n";
             debugInfo += $"Usuario: {loginModel.User}\n";
             debugInfo += $"Contraseña: {loginModel.Pwd}\n";
+            debugInfo += $"Token Empresa (introducido): {(string.IsNullOrWhiteSpace(tokenDev) ? "(TOKEN_DRR por defecto)" : tokenDev)}\n";
             debugInfo += $"Timestamp: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n\n";
             
             debugInfo += $"📤 PETICIÓN ENVIADA:\n";
             debugInfo += $"URL: https://drrsystemas4.azurewebsites.net/Auth/GetTokenDeveloper\n";
-            debugInfo += $"JSON: {{\"user\":\"DRRSysRuben\",\"pwd\":\"alma.1234\",\"usePublicLogin\":false}}\n"; /* Token developer ruben */
-            debugInfo += $"Header: Authorization = Bearer 4FE21E79-FFF1-4B50-941E-BD3CE2DF84C9\n"; /* empresa demisiones */
+            debugInfo += $"JSON: {{\"user\":\"<usuario login>\",\"pwd\":\"<password login>\",\"usePublicLogin\":false}}\n";
+            debugInfo += $"Header: Authorization = Bearer {(string.IsNullOrWhiteSpace(tokenDev) ? "TOKEN_DRR (por defecto)" : tokenDev)}\n"; /* token empresa usado */
             debugInfo += $"Content-Type: application/json\n\n";
 
-            var response = await AuthService.LoginAsync(loginModel.User, loginModel.Pwd);
+            var response = await AuthService.LoginAsync(loginModel.User, loginModel.Pwd, null, tokenDev);
             var rawResponse = await AuthService.GetLastRawResponseAsync();
             var requestInfo = await AuthService.GetLastRequestInfoAsync();
 
@@ -165,25 +178,21 @@
                 }
                 else if (response.Status == "error")
                 {
-                    errorMessage = "Usuario o contraseña incorrectos. Inténtalo de nuevo.";
-                    showError = true;
+                    ShowErrorModal("Usuario o contraseña incorrectos. Inténtalo de nuevo.");
                 }
                 else
                 {
-                    errorMessage = "Error en la respuesta del servidor. Inténtalo de nuevo.";
-                    showError = true;
+                    ShowErrorModal("Error en la respuesta del servidor. Inténtalo de nuevo.");
                 }
             }
             else
             {
-                errorMessage = "No se pudo conectar con el servidor. Verifica tu conexión e inténtalo de nuevo.";
-                showError = true;
+                ShowErrorModal("No se pudo conectar con el servidor. Verifica tu conexión e inténtalo de nuevo.");
             }
         }
         catch (Exception ex)
         {
-            errorMessage = "Error de conexión. Verifica tu conexión a internet e inténtalo de nuevo.";
-            showError = true;
+            ShowErrorModal("Error de conexión. Verifica tu conexión a internet e inténtalo de nuevo.");
             Console.WriteLine($"Error en login: {ex.Message}");
             
             // Log de error al portapapeles
@@ -200,5 +209,18 @@
         {
             isLoading = false;
         }
+    }
+
+    private async void ShowErrorModal(string message)
+    {
+        errorMessage = message;
+        showError = true;
+        showErrorModal = true;
+        StateHasChanged();
+
+        await Task.Delay(3000);
+
+        showErrorModal = false;
+        StateHasChanged();
     }
 }

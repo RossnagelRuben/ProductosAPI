@@ -1,6 +1,23 @@
 /* Estilos del menú lateral original Blazor */
 .navbar-toggler {
     background-color: rgba(255, 255, 255, 0.1);
+    border: none;
+    padding: 0.25rem 0.5rem;
+}
+
+.nav-expander {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    font-size: 1.1rem;
+    margin-left: auto;
+}
+
+.nav-toggle-icon {
+    display: inline-block;
+    width: 1.5rem;
+    text-align: center;
 }
 
 .top-row {
@@ -10,6 +27,7 @@
 
 .navbar-brand {
     font-size: 1.1rem;
+    flex: 1;
 }
 
 .oi {
@@ -52,14 +70,6 @@
 }
 
 @media (min-width: 641px) {
-    .navbar-toggler {
-        display: none;
-    }
-
-    .collapse {
-        display: block;
-    }
-
     /* El menú ocupa todo el alto del sidebar (flex) para que llegue hasta abajo en PC */
     .nav-scrollable {
         flex: 1;

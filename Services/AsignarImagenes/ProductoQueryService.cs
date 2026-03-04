@@ -29,7 +29,10 @@ public sealed class ProductoQueryService : IProductoQueryService
             $"pageNumber={Math.Max(1, filter.PageNumber)}",
             // Siempre pedimos a la API que incluya datos de imagen (Imagen=true).
             // El filtrado Con/Sin imagen se hace del lado cliente según ImagenUrl/ImagenCargada.
-            "Imagen=true"
+            "Imagen=true",
+            // Include: 0 = Ninguno, 1 = Stock, 2 = Observaciones.
+            // Para la pantalla de Asignar Imágenes necesitamos que la API devuelva también las observaciones.
+            "Include=2"
         };
         if (!string.IsNullOrWhiteSpace(filter.CodigoBarra))
             qs.Add($"codigoBarra={Uri.EscapeDataString(filter.CodigoBarra.Trim())}");

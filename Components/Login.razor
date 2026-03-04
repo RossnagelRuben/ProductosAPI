@@ -32,6 +32,14 @@
                               placeholder="Ingresa tu contraseña" />
                 </div>
 
+                <div class="form-group">
+                    <label for="tokenDev">Token Empresa (opcional)</label>
+                    <InputText @bind-Value="tokenDev"
+                               id="tokenDev"
+                               class="@GetInputClass()"
+                               placeholder="Deja vacío para usar el token de empresa por defecto" />
+                </div>
+
                 @if (!string.IsNullOrEmpty(errorMessage))
                 {
                     <div class="error-message">
@@ -72,6 +80,7 @@
 
 @code {
     private LoginRequest loginModel = new();
+    private string tokenDev = string.Empty; // token de empresa capturado desde el login
     private bool isLoading = false;
     private bool showError = false;
     private string errorMessage = string.Empty;
@@ -91,7 +100,7 @@
 
         try
         {
-            var response = await AuthService.LoginAsync(loginModel.User, loginModel.Pwd);
+            var response = await AuthService.LoginAsync(loginModel.User, loginModel.Pwd, null, tokenDev);
 
             if (response?.Status == "ok" && response.Data != null)
             {

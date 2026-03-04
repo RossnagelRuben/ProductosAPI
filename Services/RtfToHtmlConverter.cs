@@ -10,15 +10,42 @@ namespace BlazorApp_ProductosAPI.Services;
 public static class RtfToHtmlConverter
 {
 
-    /// <summary>Convierte una cadena RTF a HTML seguro (solo tags permitidos). Si no parece RTF, escapa y devuelve el texto en párrafo.</summary>
+    /// <summary>Convierte una cadena RTF a HTML seguro (solo tags permitidos). Si no parece RTF, escapa y devuelve el texto en párrafo. Nunca lanza excepciones.</summary>
     public static string ToHtml(string? rtf)
     {
         if (string.IsNullOrWhiteSpace(rtf))
             return "<p class=\"rtf-preview-empty\">Sin contenido.</p>";
 
+        rtf = SanitizeRtfInput(rtf);
         var trimmed = rtf.Trim();
         if (!trimmed.StartsWith("{\\rtf", StringComparison.OrdinalIgnoreCase))
             return "<p class=\"rtf-preview-plain\">" + EscapeHtml(rtf) + "</p>";
+
+        try
+        {
+            return ToHtmlCore(trimmed);
+        }
+        catch
+        {
+            return "<p class=\"rtf-preview-plain\">" + EscapeHtml(rtf) + "</p>";
+        }
+    }
+
+    private static string SanitizeRtfInput(string rtf)
+    {
+        if (string.IsNullOrEmpty(rtf)) return rtf;
+        var sb = new StringBuilder(rtf.Length);
+        foreach (var c in rtf)
+        {
+            if (c == '\0') continue;
+            if (char.IsSurrogate(c)) continue;
+            sb.Append(c);
+        }
+        return sb.ToString();
+    }
+
+    private static string ToHtmlCore(string trimmed)
+    {
 
         var sb = new StringBuilder();
         var i = 0;
@@ -65,10 +92,27 @@ public static class RtfToHtmlConverter
                     }
                 }
 
-                // Formato Unicode estándar de RTF: \uN?  (N decimal, ? = carácter de fallback que se debe ignorar)
+                // Formato Unicode RTF: \uN? (N decimal) o \uXXXX (hex, p. ej. \u00f3 = ó). Gemini a veces usa hex.
                 if (trimmed[i] == 'u' && i + 2 < trimmed.Length)
                 {
                     var j = i + 1;
+                    // Intentar primero 4 dígitos hex (\u00f3 para ó, \u00f1 para ñ) para no interpretar \u00 como decimal 0 y perder F3
+                    if (j + 4 <= trimmed.Length &&
+                        IsHex(trimmed[j]) && IsHex(trimmed[j + 1]) && IsHex(trimmed[j + 2]) && IsHex(trimmed[j + 3]))
+                    {
+                        var hex4 = trimmed.Substring(j, 4);
+                        if (int.TryParse(hex4, System.Globalization.NumberStyles.HexNumber, null, out var codeHex) &&
+                            codeHex > 0 && codeHex <= 0xFFFF)
+                        {
+                            var ch = (char)codeHex;
+                            sb.Append(EscapeHtml(ch.ToString()));
+                            i = j + 4;
+                            if (i < trimmed.Length && (trimmed[i] == ' ' || trimmed[i] == '\t')) i++;
+                            if (i < trimmed.Length) i++; // carácter de fallback
+                            continue;
+                        }
+                    }
+                    // Decimal con signo opcional: \u243? o \u-123?
                     var negative = false;
                     if (j < trimmed.Length && trimmed[j] == '-')
                     {
@@ -91,12 +135,8 @@ public static class RtfToHtmlConverter
                             }
                         }
                         i = j;
-                        // Consumir espacio opcional
-                        if (i < trimmed.Length && trimmed[i] == ' ')
-                            i++;
-                        // Consumir un carácter de fallback si existe (aunque Gemini use '3'/'1'/'3', lo ignoramos)
-                        if (i < trimmed.Length)
-                            i++;
+                        if (i < trimmed.Length && trimmed[i] == ' ') i++;
+                        if (i < trimmed.Length) i++;
                         continue;
                     }
                 }

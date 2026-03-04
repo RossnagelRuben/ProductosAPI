@@ -61,6 +61,7 @@
                                 </button>
                             }
                             *@
+                            @* Botón SerpAPI original (mantener comentado si se quiere volver a usar búsquedas externas)
                             @if (PuedeBuscarEnWeb(p))
                             {
                                 <button type="button"
@@ -68,6 +69,16 @@
                                         @onclick="() => OnBuscarImagenSerpApi.InvokeAsync(p)">
                                     <span class="oi oi-image" aria-hidden="true"></span>
                                     <span>SerpAPI</span>
+                                </button>
+                            }
+                            *@
+                            @if (PuedeBuscarEnWeb(p))
+                            {
+                                <button type="button"
+                                        class="btn-card btn-serpapi"
+                                        @onclick="() => OnBuscarImagenSerpApi.InvokeAsync(p)">
+                                    <span class="oi oi-image" aria-hidden="true"></span>
+                                    <span>Buscar imagen (API)</span>
                                 </button>
                             }
                             <button type="button"

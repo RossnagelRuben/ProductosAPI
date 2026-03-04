@@ -25,7 +25,11 @@ public partial class ProductosImagenGrid
     [Parameter] public int? IsSavingImage { get; set; }
     [Parameter] public EventCallback<ProductoConImagenDto> OnAbrirModalImagen { get; set; }
     [Parameter] public EventCallback<ProductoConImagenDto> OnBuscarImagenWeb { get; set; }
-    /// <summary>Callback para búsqueda de imágenes con SerpAPI (Google Images, Argentina). Se habilita si tiene descripción (con o sin código de barras).</summary>
+    /// <summary>
+    /// Callback de búsqueda de imágenes desde la tarjeta.
+    /// Actualmente se conecta a la API /Integration/ImageSearch desde la página padre.
+    /// El nombre original (SerpApi) se mantiene por compatibilidad.
+    /// </summary>
     [Parameter] public EventCallback<ProductoConImagenDto> OnBuscarImagenSerpApi { get; set; }
     [Parameter] public EventCallback<ProductoConImagenDto> OnAbrirModalObservaciones { get; set; }
     [Parameter] public EventCallback<ProductoConImagenDto> OnGuardar { get; set; }
@@ -57,7 +61,7 @@ public partial class ProductosImagenGrid
                 if (!string.IsNullOrWhiteSpace(p.ImagenUrl) && EsDataUrlDeImagenReal(p.ImagenUrl))
                     _imagenFallidaIds.Remove(p.ProductoID);
             }
-            await LogGridAlConsolaAsync();
+            // LogGridAlConsolaAsync(); // Desactivado para no saturar la consola en cada render
         }
     }
 
@@ -87,27 +91,8 @@ public partial class ProductosImagenGrid
         return false;
     }
 
-    private async Task LogGridAlConsolaAsync()
-    {
-        try
-        {
-            var list = Items!.Select(p =>
-            {
-                var src = GetImageSrc(p);
-                return new
-                {
-                    p.ProductoID,
-                    p.Codigo,
-                    ImagenUrl = p.ImagenUrl != null ? (p.ImagenUrl.Length > 100 ? p.ImagenUrl.Substring(0, 100) + "…" : p.ImagenUrl) : "(null)",
-                    srcUsado = src.StartsWith("data:") ? "(data URL placeholder)" : (src.Length > 100 ? src.Substring(0, 100) + "…" : src),
-                    usaPlaceholder = string.IsNullOrWhiteSpace(p.ImagenUrl) || _imagenFallidaIds.Contains(p.ProductoID)
-                };
-            }).ToList();
-            var json = JsonSerializer.Serialize(list);
-            await JS.InvokeVoidAsync("__logAsignarImagenes", "Grid: src de cada <img>", json);
-        }
-        catch { /* no romper la UI */ }
-    }
+    /// <summary>Log de diagnóstico de la grilla (desactivado por defecto para no saturar la consola).</summary>
+    private Task LogGridAlConsolaAsync() => Task.CompletedTask;
 
     private async Task MarcarImagenFallida(ProductoConImagenDto p)
     {

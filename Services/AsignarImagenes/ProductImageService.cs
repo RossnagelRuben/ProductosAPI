@@ -98,29 +98,42 @@ public sealed class ProductImageService : IProductImageService
         if (productoID <= 0) return false;
         if (string.IsNullOrWhiteSpace(imageUrlOrBase64)) return false;
 
-        var original = imageUrlOrBase64;
+        var formatoAntes = imageUrlOrBase64.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase)
+            ? (imageUrlOrBase64.IndexOf(';') is int idx && idx > 10 ? imageUrlOrBase64.Substring(5, idx - 5) : "data:image/?")
+            : "no-data-url";
+        var lenAntes = imageUrlOrBase64.Length;
 
-        // Optimizar tamaño de la imagen en el navegador (canvas) antes de enviarla al backend.
-        // Solo aplica cuando viene como data URL (data:image/...;base64,AAAA).
+        // Optimizar y convertir a JPEG en el navegador (canvas) antes de enviar al backend.
         if (imageUrlOrBase64.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
         {
             try
             {
-                // Máximo 800x800, calidad alta (0.85) para reducir peso sin perder calidad visible.
                 var optimized = await _js.InvokeAsync<string>("__optimizarImagenAsignar", imageUrlOrBase64, 800, 800, 0.85);
                 if (!string.IsNullOrWhiteSpace(optimized))
-                {
                     imageUrlOrBase64 = optimized;
-                }
             }
-            catch
+            catch (Exception exOpt)
             {
-                // Si falla la optimización, continuamos con la imagen original.
+                await LogAsync("SaveProductImageAsync OPTIMIZADOR EXCEPCIÓN", new { productoID, mensaje = exOpt.Message });
+            }
+            // Si tras optimizar no es JPEG (falló canvas), forzar conversión solo a JPEG.
+            if (!imageUrlOrBase64.StartsWith("data:image/jpeg", StringComparison.OrdinalIgnoreCase) && !imageUrlOrBase64.StartsWith("data:image/jpg", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var jpegOnly = await _js.InvokeAsync<string>("__convertirImagenAJpeg", imageUrlOrBase64, 0.92);
+                    if (!string.IsNullOrWhiteSpace(jpegOnly) && jpegOnly.StartsWith("data:image/jpeg", StringComparison.OrdinalIgnoreCase))
+                        imageUrlOrBase64 = jpegOnly;
+                }
+                catch { }
             }
         }
 
-        // La API espera un string base64 (format: byte). Si viene un data URL ("data:image/...;base64,AAAA"),
-        // recortamos el prefijo y enviamos solo la parte base64.
+        var formatoDespues = imageUrlOrBase64.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase)
+            ? (imageUrlOrBase64.IndexOf(';') is int i && i > 10 ? imageUrlOrBase64.Substring(5, i - 5) : "data:image/?")
+            : "no-data-url";
+
+        // Extraer solo base64 y quitar espacios/saltos que rompen el decoding en el servidor.
         var imagenParaApi = imageUrlOrBase64;
         if (imageUrlOrBase64.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
         {
@@ -129,6 +142,36 @@ public sealed class ProductImageService : IProductImageService
             {
                 imagenParaApi = imageUrlOrBase64.Substring(coma + 1);
             }
+        }
+        imagenParaApi = SanitizeBase64(imagenParaApi);
+
+        var base64Len = imagenParaApi?.Length ?? 0;
+        var base64Preview = base64Len > 0 && imagenParaApi != null
+            ? (imagenParaApi.Length <= 60 ? imagenParaApi : imagenParaApi.Substring(0, 60) + "...")
+            : "(vacío)";
+
+        var esJpeg = formatoDespues.Contains("jpeg", StringComparison.OrdinalIgnoreCase) || formatoDespues.Contains("jpg", StringComparison.OrdinalIgnoreCase);
+        await LogAsync("SaveProductImageAsync ANTES PATCH", new
+        {
+            productoID,
+            formatoAntes,
+            formatoDespues,
+            lenAntes,
+            base64Len,
+            base64Preview,
+            esJpeg
+        });
+
+        // La API DRR solo acepta JPEG. Si la conversión en el navegador falló (ej. WebP), no enviar y evitar "Parameter is not valid".
+        if (!esJpeg)
+        {
+            await LogAsync("SaveProductImageAsync OMITIDO (no JPEG)", new
+            {
+                productoID,
+                formatoDespues,
+                mensaje = "La imagen no pudo convertirse a JPEG (ej. WebP). La API solo acepta JPEG. No se envía PATCH."
+            });
+            return false;
         }
 
         var request = new ProductoPatchRequest
@@ -145,11 +188,19 @@ public sealed class ProductImageService : IProductImageService
             var result = await _productoPatch.PatchProductoAsync(request, token, cancellationToken);
             if (!result.Success)
             {
-                await LogAsync("SaveProductImageAsync PATCH ERROR", new { request, result.StatusCode, result.ResponseBody, result.ErrorMessage });
+                await LogAsync("SaveProductImageAsync PATCH ERROR", new
+                {
+                    productoID,
+                    StatusCode = result.StatusCode,
+                    ResponseBody = result.ResponseBody,
+                    ErrorMessage = result.ErrorMessage,
+                    base64Len,
+                    formatoEnviado = formatoDespues
+                });
             }
             else
             {
-                await LogAsync("SaveProductImageAsync PATCH OK", new { request, result.StatusCode });
+                await LogAsync("SaveProductImageAsync PATCH OK", new { productoID, StatusCode = result.StatusCode, base64Len });
             }
             return result.Success;
         }
@@ -158,6 +209,19 @@ public sealed class ProductImageService : IProductImageService
             await LogAsync("SaveProductImageAsync EXCEPCIÓN", new { productoID, mensaje = ex.Message });
             return false;
         }
+    }
+
+    /// <summary>Quita espacios, saltos de línea y retornos para que el servidor decodifique el base64 correctamente.</summary>
+    private static string SanitizeBase64(string? base64)
+    {
+        if (string.IsNullOrEmpty(base64)) return base64 ?? "";
+        var sb = new System.Text.StringBuilder(base64.Length);
+        foreach (var c in base64)
+        {
+            if (char.IsLetterOrDigit(c) || c == '+' || c == '/' || c == '=')
+                sb.Append(c);
+        }
+        return sb.ToString();
     }
 
     private sealed class CentralizadoraProducto

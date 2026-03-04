@@ -48,18 +48,18 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    padding: 16px;
     position: relative;
     z-index: 1;
 }
 
 .stack-tight {
-    gap: 20px;
+    gap: 12px; /* Menos espacio vertical para evitar scroll */
 }
 
 /* Logos iguales al index - Tamaño reducido */
 .logo-alma, .logo-drr {
-    max-width: 120px;
+    max-width: 100px;
     height: auto;
     filter: drop-shadow(0 5px 15px rgba(0, 0, 0, 0.3));
     animation: logoFloat 3s ease-in-out infinite;
@@ -83,13 +83,13 @@ body {
     backdrop-filter: blur(20px);
     border-radius: 25px;
     box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
-    padding: 40px;
+    padding: 30px 28px;
     width: 100%;
-    max-width: 450px;
+    max-width: 440px;
     position: relative;
     z-index: 1;
     border: 1px solid rgba(255, 255, 255, 0.2);
-    margin: 20px 0;
+    margin: 10px 0;
     animation: cardFloat 6s ease-in-out infinite;
 }
 
@@ -297,7 +297,7 @@ body {
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.2);
     transition: all 0.3s ease;
-    margin-top: 20px;
+    margin-top: 12px;
 }
 
 .powered-by:hover {
@@ -428,4 +428,51 @@ body {
     transform: translateY(-5px);
     box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
     transition: all 0.3s ease;
+}
+
+/* Modal / toast de error flotante para el login (parte superior, sin tapar el contenido) */
+.login-modal-overlay {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10000;
+    display: flex;
+    justify-content: center;
+    pointer-events: none; /* no bloquea clics en el formulario */
+}
+
+.login-modal-card {
+    background: rgba(255, 255, 255, 0.96);
+    border-radius: 18px;
+    padding: 12px 18px;
+    max-width: 420px;
+    width: calc(100% - 40px);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+    animation: fadeInDown 0.25s ease-out;
+    font-size: 14px;
+    pointer-events: auto;
+}
+
+.login-modal-icon {
+    font-size: 20px;
+}
+
+.login-modal-text {
+    color: #c0392b;
+    font-weight: 600;
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -10px);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
 }
