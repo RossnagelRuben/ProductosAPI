@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using BlazorApp_ProductosAPI.Models.AsignarImagenes;
@@ -55,36 +56,65 @@ public sealed class ProductoQueryService : IProductoQueryService
         using var req = new HttpRequestMessage(HttpMethod.Get, $"{ApiUrl}?{string.Join("&", qs)}");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
+        var sw = Stopwatch.StartNew();
         using var resp = await _httpClient.SendAsync(req, cancellationToken);
-        if (!resp.IsSuccessStatusCode)
-            return Array.Empty<ProductoConImagenDto>();
-
         var json = await resp.Content.ReadAsStringAsync(cancellationToken);
+        sw.Stop();
+
+        if (!resp.IsSuccessStatusCode)
+        {
+            _ = LogApiTimingAsync("API GetProducto", sw.ElapsedMilliseconds, (int)resp.StatusCode, 0, json?.Length ?? 0, filter.PageNumber, filter.PageSize);
+            return Array.Empty<ProductoConImagenDto>();
+        }
+
         var list = new List<ProductoConImagenDto>();
         try
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
             if (!root.TryGetProperty("data", out var dataArr) && !root.TryGetProperty("Data", out dataArr))
+            {
+                _ = LogApiTimingAsync("API GetProducto", sw.ElapsedMilliseconds, (int)resp.StatusCode, 0, json.Length, filter.PageNumber, filter.PageSize);
                 return list;
+            }
             if (dataArr.ValueKind != JsonValueKind.Array)
+            {
+                _ = LogApiTimingAsync("API GetProducto", sw.ElapsedMilliseconds, (int)resp.StatusCode, 0, json.Length, filter.PageNumber, filter.PageSize);
                 return list;
+            }
             var index = 0;
             foreach (var el in dataArr.EnumerateArray())
             {
-                if (index == 0)
-                    await LogEstructuraImagenPrimerProductoAsync(el);
                 index++;
                 var dto = MapToDto(el);
                 if (dto != null)
                     list.Add(dto);
             }
+            _ = LogApiTimingAsync("API GetProducto", sw.ElapsedMilliseconds, (int)resp.StatusCode, list.Count, json.Length, filter.PageNumber, filter.PageSize);
         }
         catch
         {
-            // devolver lista vacía en caso de error de parsing
+            _ = LogApiTimingAsync("API GetProducto", sw.ElapsedMilliseconds, (int)resp.StatusCode, list.Count, json?.Length ?? 0, filter.PageNumber, filter.PageSize);
         }
         return list;
+    }
+
+    private async Task LogApiTimingAsync(string tag, long tiempoMs, int statusCode, int itemsCount, int jsonLength, int pageNumber, int pageSize)
+    {
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync("__logAsignarImagenes", tag, JsonSerializer.Serialize(new
+            {
+                tiempoMs,
+                tiempoSeg = (double)tiempoMs / 1000,
+                statusCode,
+                itemsDevolueltos = itemsCount,
+                jsonLength,
+                pageNumber,
+                pageSize
+            }));
+        }
+        catch { /* no romper flujo si falla el log */ }
     }
 
     private static ProductoConImagenDto? MapToDto(JsonElement el)
@@ -317,16 +347,52 @@ public sealed class ProductoQueryService : IProductoQueryService
         return null;
     }
 
-    /// <summary>Obtiene observaciones del producto desde el JSON (observaciones, observacionesAdicionales, etc.).</summary>
+    /// <summary>Obtiene observaciones del producto desde el JSON. Con Include=2 la API puede devolverlas en la raíz, en producto/product o en presentaciones.</summary>
     private static string? GetObservacionesFromElement(JsonElement el)
     {
-        var names = new[] { "observacionesAdicionales", "observaciones", "ObservacionesAdicionales", "Observaciones", "notas", "Notas" };
+        var names = new[] { "observacionesAdicionales", "observaciones", "ObservacionesAdicionales", "Observaciones", "observacion", "Observacion", "notas", "Notas" };
         foreach (var name in names)
         {
             if (el.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.String)
             {
                 var s = prop.GetString();
                 if (!string.IsNullOrWhiteSpace(s)) return s;
+            }
+        }
+        if (el.TryGetProperty("producto", out var prod) && prod.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var name in names)
+            {
+                if (prod.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.String)
+                {
+                    var s = prop.GetString();
+                    if (!string.IsNullOrWhiteSpace(s)) return s;
+                }
+            }
+        }
+        if (el.TryGetProperty("product", out var product) && product.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var name in names)
+            {
+                if (product.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.String)
+                {
+                    var s = prop.GetString();
+                    if (!string.IsNullOrWhiteSpace(s)) return s;
+                }
+            }
+        }
+        if (el.TryGetProperty("presentaciones", out var pres) && pres.ValueKind == JsonValueKind.Array && pres.GetArrayLength() > 0)
+        {
+            foreach (var pre in pres.EnumerateArray())
+            {
+                foreach (var name in names)
+                {
+                    if (pre.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.String)
+                    {
+                        var s = prop.GetString();
+                        if (!string.IsNullOrWhiteSpace(s)) return s;
+                    }
+                }
             }
         }
         return null;

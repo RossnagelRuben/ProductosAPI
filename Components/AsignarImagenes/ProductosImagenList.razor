@@ -65,6 +65,7 @@
                         <span>Generar imagen (Gemini) para seleccionados</span>
                     }
                 </button>
+                @* Botón SerpAPI+Gemini oculto: solo se usa OpenAI para observaciones.
                 <button type="button" class="btn-list btn-bulk-obs"
                         disabled="@(IsBulkSearching || IsBulkGenerating || IsBulkGeneratingObservaciones || !TieneSeleccionados)"
                         @onclick="(() => OnGenerarObservacionesMasivo.InvokeAsync())">
@@ -76,8 +77,15 @@
                     else
                     {
                         <span class="oi oi-document"></span>
-                        <span>Generar observaciones (IA) para seleccionados</span>
+                        <span>Generar observaciones (SerpAPI+Gemini)</span>
                     }
+                </button>
+                *@
+                <button type="button" class="btn-list btn-bulk-obs"
+                        disabled="@(IsBulkSearching || IsBulkGenerating || IsBulkGeneratingObservaciones || !TieneSeleccionados)"
+                        @onclick="(() => OnGenerarObservacionesMasivoOpenAI.InvokeAsync())">
+                    <span class="oi oi-document"></span>
+                    <span>Generar observaciones (OpenAI)</span>
                 </button>
                 <button type="button" class="btn-list btn-save-all"
                         disabled="@(TotalPendienteGuardar == 0 || IsGuardandoTodos)"

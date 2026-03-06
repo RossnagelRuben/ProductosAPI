@@ -3,6 +3,7 @@ using BlazorApp_ProductosAPI.Components.AsignarImagenes;
 using BlazorApp_ProductosAPI.Models;
 using BlazorApp_ProductosAPI.Models.AsignarImagenes;
 using BlazorApp_ProductosAPI.Services;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text;
 using BlazorApp_ProductosAPI.Services.AsignarImagenes;
@@ -25,6 +26,8 @@ public partial class AsignarImagenes
     /// <summary>Servicio de patch de producto para guardar imagen y/u observaciones en la API.</summary>
     [Inject] private Services.AsignarImagenes.IProductoPatchService ProductoPatch { get; set; } = null!;
     [Inject] private ISerpApiOrganicSearchService SerpApiOrganicSearch { get; set; } = null!;
+    /// <summary>Servicio de generación de texto con OpenAI (Chat Completions) para observaciones RTF.</summary>
+    [Inject] private IOpenAITextService OpenAITextService { get; set; } = null!;
     /// <summary>Servicio de búsqueda de imágenes usando la API propia /Integration/ImageSearch.</summary>
     [Inject] private IIntegrationImageSearchService IntegrationImageSearch { get; set; } = null!;
 
@@ -55,10 +58,13 @@ public partial class AsignarImagenes
     private const string LsGeminiKey = "img_gkey";
     private const string LsGoogleSearchKeys = "google_search_keys";
     private const string LsSerpApiKey = "serpapi_key";
+    private const string LsOpenAiKey = "openai_key";
 
     private string _googleSearchKeysRaw = "";
     /// <summary>API key de SerpAPI para búsqueda de imágenes (Google Images, ubicación Argentina).</summary>
     private string _serpApiKeyRaw = "";
+    /// <summary>API key de OpenAI para generación de observaciones (Chat Completions).</summary>
+    private string _openAiKey = "";
     /// <summary>Estado del modal "Buscar imagen en la web". Null = cerrado. Evita referencias obsoletas al 2º/3er producto (SOLID: estado único).</summary>
     private BusquedaWebState? _busquedaWeb;
     /// <summary>Si está asignado, se muestra una modal encima con la imagen en grande (Escape cierra solo esta y vuelve a la de SerpAPI).</summary>
@@ -80,6 +86,8 @@ public partial class AsignarImagenes
     private bool _observacionesPreviewNeedsSyncFromRtf = false;
     /// <summary>Si true, el próximo blur del contenteditable no debe pisar _observacionesRtf (evita que el blur al hacer clic en Generar borre el resultado).</summary>
     private bool _observacionesSkipNextSyncFromPreview = false;
+    /// <summary>Prompt que se envía a OpenAI para generar observaciones RTF; el usuario puede editarlo en el modal.</summary>
+    private string _observacionesPromptOpenAI = "";
 
     /// <summary>Mensaje de notificación (toast) para operaciones de guardado (éxito / error).</summary>
     private string? _toastMessage;
@@ -122,11 +130,48 @@ public partial class AsignarImagenes
     /// <summary>True = filtros colapsados después de buscar (solo se muestra el botón para expandir).</summary>
     private bool _filtersCollapsed;
 
+    /// <summary>Si falta API key de OpenAI o de Gemini, se muestra la modal una vez al entrar (se guardan en LocalStorage).</summary>
+    private bool _showApiKeysModal;
+    private string _apiKeysModalGemini = "";
+    private string _apiKeysModalOpenAi = "";
+
     protected override async Task OnInitializedAsync()
     {
         await CargarTokenYCatalogos();
         _googleSearchKeysRaw = await LocalStorage.GetItemAsync(LsGoogleSearchKeys) ?? "";
         _serpApiKeyRaw = await LocalStorage.GetItemAsync(LsSerpApiKey) ?? "";
+        _geminiApiKeyModal = await LocalStorage.GetItemAsync(LsGeminiKey) ?? "";
+        _openAiKey = await LocalStorage.GetItemAsync(LsOpenAiKey) ?? "";
+        var faltaGemini = string.IsNullOrWhiteSpace(_geminiApiKeyModal);
+        var faltaOpenAi = string.IsNullOrWhiteSpace(_openAiKey);
+        if (!string.IsNullOrWhiteSpace(_token) && (faltaGemini || faltaOpenAi))
+        {
+            _showApiKeysModal = true;
+            _apiKeysModalGemini = _geminiApiKeyModal ?? "";
+            _apiKeysModalOpenAi = _openAiKey ?? "";
+        }
+    }
+
+    private async Task GuardarApiKeysModalAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(_apiKeysModalGemini))
+        {
+            _geminiApiKeyModal = _apiKeysModalGemini.Trim();
+            await LocalStorage.SetItemAsync(LsGeminiKey, _geminiApiKeyModal);
+        }
+        if (!string.IsNullOrWhiteSpace(_apiKeysModalOpenAi))
+        {
+            _openAiKey = _apiKeysModalOpenAi.Trim();
+            await LocalStorage.SetItemAsync(LsOpenAiKey, _openAiKey);
+        }
+        _showApiKeysModal = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void CerrarApiKeysModal()
+    {
+        _showApiKeysModal = false;
+        StateHasChanged();
     }
 
     private async Task OnGoogleSearchKeysInput(ChangeEventArgs e)
@@ -171,6 +216,25 @@ public partial class AsignarImagenes
         await CargarPaginaAsync();
     }
 
+    /// <summary>Copia el filtro actual con otro PageSize; usado para la API cuando hay filtro de imagen sin tocar _filter.PageSize.</summary>
+    private static ProductoQueryFilter CloneFilterWithPageSize(ProductoQueryFilter f, int pageSize)
+    {
+        return new ProductoQueryFilter
+        {
+            PageSize = pageSize,
+            PageNumber = f.PageNumber,
+            CodigoBarra = f.CodigoBarra,
+            DescripcionLarga = f.DescripcionLarga,
+            FamiliaID = f.FamiliaID,
+            MarcaID = f.MarcaID,
+            SucursalID = f.SucursalID,
+            FechaModifDesde = f.FechaModifDesde,
+            FechaModifHasta = f.FechaModifHasta,
+            FiltroImagen = f.FiltroImagen,
+            FiltroCodigoBarra = f.FiltroCodigoBarra
+        };
+    }
+
     /// <summary>Carga la página actual según filtros. Cuando hay filtro de imagen o de código de barras,
     /// la API puede devolver menos de PageSize por página; por eso pedimos varias páginas API y acumulamos
     /// hasta llenar la página actual (respetando PageNumber y PageSize). Sin filtros, una sola llamada por página.</summary>
@@ -197,62 +261,73 @@ public partial class AsignarImagenes
         };
         try
         {
+            var swTotal = Stopwatch.StartNew();
             _busquedaId++;
             _seleccionados.Clear(); // Nueva búsqueda: limpia selección en vista lista (SOLID: estado coherente).
-            bool tieneFiltroImagenOCodigo = _filter.FiltroImagen.HasValue || _filter.FiltroCodigoBarra.HasValue;
+            bool tieneFiltroImagen = _filter.FiltroImagen.HasValue;
+            bool tieneFiltroCodigo = _filter.FiltroCodigoBarra.HasValue;
 
-            if (tieneFiltroImagenOCodigo)
+            // Solo filtro código de barras: la API aplica ConCodigoBarra → UNA sola llamada, búsqueda rápida.
+            // Filtro de imagen: la API no filtra por imagen → hay que acumular en cliente; usamos página grande y pocas llamadas.
+            if (tieneFiltroImagen)
             {
-                // Con filtros, la API puede devolver menos coincidencias por página; acumulamos páginas API
-                // hasta tener al menos (paginaUsuario * PageSize) ítems que cumplan el filtro, luego tomamos la rebanada de la página actual.
                 var paginaUsuario = _filter.PageNumber;
+                var pageSizeUsuario = _filter.PageSize;
                 var acumulada = new List<ProductoConImagenDto>();
                 var apiPage = 1;
-                const int maxPages = 100;
-                var necesariosParaEstaPagina = paginaUsuario * _filter.PageSize;
+                const int maxPages = 5;
+                const int pageSizeApi = 100;
+                var necesarios = paginaUsuario * pageSizeUsuario;
 
-                while (acumulada.Count < necesariosParaEstaPagina && apiPage <= maxPages)
+                // Usar un filtro temporal para la API; no modificar _filter.PageSize para que el input "Cantidad" no cambie a 100.
+                var filtroApi = CloneFilterWithPageSize(_filter, pageSizeApi);
+                while (acumulada.Count < necesarios && apiPage <= maxPages)
                 {
-                    _filter.PageNumber = apiPage; // página que pedimos a la API en esta iteración
-                    var chunk = (await ProductoQuery.GetProductosAsync(_filter, _token)).ToList();
+                    filtroApi.PageNumber = apiPage;
+                    var chunk = (await ProductoQuery.GetProductosAsync(filtroApi, _token)).ToList();
                     if (chunk.Count == 0) break;
 
-                    await CargarImagenesConTokenAsync(chunk);
-
-                    // Aplicar filtros en cliente (por si la API no los aplica o devuelve mezclado)
                     var queCumplen = chunk.AsEnumerable();
-                    if (_filter.FiltroImagen == true)
+                    if (filtroApi.FiltroImagen == true)
                         queCumplen = queCumplen.Where(p => !string.IsNullOrWhiteSpace(p.ImagenUrl));
-                    else if (_filter.FiltroImagen == false)
+                    else
                         queCumplen = queCumplen.Where(p => string.IsNullOrWhiteSpace(p.ImagenUrl));
-                    if (_filter.FiltroCodigoBarra == true)
+                    if (filtroApi.FiltroCodigoBarra == true)
                         queCumplen = queCumplen.Where(p => !string.IsNullOrWhiteSpace(p.CodigoBarra));
-                    else if (_filter.FiltroCodigoBarra == false)
+                    else if (filtroApi.FiltroCodigoBarra == false)
                         queCumplen = queCumplen.Where(p => string.IsNullOrWhiteSpace(p.CodigoBarra));
 
                     acumulada.AddRange(queCumplen.ToList());
-                    if (acumulada.Count >= necesariosParaEstaPagina) break;
-                    if (chunk.Count < _filter.PageSize) break; // la API no tiene más
+                    if (acumulada.Count >= necesarios) break;
+                    if (chunk.Count < pageSizeApi) break;
                     apiPage++;
                 }
 
-                // Rebanada correspondiente a la página del usuario (ej. página 2 y PageSize 25 → ítems 25..49)
                 _items = acumulada
-                    .Skip((paginaUsuario - 1) * _filter.PageSize)
-                    .Take(_filter.PageSize)
+                    .Skip((paginaUsuario - 1) * pageSizeUsuario)
+                    .Take(pageSizeUsuario)
                     .ToList();
-                // Restaurar en el filtro la página que ve el usuario (no la última apiPage usada internamente)
                 _filter.PageNumber = paginaUsuario;
+                // _filter.PageSize no se tocó; sigue siendo el valor del usuario (p. ej. 4).
             }
             else
             {
-                // Sin filtros de imagen/código: una llamada por página, la API devuelve hasta PageSize ítems
+                // Sin filtro de imagen: una sola llamada (filtro código lo aplica la API con ConCodigoBarra).
                 _items = (await ProductoQuery.GetProductosAsync(_filter, _token)).ToList();
-                await CargarImagenesConTokenAsync(_items);
+                if (tieneFiltroCodigo)
+                {
+                    if (_filter.FiltroCodigoBarra == true)
+                        _items = _items.Where(p => !string.IsNullOrWhiteSpace(p.CodigoBarra)).ToList();
+                    else
+                        _items = _items.Where(p => string.IsNullOrWhiteSpace(p.CodigoBarra)).ToList();
+                }
             }
 
-            // Con filtros "Todos" no aplicamos filtro en cliente; la API ya devolvió la página.
-            if (!tieneFiltroImagenOCodigo)
+            // Cargar imágenes en segundo plano (no bloquear la lista): la grilla/tabla se muestra al instante
+            _ = CargarImagenesConTokenAsync(_items);
+
+            // Cuando no usamos el bucle (una sola llamada), aplicar en cliente por imagen/código por si acaso.
+            if (!tieneFiltroImagen)
             {
                 if (_filtroImagenOption == "Con")
                     _items = _items.Where(p => !string.IsNullOrWhiteSpace(p.ImagenUrl)).ToList();
@@ -264,7 +339,20 @@ public partial class AsignarImagenes
                     _items = _items.Where(p => string.IsNullOrWhiteSpace(p.CodigoBarra)).ToList();
             }
 
-            await LogProductosAlConsolaAsync();
+            swTotal.Stop();
+            try
+            {
+                await JS.InvokeVoidAsync("__logAsignarImagenes", "Búsqueda productos TIEMPO TOTAL", JsonSerializer.Serialize(new
+                {
+                    tiempoMs = swTotal.ElapsedMilliseconds,
+                    tiempoSeg = Math.Round(swTotal.Elapsed.TotalSeconds, 2),
+                    itemsMostrados = _items.Count,
+                    filtroImagen = tieneFiltroImagen,
+                    filtroCodigo = tieneFiltroCodigo
+                }));
+            }
+            catch { }
+            _ = LogProductosAlConsolaAsync(); // No esperar: solo log en F12; la lista se muestra al instante
         }
         catch (Exception ex)
         {
@@ -543,6 +631,7 @@ public partial class AsignarImagenes
         _geminiApiKeyModal = await LocalStorage.GetItemAsync(LsGeminiKey) ?? "";
         _observacionesVistaCodigo = false; // por defecto mostrar Vista previa
         _observacionesPreviewNeedsSyncFromRtf = true;
+        _observacionesPromptOpenAI = BuildPromptObservacionesRtfOpenAI(p.DescripcionLarga ?? "", p.CodigoBarra ?? "");
         await InvokeAsync(StateHasChanged);
     }
 
@@ -575,33 +664,190 @@ public partial class AsignarImagenes
     }
 
     /// <summary>
-    /// Normaliza el RTF para enviarlo a la API: cualquier carácter no ASCII se convierte a secuencias RTF estándar
-    /// (\'xx para Latin‑1 y \uNNN? para el resto). De esta forma el texto viaja sólo con ASCII y
-    /// evita problemas de codificación (acentos/ñ) al guardar y leer desde otras aplicaciones (WinForms, etc.).
-    /// No modifica comandos RTF ya existentes como \'f3 o \u241?.
+    /// Corrige secuencias RTF mal formadas que el modelo o la API a veces introducen, para que todas las observaciones
+    /// se guarden bien. Se aplica antes de normalizar (modal y modo lista).
+    /// </summary>
+    private static string RepairRtfEscapesFromModel(string rtf)
+    {
+        if (string.IsNullOrEmpty(rtf)) return rtf ?? "";
+        var s = rtf;
+        // Evitar doble escape: \\' debe ser \' (si no, la API guarda d\'\'eda y el visor falla). Colapsar en bucle por si hay \\\\' etc.
+        while (s.Contains("\\\\'", StringComparison.Ordinal))
+            s = s.Replace("\\\\'", "\\'", StringComparison.Ordinal);
+        // Colapsar \' \' (secuencia duplicada) → \' (ej. d\'\'eda, presentaci\'\'f3n, peque\'\'f1os). En bucle por si hay más.
+        while (s.Contains("\\'\\'", StringComparison.Ordinal))
+            s = s.Replace("\\'\\'", "\\'", StringComparison.Ordinal);
+        // Unicode ú mal escrito: \'u00fa o \'u00fa, → \'fa (formato correcto del ejemplo BIEN)
+        s = s.Replace("\\'u00fa,", "\\'fa", StringComparison.Ordinal);
+        s = s.Replace("\\'u00fa", "\\'fa", StringComparison.Ordinal);
+        // í en "probióticos": \'io → \'edo
+        s = s.Replace("\\'io", "\\'edo", StringComparison.Ordinal);
+        // è → é (modelo suele confundir)
+        s = s.Replace("\\'e8", "\\'e9", StringComparison.Ordinal);
+        // \'o inválido (ó mal escrito) → \'f3
+        s = s.Replace("\\'o", "\\'f3", StringComparison.Ordinal);
+        // práctica: \'a! → \'e1 (á)
+        s = s.Replace("\\'a!", "\\'e1", StringComparison.Ordinal);
+        // Restos de entidad "eacute": \'eacutelico → ético, \'eacutica → ética (estética, etc.)
+        s = s.Replace("\\'eacutelico", "\\'e9tico", StringComparison.Ordinal);
+        s = s.Replace("\\'eacutelica", "\\'e9tica", StringComparison.Ordinal);
+        s = s.Replace("\\'eacutica", "\\'e9tica", StringComparison.Ordinal);
+        // \d1 (subscript) usado por error en medio de palabra → d
+        s = s.Replace("\\d1", "d", StringComparison.Ordinal);
+        // ú: \'fa) (paréntesis pegado) → \'fa
+        s = s.Replace("\\'fa)", "\\'fa", StringComparison.Ordinal);
+        // ó: \'f; (punto y coma en vez de 3) → \'f3 (ej. "módulo" → "m;dulo")
+        s = s.Replace("\\'f;", "\\'f3", StringComparison.Ordinal);
+        // Espacio erróneo tras secuencia RTF (ej. "autom\'f3 viles" → "autom\'f3viles", "clim\'a ticas" → á)
+        s = s.Replace("\\'f3 ", "\\'f3", StringComparison.Ordinal);
+        s = s.Replace("\\'e1 ", "\\'e1", StringComparison.Ordinal);
+        s = s.Replace("\\'e9 ", "\\'e9", StringComparison.Ordinal);
+        s = s.Replace("\\'fa ", "\\'fa", StringComparison.Ordinal);
+        s = s.Replace("\\'ed ", "\\'ed", StringComparison.Ordinal);
+        s = s.Replace("\\'f1 ", "\\'f1", StringComparison.Ordinal);
+        // á mal guardado como \'a + espacio (solo un hex) → \'e1
+        s = s.Replace("\\'a ", "\\'e1", StringComparison.Ordinal);
+        // á mal guardado como \'a1 (0xA1 = ¡ en Latin-1; en descripciones suele ser á) → \'e1
+        s = s.Replace("\\'a1", "\\'e1", StringComparison.Ordinal);
+        // á mal: \'a + letra (ej. neum\'altico, clim\'aticas) → \'e1 + letra. En RTF \' exige 2 hex; \'a+letra es inválido.
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\\'a([a-zA-Z])", "\\'e1$1", System.Text.RegularExpressions.RegexOptions.None);
+        // í mal: \'ia (ej. d\'ia = día) → \'eda (í en RTF = \'ed, luego 'a')
+        s = s.Replace("\\'ia", "\\'eda", StringComparison.Ordinal);
+        // Entidad HTML "acute;" pegada tras \'XX (ej. m\'f3acute;dulo → m\'f3dulo)
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"(\\'[0-9a-fA-F]{2})acute;", "$1", System.Text.RegularExpressions.RegexOptions.None);
+        return s;
+    }
+
+    /// <summary>
+    /// Asegura que el texto devuelto por OpenAI/Gemini sea RTF válido para vista previa y para guardar en API (RichTextBox).
+    /// Si la respuesta ya empieza con {\rtf1, se extrae y normaliza. Si viene en bloque de código (```), se quita el envoltorio.
+    /// Si el modelo devolvió texto plano, se envuelve en un documento RTF mínimo para que RtfToHtmlConverter y el backend lo interpreten bien.
+    /// </summary>
+    private static string EnsureValidRtfFromOpenAI(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return "";
+        var rtf = raw.Trim();
+        // Quitar bloque de código markdown (```rtf o ```)
+        if (rtf.StartsWith("```", StringComparison.Ordinal))
+        {
+            var first = rtf.IndexOf('\n');
+            var last = rtf.LastIndexOf("```", StringComparison.Ordinal);
+            if (first >= 0 && last > first + 1)
+                rtf = rtf.Substring(first + 1, last - first - 1).Trim();
+        }
+        // Extraer el bloque RTF si está embebido en explicación (ej. "Aquí está el RTF: {\rtf1 ... }")
+        var rtfStart = rtf.IndexOf("{\\rtf", StringComparison.OrdinalIgnoreCase);
+        if (rtfStart > 0)
+        {
+            var fromRtf = rtf.Substring(rtfStart);
+            var lastBrace = fromRtf.LastIndexOf('}');
+            if (lastBrace > 0)
+                rtf = fromRtf.Substring(0, lastBrace + 1);
+            else
+                rtf = fromRtf;
+        }
+        else if (rtfStart == 0)
+        {
+            var lastBrace = rtf.LastIndexOf('}');
+            if (lastBrace > 0)
+                rtf = rtf.Substring(0, lastBrace + 1);
+        }
+        // Si ya es RTF válido (empieza con {\rtf), reparar escapes mal formados que a veces devuelve el modelo y normalizar
+        if (rtf.StartsWith("{\\rtf", StringComparison.OrdinalIgnoreCase))
+        {
+            rtf = RepairRtfEscapesFromModel(rtf);
+            return NormalizeRtfForApi(rtf);
+        }
+        // Texto plano: envolver en RTF mínimo para que la vista previa y el RichTextBox lo muestren y almacenen correctamente
+        var escaped = new StringBuilder();
+        foreach (var c in rtf)
+        {
+            if (c == '\\') escaped.Append("\\\\");
+            else if (c == '{') escaped.Append("\\{");
+            else if (c == '}') escaped.Append("\\}");
+            else if (c == '\r') { }
+            else if (c == '\n') escaped.Append("\\par\n");
+            else escaped.Append(c);
+        }
+        var minimalRtf = "{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 Calibri;}}\\f0\\par\n" + escaped + "\\par }";
+        return NormalizeRtfForApi(minimalRtf);
+    }
+
+    /// <summary>
+    /// Deja el RTF en el formato exacto del ejemplo de la API: solo {\rtf1\ansi, \b, \b0, \par, \'xx.
+    /// Quita \deff0 y {\fonttbl ...} que algunos visores RTF no reconocen y causan "Estructura no reconocida".
+    /// </summary>
+    private static string EnsureRtfMatchesApiExample(string rtf)
+    {
+        if (string.IsNullOrEmpty(rtf)) return rtf ?? "";
+        var s = rtf;
+        // Quitar bloque de fuente que no está en el ejemplo y puede romper el visor (InfoProducto RichTextBox)
+        s = s.Replace("\\deff0 {\\fonttbl {\\f0 Calibri;}}\\f0\\par\n", "", StringComparison.Ordinal);
+        s = s.Replace("\\deff0{\\fonttbl{\\f0 Calibri;}}\\f0\\par\n", "", StringComparison.Ordinal);
+        // Formato del ejemplo BIEN: \ansi\b sin espacio entre ambos (en MAL aparece "\\ansi \\b")
+        s = s.Replace("\\ansi \\b", "\\ansi\\b", StringComparison.Ordinal);
+        // Ejemplo BIEN no tiene espacio tras \par\n; MAL sí ("\\par\n Este"). Quitar espacio tras \par\n.
+        while (s.Contains("\\par\n ", StringComparison.Ordinal))
+            s = s.Replace("\\par\n ", "\\par\n", StringComparison.Ordinal);
+        // Asegurar \par seguido de \n como en el ejemplo (evita problemas de parsing)
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\\par(?!\n)", "\\par\n", System.Text.RegularExpressions.RegexOptions.None);
+        return s;
+    }
+
+    /// <summary>
+    /// Normaliza el RTF para enviarlo a la API en el mismo formato que devuelve la API (ej. observacion de producto):
+    /// {\rtf1\ansi, \b, \b0, \par, y caracteres acentuados como \'xx (dos hex en minúscula: \'e1 á, \'ed í, \'f3 ó, \'fa ú, \'f1 ñ).
+    /// Solo ASCII en el payload; las secuencias \'XX se normalizan a minúsculas para coincidir con el almacenamiento correcto.
     /// </summary>
     private static string NormalizeRtfForApi(string? rtf)
     {
         if (string.IsNullOrEmpty(rtf)) return rtf ?? "";
         var sb = new StringBuilder(rtf.Length * 2);
-        foreach (var c in rtf)
+        var i = 0;
+        while (i < rtf.Length)
         {
+            var c = rtf[i];
             var code = (int)c;
+
+            // Secuencia RTF ya válida \'XX (dos hex) → normalizar a minúsculas para coincidir con el formato de la API (ej. \'f3, \'ed, \'fa)
+            if (c == '\\' && i + 3 < rtf.Length && rtf[i + 1] == '\'' && IsHexRtf(rtf[i + 2]) && IsHexRtf(rtf[i + 3]))
+            {
+                sb.Append("\\'").Append(char.ToLowerInvariant(rtf[i + 2])).Append(char.ToLowerInvariant(rtf[i + 3]));
+                i += 4;
+                continue;
+            }
+            // Secuencia \uN? o \uNNN? (decimal) o \u-123? → no tocar
+            if (c == '\\' && i + 2 < rtf.Length && rtf[i + 1] == 'u')
+            {
+                var start = i;
+                i += 2;
+                if (i < rtf.Length && rtf[i] == '-') i++;
+                while (i < rtf.Length && char.IsDigit(rtf[i])) i++;
+                if (i < rtf.Length && rtf[i] == '?') i++;
+                sb.Append(rtf, start, i - start);
+                continue;
+            }
+
             if (code <= 0x7F)
             {
                 sb.Append(c);
+                i++;
             }
             else if (code >= 0x80 && code <= 0xFF)
             {
                 sb.Append("\\'").Append(code.ToString("x2"));
+                i++;
             }
             else
             {
                 sb.Append("\\u").Append(code).Append('?');
+                i++;
             }
         }
         return sb.ToString();
     }
+
+    private static bool IsHexRtf(char c) => (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -713,27 +959,20 @@ public partial class AsignarImagenes
             var snippetsText = snippets != null && snippets.Count > 0
                 ? string.Join("\n\n", snippets.Select(s => "- " + s))
                 : "(No se encontraron resultados de búsqueda para este producto.)";
-            var prompt = $@"Eres un asistente que escribe observaciones de productos en formato RTF (Rich Text Format).
+            var prompt = $@"Eres un asistente que escribe observaciones de productos para un catálogo.
+
 Producto: {desc}. Código de barras: {barra}.
 
 Información obtenida de búsqueda en internet:
 {snippetsText}
 
-Escribe observaciones útiles para catálogo (descripción, uso, características) en RTF válido. Responde ÚNICAMENTE con el contenido RTF, sin explicaciones ni markdown. El RTF debe empezar por {{\rtf1 y usar comandos estándar como \par para párrafos. Para acentos y la letra ñ en español usa secuencias Unicode RTF: \u243? para ó, \u241? para ñ, \u225? para á, \u233? para é, \u237? para í, \u250? para ú, \u252? para ü (siempre seguido del signo ?). Escribe el texto en español correcto con todos los acentos y la ñ. Si no hay información útil, escribe un párrafo breve con la descripción del producto en RTF.";
+Responde ÚNICAMENTE con texto plano en español. Usa acentos y ñ correctamente (ó, ñ, á, é, í, ú, ü). NO uses formato RTF ni secuencias \u o \', ni markdown. Escribe observaciones útiles (descripción, uso, características). Separa párrafos con saltos de línea. Si no hay información útil, un párrafo breve con la descripción del producto.";
             var result = await GeminiService.GenerateTextAsync(prompt, apiKeyGemini);
             if (_productoObservaciones == null) { _generandoObservaciones = false; await InvokeAsync(StateHasChanged); return; }
             if (result != null && result.Success && !string.IsNullOrWhiteSpace(result.Text))
             {
-                var raw = result.Text.Trim();
-                if (raw.StartsWith("```", StringComparison.Ordinal))
-                {
-                    var first = raw.IndexOf('\n');
-                    var last = raw.LastIndexOf("```", StringComparison.Ordinal);
-                    if (first >= 0 && last > first + 1)
-                        raw = raw.Substring(first + 1, last - first - 1).Trim();
-                }
-                // Normalizar acentos/ñ a secuencias RTF estándar antes de guardar/enviar a la API.
-                _observacionesRtf = NormalizeRtfForApi(raw);
+                // Texto plano → RTF válido sin símbolos raros (nosotros generamos el RTF).
+                _observacionesRtf = EnsureValidRtfFromOpenAI(result.Text);
                 _observacionesPreviewNeedsSyncFromRtf = true;
                 _observacionesSkipNextSyncFromPreview = true;
                 try { await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarObservacionesModal Gemini OK", JsonSerializer.Serialize(new { productId, rtfLen = _observacionesRtf.Length })); } catch { }
@@ -755,6 +994,85 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
             _generandoObservaciones = false;
             await InvokeAsync(StateHasChanged);
         }
+    }
+
+    /// <summary>
+    /// Genera observaciones en RTF usando solo OpenAI (Chat Completions).
+    /// Misma lógica de prompt RTF que SerpAPI+Gemini pero sin búsqueda web; el modelo genera a partir de descripción y código de barra.
+    /// SOLID: la construcción del prompt y el uso del resultado se mantienen en esta página; el servicio solo genera texto.
+    /// </summary>
+    private async Task GenerarObservacionesConOpenAIAsync()
+    {
+        if (_productoObservaciones == null) return;
+        var productId = _productoObservaciones.ProductoID;
+        try { await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarObservacionesOpenAI INICIO", JsonSerializer.Serialize(new { productId })); } catch { }
+        var apiKey = _openAiKey?.Trim();
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            _errorObservaciones = "Ingresá la API key de OpenAI en «Configurar API keys» (modal al entrar si falta).";
+            return;
+        }
+        var desc = _productoObservaciones.DescripcionLarga ?? "";
+        var barra = _productoObservaciones.CodigoBarra ?? "";
+        if (string.IsNullOrWhiteSpace(desc) && string.IsNullOrWhiteSpace(barra))
+        {
+            _errorObservaciones = "El producto debe tener descripción o código de barras.";
+            return;
+        }
+        _errorObservaciones = null;
+        _generandoObservaciones = true;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            if (_productoObservaciones == null) { _generandoObservaciones = false; await InvokeAsync(StateHasChanged); return; }
+            var prompt = string.IsNullOrWhiteSpace(_observacionesPromptOpenAI?.Trim()) ? BuildPromptObservacionesRtfOpenAI(desc, barra) : _observacionesPromptOpenAI!.Trim();
+            var result = await OpenAITextService.GenerateTextAsync(prompt, apiKey);
+            if (_productoObservaciones == null) { _generandoObservaciones = false; await InvokeAsync(StateHasChanged); return; }
+            if (result != null && result.Success && !string.IsNullOrWhiteSpace(result.Text))
+            {
+                // Garantizar RTF válido para vista previa y para guardar en API (RichTextBox en desktop).
+                _observacionesRtf = EnsureValidRtfFromOpenAI(result.Text);
+                _observacionesPreviewNeedsSyncFromRtf = true;
+                _observacionesSkipNextSyncFromPreview = true;
+                try { await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarObservacionesOpenAI OK", JsonSerializer.Serialize(new { productId, rtfLen = _observacionesRtf.Length })); } catch { }
+            }
+            else
+            {
+                _errorObservaciones = result?.ErrorMessage ?? "OpenAI no devolvió texto.";
+                try { await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarObservacionesOpenAI sin texto", JsonSerializer.Serialize(new { productId, error = _errorObservaciones })); } catch { }
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorObservaciones = ex.Message;
+            try { await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarObservacionesOpenAI EXCEPCIÓN", JsonSerializer.Serialize(new { productId, mensaje = ex.Message })); } catch { }
+        }
+        finally
+        {
+            _generandoObservaciones = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>Construye el prompt por defecto para que OpenAI genere observaciones en RTF con el formato exacto que almacena la API.</summary>
+    private static string BuildPromptObservacionesRtfOpenAI(string descripcion, string codigoBarra)
+    {
+        return $@"Eres un asistente que escribe observaciones de productos en formato RTF para un catálogo. Responde ÚNICAMENTE con el bloque RTF, sin texto antes ni después.
+
+Producto: {descripcion}
+Código de barras: {codigoBarra}
+
+Formato obligatorio:
+1) Empieza con {{\rtf1\ansi y termina con }}. No uses markdown ni ```.
+2) Título del producto en negrita: \b NOMBRE DEL PRODUCTO\b0\par
+3) Párrafos separados con \par
+4) Acentos y ñ: usa SOLO la secuencia barra invertida + apóstrofo + dos letras hex en minúscula. Sin espacios ni entidades HTML.
+   \'e1=á  \'e9=é  \'ed=í  \'f3=ó  \'fa=ú  \'f1=ñ  \'fc=ü
+   Ejemplos correctos: soluci\'f3n, d\'eda, Caracter\'edsticas, C\'f3digo, \'fanica, acompa\'f1ado.
+5) Subtítulos en negrita: \b Caracter\'edsticas:\b0\par y \b Uso:\b0\par
+6) Cierre con: C\'f3digo de barras: [número]
+
+Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negrita con viñetas, Uso en negrita con texto, y al final C\'f3digo de barras: [código]. Todo en una sola cadena RTF.";
     }
 
     private async Task MostrarToastAsync(string mensaje, bool esError)
@@ -790,7 +1108,24 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
             return;
         }
 
-        var texto = string.IsNullOrWhiteSpace(_observacionesRtf) ? null : NormalizeRtfForApi(_observacionesRtf);
+        // Reparar, normalizar y dejar el RTF en el formato exacto del ejemplo de la API (sin \deff0/\fonttbl, \par\n).
+        var rtfAntes = _observacionesRtf;
+        var texto = string.IsNullOrWhiteSpace(rtfAntes) ? null : EnsureRtfMatchesApiExample(NormalizeRtfForApi(RepairRtfEscapesFromModel(rtfAntes)));
+
+        try
+        {
+            var nonAsciiEnNormalizado = texto == null ? 0 : texto.Count(c => (int)c > 0x7F);
+            await JS.InvokeVoidAsync("__logAsignarImagenes", "PATCH Observaciones DIAGNÓSTICO", JsonSerializer.Serialize(new
+            {
+                codigoID = _productoObservaciones!.ProductoID,
+                rtfLongitudAntes = rtfAntes?.Length ?? 0,
+                observacionLongitudDespues = texto?.Length ?? 0,
+                noAsciiEnEnvio = nonAsciiEnNormalizado,
+                previewAntes = (rtfAntes?.Length ?? 0) > 0 ? (rtfAntes!.Length > 180 ? rtfAntes.Substring(0, 180) + "…" : rtfAntes) : "(vacío)",
+                previewEnvio = (texto?.Length ?? 0) > 0 ? (texto!.Length > 180 ? texto.Substring(0, 180) + "…" : texto) : "(null)"
+            }));
+        }
+        catch { /* no romper guardado si falla el log */ }
 
         // Actualizar modelo en memoria para que la UI quede consistente inmediatamente.
         var item = _items.FirstOrDefault(x => x.ProductoID == _productoObservaciones.ProductoID);
@@ -814,7 +1149,9 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
         await InvokeAsync(StateHasChanged);
         try
         {
+            var swPatch = Stopwatch.StartNew();
             var result = await ProductoPatch.PatchProductoAsync(request, _token);
+            swPatch.Stop();
             if (!result.Success)
             {
                 _errorObservaciones = "No se pudo guardar las observaciones en la API.";
@@ -823,7 +1160,7 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
                 {
                     await JS.InvokeVoidAsync("__logAsignarImagenes", "PATCH Observaciones ERROR", JsonSerializer.Serialize(new
                     {
-                        request,
+                        tiempoMs = swPatch.ElapsedMilliseconds,
                         result.StatusCode,
                         result.ResponseBody,
                         result.ErrorMessage
@@ -837,9 +1174,12 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
             {
                 await JS.InvokeVoidAsync("__logAsignarImagenes", "PATCH Observaciones OK", JsonSerializer.Serialize(new
                 {
-                    request,
-                    result.StatusCode,
-                    result.ResponseBody
+                    tiempoMs = swPatch.ElapsedMilliseconds,
+                    tiempoSeg = Math.Round(swPatch.Elapsed.TotalSeconds, 2),
+                    codigoID = request.CodigoID,
+                    observacionLongitudEnviada = request.Observacion?.Length ?? 0,
+                    statusCode = result.StatusCode,
+                    responseBody = (result.ResponseBody?.Length ?? 0) > 500 ? result.ResponseBody.Substring(0, 500) + "…" : result.ResponseBody
                 }));
             }
             catch { }
@@ -1657,29 +1997,33 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
             for (int i = 0; i < pendientesObservaciones.Count; i++)
             {
                 var item = pendientesObservaciones[i];
+                var observacionNormalizada = EnsureRtfMatchesApiExample(NormalizeRtfForApi(RepairRtfEscapesFromModel(item.Observaciones ?? "")));
                 var request = new ProductoPatchRequest
                 {
                     CodigoID = item.ProductoID,
                     ImagenEspecified = false,
                     Imagen = "null",
                     ObservacionEspecified = true,
-                    // Siempre normalizamos el RTF antes de enviarlo a la API para que WinForms lo interprete igual.
-                    Observacion = NormalizeRtfForApi(item.Observaciones)
+                    Observacion = observacionNormalizada
                 };
                 try
                 {
-                    // Log detallado por ítem para diagnosticar por qué algunas observaciones no se guardan.
+                    var noAscii = observacionNormalizada.Count(c => (int)c > 0x7F);
                     await JS.InvokeVoidAsync("__logAsignarImagenes", "PATCH Observaciones MASIVO ANTES", JsonSerializer.Serialize(new
                     {
                         indice = i + 1,
                         total = pendientesObservaciones.Count,
-                        request.CodigoID,
-                        rtfLen = request.Observacion?.Length ?? 0
+                        codigoID = request.CodigoID,
+                        observacionLongitud = observacionNormalizada.Length,
+                        noAsciiEnEnvio = noAscii,
+                        preview = observacionNormalizada.Length > 120 ? observacionNormalizada.Substring(0, 120) + "…" : observacionNormalizada
                     }));
                 }
                 catch { }
 
+                var swPatch = Stopwatch.StartNew();
                 var result = await ProductoPatch.PatchProductoAsync(request, _token);
+                swPatch.Stop();
                 if (result.Success)
                 {
                     item.ObservacionesPendienteGuardar = false;
@@ -1690,7 +2034,8 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
                         {
                             indice = i + 1,
                             total = pendientesObservaciones.Count,
-                            request.CodigoID,
+                            tiempoMs = swPatch.ElapsedMilliseconds,
+                            codigoID = request.CodigoID,
                             statusCode = result.StatusCode
                         }));
                     }
@@ -1705,7 +2050,8 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
                         {
                             indice = i + 1,
                             total = pendientesObservaciones.Count,
-                            request.CodigoID,
+                            tiempoMs = swPatch.ElapsedMilliseconds,
+                            codigoID = request.CodigoID,
                             statusCode = result.StatusCode,
                             error = result.ErrorMessage,
                             body = result.ResponseBody
@@ -2338,26 +2684,19 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
                     continue;
                 }
                 var snippetsText = snippets.Count > 0 ? string.Join("\n\n", snippets.Select(s => "- " + s)) : "(No se encontraron resultados de búsqueda para este producto.)";
-                var prompt = $@"Eres un asistente que escribe observaciones de productos en formato RTF (Rich Text Format).
+                var prompt = $@"Eres un asistente que escribe observaciones de productos para un catálogo.
+
 Producto: {desc}. Código de barras: {barra}.
 
 Información obtenida de búsqueda en internet:
 {snippetsText}
 
-Escribe observaciones útiles para catálogo (descripción, uso, características) en RTF válido. Responde ÚNICAMENTE con el contenido RTF, sin explicaciones ni markdown. El RTF debe empezar por {{\rtf1 y usar comandos estándar como \par para párrafos. Para acentos y la letra ñ en español usa secuencias Unicode RTF: \u243? para ó, \u241? para ñ, \u225? para á, \u233? para é, \u237? para í, \u250? para ú, \u252? para ü (siempre seguido del signo ?). Escribe el texto en español correcto con todos los acentos y la ñ. Si no hay información útil, escribe un párrafo breve con la descripción del producto en RTF.";
+Responde ÚNICAMENTE con texto plano en español. Usa acentos y ñ correctamente (ó, ñ, á, é, í, ú, ü). NO uses formato RTF ni secuencias \u o \', ni markdown. Escribe observaciones útiles (descripción, uso, características). Separa párrafos con saltos de línea. Si no hay información útil, un párrafo breve con la descripción del producto.";
                 var result = await GeminiService.GenerateTextAsync(prompt, apiKeyGemini!);
                 if (result != null && result.Success && !string.IsNullOrWhiteSpace(result.Text))
                 {
-                    var rtf = result.Text.Trim();
-                    if (rtf.StartsWith("```", StringComparison.Ordinal))
-                    {
-                        var first = rtf.IndexOf('\n');
-                        var last = rtf.LastIndexOf("```", StringComparison.Ordinal);
-                        if (first >= 0 && last > first + 1)
-                            rtf = rtf.Substring(first + 1, last - first - 1).Trim();
-                    }
-                    // Normalizar a RTF ASCII‑safe para que la API y WinForms respeten los acentos.
-                    var normalizedRtf = NormalizeRtfForApi(rtf);
+                    // Texto plano → RTF válido sin símbolos raros.
+                    var normalizedRtf = EnsureValidRtfFromOpenAI(result.Text);
                     p.Observaciones = SanitizeRtfForPreview(normalizedRtf);
                     p.ObservacionesPendienteGuardar = true;
                     okCount++;
@@ -2367,6 +2706,68 @@ Escribe observaciones útiles para catálogo (descripción, uso, característica
                 await InvokeAsync(StateHasChanged);
             }
             await MostrarToastAsync(okCount > 0 ? $"Se generaron {okCount} observación(es) en memoria. Usá «Guardar cambios»." : "No se pudo generar ninguna observación.", okCount == 0);
+        }
+        finally
+        {
+            _bulkGeneratingObservaciones = false;
+            _bulkGeneratingObservacionesCurrent = 0;
+            _bulkGeneratingObservacionesTotal = 0;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>
+    /// Genera observaciones con OpenAI (Chat Completions) para cada producto seleccionado; las deja en memoria (ObservacionesPendienteGuardar = true).
+    /// Usa la misma lógica de prompt RTF que en la modal; no requiere SerpAPI.
+    /// </summary>
+    private async Task GenerarObservacionesMasivoOpenAIAsync()
+    {
+        var apiKey = _openAiKey?.Trim();
+        if (string.IsNullOrWhiteSpace(apiKey))
+            apiKey = await LocalStorage.GetItemAsync(LsOpenAiKey);
+        if (string.IsNullOrWhiteSpace(apiKey?.Trim()))
+        {
+            await MostrarToastAsync("Configurá la API key de OpenAI en «Configurar API keys».", true);
+            return;
+        }
+        var idsToProcess = _items
+            .Where(p => _seleccionados.Contains(p.ProductoID) && (!string.IsNullOrWhiteSpace(p.DescripcionLarga) || !string.IsNullOrWhiteSpace(p.CodigoBarra)))
+            .Select(p => p.ProductoID)
+            .ToList();
+        if (idsToProcess.Count == 0)
+        {
+            await MostrarToastAsync("Seleccioná al menos un producto con descripción o código de barras.", false);
+            return;
+        }
+        _bulkGeneratingObservaciones = true;
+        _bulkGeneratingObservacionesTotal = idsToProcess.Count;
+        _bulkGeneratingObservacionesCurrent = 0;
+        await InvokeAsync(StateHasChanged);
+        var okCount = 0;
+        var total = idsToProcess.Count;
+        try
+        {
+            for (int i = 0; i < total; i++)
+            {
+                var p = _items.FirstOrDefault(x => x.ProductoID == idsToProcess[i]);
+                if (p == null) { _bulkGeneratingObservacionesCurrent = i + 1; await InvokeAsync(StateHasChanged); continue; }
+                var desc = p.DescripcionLarga ?? "";
+                var barra = p.CodigoBarra ?? "";
+                var prompt = BuildPromptObservacionesRtfOpenAI(desc, barra);
+                var result = await OpenAITextService.GenerateTextAsync(prompt, apiKey!);
+                if (result != null && result.Success && !string.IsNullOrWhiteSpace(result.Text))
+                {
+                    var normalizedRtf = EnsureValidRtfFromOpenAI(result.Text);
+                    p.Observaciones = SanitizeRtfForPreview(normalizedRtf);
+                    p.ObservacionesPendienteGuardar = true;
+                    okCount++;
+                }
+                _bulkGeneratingObservacionesCurrent = i + 1;
+                await InvokeAsync(StateHasChanged);
+            }
+            await MostrarToastAsync(
+                okCount > 0 ? $"Se generaron {okCount} observación(es) con OpenAI. Usá «Guardar cambios»." : "No se pudo generar ninguna observación con OpenAI.",
+                okCount == 0);
         }
         finally
         {

@@ -22,6 +22,7 @@ builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.IJsInteropService, Bl
 builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.IGoogleImageSearchService, BlazorApp_ProductosAPI.Services.GoogleImageSearchService>();
 builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.ISerpApiImageSearchService, BlazorApp_ProductosAPI.Services.SerpApiImageSearchService>();
 builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.ISerpApiOrganicSearchService, BlazorApp_ProductosAPI.Services.SerpApiOrganicSearchService>();
+builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.IOpenAITextService, BlazorApp_ProductosAPI.Services.OpenAITextService>();
 builder.Services.AddScoped<BlazorApp_ProductosAPI.Services.IIntegrationImageSearchService, BlazorApp_ProductosAPI.Services.IntegrationImageSearchService>();
 
 // Asignar imágenes (SOLID: interfaces y implementaciones)

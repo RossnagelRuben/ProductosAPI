@@ -45,6 +45,8 @@ public partial class ProductosImagenList
     [Parameter] public EventCallback OnBuscarImagenMasivoSerpApi { get; set; }
     [Parameter] public EventCallback OnGenerarImagenMasivo { get; set; }
     [Parameter] public EventCallback OnGenerarObservacionesMasivo { get; set; }
+    /// <summary>Generar observaciones con OpenAI (Chat) para los seleccionados.</summary>
+    [Parameter] public EventCallback OnGenerarObservacionesMasivoOpenAI { get; set; }
     [Parameter] public EventCallback OnGuardarCambios { get; set; }
 
     /// <summary>URL para miniaturas; si no hay imagen real se usa placeholder.</summary>

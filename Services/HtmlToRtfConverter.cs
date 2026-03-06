@@ -162,10 +162,25 @@ public static class HtmlToRtfConverter
 
     private static string UnescapeHtml(string html)
     {
-        return html
+        if (string.IsNullOrEmpty(html)) return html;
+        var s = html
             .Replace("&amp;", "&", StringComparison.Ordinal)
             .Replace("&lt;", "<", StringComparison.Ordinal)
             .Replace("&gt;", ">", StringComparison.Ordinal)
             .Replace("&quot;", "\"", StringComparison.Ordinal);
+        // Decodificar entidades numéricas &#205; y &#xCD; para que acentos/ñ no queden como literal "&#205;" en el RTF
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"&#(\d+);", m =>
+        {
+            if (int.TryParse(m.Groups[1].Value, out var code) && code >= 0 && code <= 0xFFFF)
+                return ((char)code).ToString();
+            return m.Value;
+        }, System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromMilliseconds(500));
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"&#x([0-9a-fA-F]+);", m =>
+        {
+            if (int.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.HexNumber, null, out var code) && code >= 0 && code <= 0xFFFF)
+                return ((char)code).ToString();
+            return m.Value;
+        }, System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromMilliseconds(500));
+        return s;
     }
 }

@@ -170,6 +170,7 @@
                                    OnBuscarImagenMasivoSerpApi="(() => BuscarImagenMasivoSerpApiAsync())"
                                    OnGenerarImagenMasivo="(() => GenerarImagenMasivoAsync())"
                                    OnGenerarObservacionesMasivo="(() => GenerarObservacionesMasivoAsync())"
+                                   OnGenerarObservacionesMasivoOpenAI="(() => GenerarObservacionesMasivoOpenAIAsync())"
                                    OnGuardarCambios="(() => GuardarTodosLosCambiosAsync())" />
             }
             else
@@ -239,13 +240,6 @@
                                       @bind="_promptModal"
                                       @bind:event="oninput"
                                       @onkeydown="OnModalKeyDown"></textarea>
-                        </div>
-                        <div class="modal-apikey">
-                            <label for="modal-gemini-key">API key de Gemini (Google)</label>
-                            <input id="modal-gemini-key" type="password" class="modal-input"
-                                   placeholder="Pegá la API key de Gemini…"
-                                   value="@_geminiApiKeyModal"
-                                   @oninput="OnGeminiKeyInput" />
                         </div>
                         @if (!string.IsNullOrWhiteSpace(_errorModal))
                         {
@@ -434,39 +428,19 @@
                             <strong>@(_productoObservaciones.DescripcionLarga ?? "—")</strong>
                             <div class="modal-meta">Código: @(_productoObservaciones.Codigo ?? "—") @if (!string.IsNullOrWhiteSpace(_productoObservaciones.CodigoBarra)) { <span>| @_productoObservaciones.CodigoBarra</span> }</div>
                         </div>
-                        <div class="observaciones-tabs">
-                            <button type="button" class="observaciones-tab @(_observacionesVistaCodigo ? "active" : "")" @onclick="() => { _observacionesVistaCodigo = true; StateHasChanged(); }">
-                                <span class="oi oi-code"></span> Código RTF
-                            </button>
-                            <button type="button" class="observaciones-tab @(!_observacionesVistaCodigo ? "active" : "")" @onclick="() => { _observacionesVistaCodigo = false; _observacionesPreviewNeedsSyncFromRtf = true; StateHasChanged(); }">
-                                <span class="oi oi-eye"></span> Vista previa
-                            </button>
+                        <div class="modal-prompt">
+                            <label for="observaciones-prompt-openai">Prompt para OpenAI (ChatGPT) — podés editarlo antes de generar</label>
+                            <textarea id="observaciones-prompt-openai" class="modal-textarea" rows="6"
+                                      placeholder="Instrucciones que se envían a ChatGPT para generar las observaciones en RTF…"
+                                      @bind="_observacionesPromptOpenAI"
+                                      @bind:event="oninput"
+                                      @onkeydown="OnModalObservacionesKeyDown"></textarea>
                         </div>
                         <div class="modal-prompt">
-                            @if (_observacionesVistaCodigo)
-                            {
-                                <label for="observaciones-txt">Observaciones (texto o RTF)</label>
-                                <textarea id="observaciones-txt" class="modal-textarea observaciones-textarea" rows="12"
-                                          placeholder="Escribí o pegá observaciones. Usá «Generar con IA» para rellenar desde búsqueda web + Gemini."
-                                          @bind="_observacionesRtf"
-                                          @bind:event="oninput"
-                                          @onkeydown="OnModalObservacionesKeyDown"></textarea>
-                            }
-                            else
-                            {
-                                <label>Vista previa (editá aquí; al salir se guarda en RTF)</label>
-                                <div id="observaciones-preview-editable" class="observaciones-preview-wrap observaciones-preview-editable"
-                                     contenteditable="true"
-                                     @onblur="SyncPreviewToRtfAsync"
-                                     data-placeholder="Sin contenido.">@((MarkupString)ObservacionesPreviewHtml)</div>
-                            }
-                        </div>
-                        <div class="modal-apikey">
-                            <label for="observaciones-gemini-key">API key de Gemini (para Generar con IA)</label>
-                            <input id="observaciones-gemini-key" type="password" class="modal-input"
-                                   placeholder="Misma key que para imágenes (Gemini)"
-                                   value="@_geminiApiKeyModal"
-                                   @oninput="OnGeminiKeyInput" />
+                            <label>Vista previa</label>
+                            <div id="observaciones-preview-editable" class="observaciones-preview-wrap observaciones-preview-readonly"
+                                 contenteditable="false"
+                                 data-placeholder="Sin contenido.">@((MarkupString)ObservacionesPreviewHtml)</div>
                         </div>
                         @if (!string.IsNullOrWhiteSpace(_errorObservaciones))
                         {
@@ -474,6 +448,7 @@
                         }
                     </div>
                     <div class="modal-footer">
+                        @* Botón SerpAPI+Gemini oculto: solo se usa OpenAI para observaciones.
                         <button type="button" class="btn-modal btn-mejorar" disabled="@_generandoObservaciones" @onclick="GenerarObservacionesConIAAsync">
                             @if (_generandoObservaciones)
                             {
@@ -486,6 +461,11 @@
                                 <span>Generar con IA (SerpAPI + Gemini)</span>
                             }
                         </button>
+                        *@
+                        <button type="button" class="btn-modal btn-mejorar" disabled="@_generandoObservaciones" @onclick="GenerarObservacionesConOpenAIAsync">
+                            <span class="oi oi-document"></span>
+                            <span>Generar con OpenAI (ChatGPT)</span>
+                        </button>
                         <button type="button" class="btn-modal btn-ghost" @onclick="CerrarModalObservaciones">Cerrar</button>
                         <button type="button" class="btn-modal btn-save" disabled="@(string.IsNullOrWhiteSpace(_observacionesRtf) || _guardandoObservaciones)" @onclick="GuardarObservacionesEnProductoAsync">
                             @if (_guardandoObservaciones) { <span class="oi oi-loop spin"></span> <span>Guardando…</span> } else { <span>Guardar observaciones</span> }
@@ -496,6 +476,38 @@
         }
     </div>
 </AuthorizeView>
+
+@* Modal que se abre solo la primera vez si falta API key de OpenAI o de Gemini; se guardan en LocalStorage. *@
+@if (_showApiKeysModal)
+{
+    <div class="modal-overlay api-keys-modal-overlay">
+        <div class="modal-card modal-card-api-keys">
+            <div class="modal-header">
+                <h3>Configurar API keys</h3>
+                <button type="button" class="modal-close" aria-label="Cerrar" @onclick="CerrarApiKeysModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="api-keys-modal-desc">Ingresá las keys que uses. Se guardan en el navegador y no se vuelven a pedir.</p>
+                <div class="modal-apikey">
+                    <label for="api-keys-gemini">API key de Gemini (imágenes / mejorar con IA)</label>
+                    <input id="api-keys-gemini" type="password" class="modal-input" placeholder="Opcional si ya está guardada"
+                           @bind="_apiKeysModalGemini" @bind:event="oninput" />
+                </div>
+                <div class="modal-apikey">
+                    <label for="api-keys-openai">API key de OpenAI (observaciones con ChatGPT)</label>
+                    <input id="api-keys-openai" type="password" class="modal-input" placeholder="Opcional si ya está guardada"
+                           @bind="_apiKeysModalOpenAi" @bind:event="oninput" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-modal btn-ghost" @onclick="CerrarApiKeysModal">Omitir</button>
+                <button type="button" class="btn-modal btn-save" @onclick="GuardarApiKeysModalAsync">
+                    <span class="oi oi-check"></span> Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+}
 
 @if (!string.IsNullOrWhiteSpace(_toastMessage))
 {
@@ -756,6 +768,14 @@
         overflow: auto;
         outline: none;
     }
+    .modal-card-api-keys {
+        max-width: 400px;
+    }
+    .api-keys-modal-desc {
+        font-size: 0.9rem;
+        color: #6c757d;
+        margin: 0 0 1rem 0;
+    }
     .modal-card-imagen {
         display: flex;
         flex-direction: column;
@@ -960,6 +980,8 @@
     .observaciones-preview-wrap .rtf-preview-empty,
     .observaciones-preview-wrap .rtf-preview-plain { color: #6c757d; }
     .observaciones-preview-editable:focus { outline: 1px solid var(--bs-primary, #0d6efd); outline-offset: 2px; }
+    .observaciones-preview-readonly { cursor: default; user-select: text; }
+    .observaciones-preview-readonly:focus { outline: none; }
     .observaciones-edit-label {
         display: block;
         margin-top: 1rem;
