@@ -875,14 +875,7 @@ public partial class AsignarImagenes
             }
             catch { }
         }
-        if (_productoObservaciones != null)
-        {
-            try
-            {
-                await JS.InvokeVoidAsync("eval", "var el = document.getElementById('modal-observaciones-overlay'); if (el) { el.focus(); }");
-            }
-            catch { }
-        }
+        // No forzar foco al overlay del modal Observaciones: si se hace en cada AfterRender, le quita el foco al textarea del prompt y el usuario no puede editarlo.
     }
 
     /// <summary>Sincroniza el contenido del contenteditable (HTML) al RTF al perder foco. No sincroniza si está generando con IA o si se acaba de generar (evita pisar el resultado). Nunca propaga excepciones para evitar "An unhandled error has occurred".</summary>
