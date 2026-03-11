@@ -17,6 +17,9 @@ public sealed class BusquedaWebState
     public bool Descargando { get; set; }
     public string? Error { get; set; }
 
+    /// <summary>Detalle del log cuando Error es "Descarga cancelada" (para botón Copiar LOG y consola).</summary>
+    public string? ErrorLogDetail { get; set; }
+
     /// <summary>URL de la imagen seleccionada en el modal (preview); al hacer clic en Guardar se descarga y se asigna al producto.</summary>
     public string? SelectedImageUrl { get; set; }
 

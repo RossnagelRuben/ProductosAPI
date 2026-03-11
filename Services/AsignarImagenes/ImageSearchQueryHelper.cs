@@ -1,10 +1,9 @@
 namespace BlazorApp_ProductosAPI.Services.AsignarImagenes;
 
 /// <summary>
-/// Helper para construir y variar las consultas de búsqueda de imágenes (API DRR /Integration/ImageSearch).
-/// Principio de responsabilidad única: solo construye textos de búsqueda; no llama a la API.
-/// Reglas de negocio: con código de barra → "barra + descripción"; sin barra → solo descripción.
-/// Si no hay resultados, se pueden probar variantes con descripción abreviada.
+/// Helper para construir las consultas de búsqueda de imágenes (API DRR /Integration/ImageSearch).
+/// Reglas: con código de barra → "barra + descripción completa"; sin barra → solo descripción completa.
+/// La descripción no se acorta: siempre se envía íntegra a la API DRR.
 /// </summary>
 public static class ImageSearchQueryHelper
 {
@@ -82,9 +81,8 @@ public static class ImageSearchQueryHelper
 
     /// <summary>
     /// A partir del texto libre del modal (código de barra + descripción o solo descripción),
-    /// genera la secuencia de queries a intentar: texto completo, solo descripción (si el primer token
-    /// parece código de barra) y descripciones abreviadas. Usado por "Buscar de nuevo" para respetar
-    /// el textbox y reintentar con descripción abreviada si no hay resultados.
+    /// genera la secuencia de queries a intentar: texto completo y, si el primer token parece código de barra, solo descripción (completa).
+    /// No se acorta la descripción: siempre se envía barra + descripción completa a la API DRR.
     /// </summary>
     /// <param name="textoBusqueda">Texto tal cual está en el textbox (barra + desc o solo desc).</param>
     /// <returns>Orden de queries a probar contra la API.</returns>
@@ -97,41 +95,16 @@ public static class ImageSearchQueryHelper
         var queries = new List<string> { texto };
         var rest = texto.Trim();
         var firstSpace = rest.IndexOf(' ');
-        string? posibleBarra = null;
-        string? restoDescripcion = null;
 
         if (firstSpace > 0)
         {
-            posibleBarra = rest.Substring(0, firstSpace);
-            restoDescripcion = rest.Substring(firstSpace + 1).Trim();
-            // Si el primer token parece código de barra (8+ dígitos), añadir fallback "solo descripción".
+            var posibleBarra = rest.Substring(0, firstSpace);
+            var restoDescripcion = rest.Substring(firstSpace + 1).Trim();
+            // Si el primer token parece código de barra (8+ dígitos), añadir fallback "solo descripción" (completa, sin acortar).
             if (posibleBarra.Length >= 8 && posibleBarra.All(char.IsDigit) &&
                 !string.IsNullOrWhiteSpace(restoDescripcion) && !queries.Contains(restoDescripcion))
             {
                 queries.Add(restoDescripcion);
-            }
-        }
-        else
-        {
-            // Sin espacio: todo el texto se considera descripción (sin código de barra).
-            restoDescripcion = rest;
-        }
-
-        // Añadir variantes abreviadas de la parte descripción (con y sin barra si aplica).
-        if (!string.IsNullOrWhiteSpace(restoDescripcion))
-        {
-            var variantesDesc = ObtenerVariantesDescripcion(restoDescripcion);
-            foreach (var variante in variantesDesc)
-            {
-                if (string.IsNullOrWhiteSpace(variante) || queries.Contains(variante))
-                    continue;
-                queries.Add(variante);
-                if (!string.IsNullOrWhiteSpace(posibleBarra) && posibleBarra.Length >= 8 && posibleBarra.All(char.IsDigit))
-                {
-                    var conBarra = $"{posibleBarra} {variante}".Trim();
-                    if (!queries.Contains(conBarra))
-                        queries.Add(conBarra);
-                }
             }
         }
 

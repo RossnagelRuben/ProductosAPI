@@ -18,4 +18,6 @@ public sealed class ProductoQueryFilter
     public bool? FiltroImagen { get; set; }
     /// <summary>Filtro por código de barras: null = todos, true = solo con código, false = solo sin código.</summary>
     public bool? FiltroCodigoBarra { get; set; }
+    /// <summary>Filtro por observación RTF: null = todos, true = solo con observación, false = solo sin observación.</summary>
+    public bool? FiltroObservacion { get; set; }
 }

@@ -79,6 +79,14 @@
                             <option value="Sin">Sin código</option>
                         </select>
                     </div>
+                    <div class="filter-field">
+                        <label for="filtro-observacion">Observación</label>
+                        <select id="filtro-observacion" class="filter-input" @bind="_filtroObservacionOption">
+                            <option value="Todos">Todos</option>
+                            <option value="Con">Con observación</option>
+                            <option value="Sin">Sin observación</option>
+                        </select>
+                    </div>
                     @* Google Search: oculto, solo se usa SerpAPI
                     <div class="filter-field filter-field-full">
                         <label for="google-keys">API key(s) Google (búsqueda imágenes)</label>
@@ -346,6 +354,12 @@
                             @if (!string.IsNullOrWhiteSpace(_busquedaWeb.Error))
                             {
                                 <div class="modal-error">@_busquedaWeb.Error</div>
+                                @if (!string.IsNullOrWhiteSpace(_busquedaWeb.ErrorLogDetail))
+                                {
+                                    <button type="button" class="btn-modal btn-ghost btn-copiar-log" @onclick="CopiarLogBusquedaWebAsync">
+                                        <span class="oi oi-clipboard"></span> Copiar LOG
+                                    </button>
+                                }
                             }
                             <div class="busqueda-web-grid">
                                 @{
@@ -356,7 +370,8 @@
                                         var currentIdx = idx;
                                         var isSelected = _busquedaWeb.SelectedImageUrl == currentUrl;
                                         <button type="button" class="busqueda-web-item @(isSelected ? "selected" : "")" disabled="@_busquedaWeb.Descargando"
-                                                @onclick="() => SeleccionarPreviewImagenSerpApi(currentUrl)">
+                                                @onclick="() => SeleccionarPreviewImagenSerpApi(currentUrl)"
+                                                @ondblclick="() => AbrirPreviewImagenBusquedaWeb(currentUrl)">
                                             <img src="@currentUrl" alt="" referrerpolicy="no-referrer" loading="lazy"
                                                  @onerror="() => LogImagenWebFallida(currentUrl, currentIdx)" />
                                         </button>
@@ -418,25 +433,41 @@
         @if (_productoObservaciones != null)
         {
             <div id="modal-observaciones-overlay" class="modal-overlay" @onkeydown="OnModalObservacionesKeyDown" tabindex="0">
-                <div class="modal-card modal-card-wide" @onkeydown="OnModalObservacionesKeyDown" tabindex="0">
+                <div class="modal-card modal-card-wide modal-card-observaciones" @onkeydown="OnModalObservacionesKeyDown" tabindex="0">
                     <div class="modal-header">
                         <h3>Observaciones</h3>
                         <button type="button" class="modal-close" aria-label="Cerrar" @onclick="CerrarModalObservaciones">&times;</button>
                     </div>
-                    <div class="modal-body">
-                        <div class="modal-desc">
+                    <div class="modal-body modal-observaciones-body">
+                        <div class="modal-desc modal-desc-compact">
                             <strong>@(_productoObservaciones.DescripcionLarga ?? "—")</strong>
                             <div class="modal-meta">Código: @(_productoObservaciones.Codigo ?? "—") @if (!string.IsNullOrWhiteSpace(_productoObservaciones.CodigoBarra)) { <span>| @_productoObservaciones.CodigoBarra</span> }</div>
                         </div>
-                        <div class="modal-prompt">
-                            <label for="observaciones-prompt-openai">Prompt para OpenAI (ChatGPT) — podés editarlo antes de generar</label>
-                            <textarea id="observaciones-prompt-openai" class="modal-textarea" rows="6"
-                                      placeholder="Instrucciones que se envían a ChatGPT para generar las observaciones en RTF…"
-                                      @bind="_observacionesPromptOpenAI"
-                                      @bind:event="oninput"
-                                      @onkeydown="OnModalObservacionesKeyDown"></textarea>
+                        <div class="observaciones-desc-fila">
+                            <input type="text" class="observaciones-desc-input observaciones-desc-larga"
+                                   placeholder="Nombre (descripción larga)"
+                                   value="@(_descripcionLargaGenerada ?? "")"
+                                   @oninput="OnDescripcionLargaInput" />
+                            <input type="text" class="observaciones-desc-input observaciones-desc-corta"
+                                   placeholder="Nombre (descripción corta)"
+                                   value="@(_descripcionCortaGenerada ?? "")"
+                                   @oninput="OnDescripcionCortaInput" />
                         </div>
-                        <div class="modal-prompt">
+                        <div class="modal-prompt modal-prompt-compact instrucciones-openai-collapse">
+                            <button type="button" class="btn-instrucciones-toggle @(_showInstruccionesOpenAI ? "expanded" : "")" @onclick="@(() => _showInstruccionesOpenAI = !_showInstruccionesOpenAI)">
+                                <span class="oi @(_showInstruccionesOpenAI ? "oi-chevron-top" : "oi-chevron-bottom")" aria-hidden="true"></span>
+                                Instrucciones adicionales para OpenAI (opcional)
+                            </button>
+                            @if (_showInstruccionesOpenAI)
+                            {
+                                <textarea id="observaciones-prompt-extra" class="modal-textarea" rows="2"
+                                          placeholder="Tono, público objetivo, etc."
+                                          @bind="_observacionesPromptExtra"
+                                          @bind:event="oninput"
+                                          @onkeydown="OnModalObservacionesKeyDown"></textarea>
+                            }
+                        </div>
+                        <div class="modal-prompt modal-prompt-compact">
                             <label>Vista previa</label>
                             <div id="observaciones-preview-editable" class="observaciones-preview-wrap observaciones-preview-readonly"
                                  contenteditable="false"
@@ -447,28 +478,79 @@
                             <div class="modal-error">@_errorObservaciones</div>
                         }
                     </div>
-                    <div class="modal-footer">
-                        @* Botón SerpAPI+Gemini oculto: solo se usa OpenAI para observaciones.
-                        <button type="button" class="btn-modal btn-mejorar" disabled="@_generandoObservaciones" @onclick="GenerarObservacionesConIAAsync">
-                            @if (_generandoObservaciones)
-                            {
-                                <span class="oi oi-loop spin"></span>
-                                <span>Buscando y generando…</span>
-                            }
-                            else
-                            {
+                    <div class="modal-footer modal-footer-observaciones">
+                        @* Primera fila: botones amarillos (guardar observaciones / guardar descripciones). *@
+                        <div class="modal-footer-row">
+                            <button type="button" class="btn-modal btn-guardar-amarillo" disabled="@(_guardandoObservaciones || _generandoObservaciones || !TieneObservacionesPendientesGuardar)" @onclick="GuardarObservacionesEnProductoAsync">
+                                @if (_guardandoObservaciones) { <span class="oi oi-loop spin"></span> <span>Guardando…</span> } else { <span>Guardar observaciones</span> }
+                            </button>
+                            <button type="button" class="btn-modal btn-guardar-amarillo" disabled="@(_guardandoObservaciones || _generandoObservaciones || !TieneDescripcionesPendientesGuardar)" @onclick="GuardarDescripcionesEnProductoAsync">
+                                Guardar descripciones
+                            </button>
+                        </div>
+                        @* Segunda fila: verde (guardar todo) y Generar con OpenAI. *@
+                        <div class="modal-footer-row">
+                            <button type="button" class="btn-modal btn-save" disabled="@(_guardandoObservaciones || _generandoObservaciones || !TieneObservacionesODescripcionesPendientesGuardar)" @onclick="GuardarObservacionesYDescripcionesEnProductoAsync">
+                                Guardar observaciones y descripciones
+                            </button>
+                            <button type="button" class="btn-modal btn-mejorar" disabled="@(_generandoObservaciones || _guardandoObservaciones)" @onclick="GenerarObservacionesConOpenAIAsync">
                                 <span class="oi oi-document"></span>
-                                <span>Generar con IA (SerpAPI + Gemini)</span>
-                            }
-                        </button>
-                        *@
-                        <button type="button" class="btn-modal btn-mejorar" disabled="@_generandoObservaciones" @onclick="GenerarObservacionesConOpenAIAsync">
-                            <span class="oi oi-document"></span>
-                            <span>Generar con OpenAI (ChatGPT)</span>
-                        </button>
-                        <button type="button" class="btn-modal btn-ghost" @onclick="CerrarModalObservaciones">Cerrar</button>
-                        <button type="button" class="btn-modal btn-save" disabled="@(string.IsNullOrWhiteSpace(_observacionesRtf) || _guardandoObservaciones)" @onclick="GuardarObservacionesEnProductoAsync">
-                            @if (_guardandoObservaciones) { <span class="oi oi-loop spin"></span> <span>Guardando…</span> } else { <span>Guardar observaciones</span> }
+                                <span>Generar con OpenAI</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* Modal de opciones antes de generar con OpenAI: abreviar descripción corta, autocompletar descripción larga, editar prompts. *@
+        @if (_showModalOpcionesGeneracion)
+        {
+            <div class="modal-overlay" @onkeydown="OnModalOpcionesGeneracionKeyDown" tabindex="0">
+                <div class="modal-card modal-card-wide" @onkeydown="OnModalOpcionesGeneracionKeyDown" tabindex="0">
+                    <div class="modal-header">
+                        <h3>Opciones de generación con OpenAI</h3>
+                        <button type="button" class="modal-close" aria-label="Cerrar" @onclick="CerrarModalOpcionesGeneracion">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="modal-busqueda-desc">Elegí qué querés generar además de la observación. Podés editar los prompts antes de generar.</p>
+                        <div class="opciones-generacion-checks">
+                            <label class="opcion-check">
+                                <input type="checkbox" @bind="_opcionesAbreviarCorta" />
+                                <span>Abreviar descripción corta (para listados)</span>
+                            </label>
+                            <label class="opcion-check">
+                                <input type="checkbox" @bind="_opcionesAutocompletarLarga" />
+                                <span>Autocompletar o rellenar descripción larga</span>
+                            </label>
+                        </div>
+                        <div class="opciones-generacion-prompts">
+                            <div class="opcion-prompt-row">
+                                <button type="button" class="btn-link-toggle" @onclick="@(() => _editandoPromptAbreviar = !_editandoPromptAbreviar)">
+                                    @(_editandoPromptAbreviar ? "Ocultar prompt de abreviación" : "Editar prompt de descripción corta")
+                                </button>
+                                @if (_editandoPromptAbreviar)
+                                {
+                                    <textarea class="modal-textarea prompt-edit" rows="3" @bind="_promptAbreviarCorta" @bind:event="oninput"
+                                              placeholder="Instrucciones para abreviar la descripción…"></textarea>
+                                }
+                            </div>
+                            <div class="opcion-prompt-row">
+                                <button type="button" class="btn-link-toggle" @onclick="@(() => _editandoPromptLarga = !_editandoPromptLarga)">
+                                    @(_editandoPromptLarga ? "Ocultar prompt de descripción larga" : "Editar prompt de descripción larga")
+                                </button>
+                                @if (_editandoPromptLarga)
+                                {
+                                    <textarea class="modal-textarea prompt-edit" rows="3" @bind="_promptDescripcionLarga" @bind:event="oninput"
+                                              placeholder="Instrucciones para autocompletar la descripción larga…"></textarea>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn-modal btn-ghost" @onclick="CerrarModalOpcionesGeneracion">Cancelar</button>
+                        <button type="button" class="btn-modal btn-mejorar" @onclick="EjecutarGeneracionOpenAIConfirmarAsync">
+                            <span class="oi oi-document"></span> Generar
                         </button>
                     </div>
                 </div>
@@ -904,12 +986,23 @@
         font-size: 0.9rem;
         margin-top: 0.5rem;
     }
+    .btn-copiar-log { margin-top: 0.5rem; }
     .modal-footer {
         display: flex;
         gap: 0.5rem;
         flex-wrap: wrap;
         padding: 1rem 1.25rem;
         border-top: 1px solid #e9ecef;
+    }
+    .modal-footer-observaciones {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    .modal-footer-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
     }
     .btn-modal {
         display: inline-flex;
@@ -928,6 +1021,9 @@
     .btn-ghost:hover { background: #dee2e6; }
     .btn-save { background: #198754; color: #fff; }
     .btn-save:hover { background: #157347; }
+    /* Amarillo clarito para guardar solo observaciones o solo descripciones (la modal no se cierra). */
+    .btn-guardar-amarillo { background: #fff3cd; color: #856404; border: 1px solid #e6b800; }
+    .btn-guardar-amarillo:hover:not(:disabled) { background: #ffe69c; border-color: #b38600; }
     .modal-card-wide { max-width: 720px; }
     .observaciones-tabs {
         display: flex;
@@ -953,16 +1049,45 @@
         color: #fff;
         border-color: #6f42c1;
     }
+    .modal-observaciones-body { padding: 1rem 1.25rem; }
+    .modal-desc-compact { margin-bottom: 0.5rem; }
+    .modal-prompt-compact { margin-top: 0.5rem; }
+    .instrucciones-openai-collapse { margin-top: 0.5rem; }
+    .btn-instrucciones-toggle {
+        display: flex; align-items: center; gap: 0.35rem;
+        width: 100%; padding: 0.4rem 0.5rem; border: 1px solid #dee2e6; border-radius: 6px;
+        background: #f8f9fa; color: #495057; font-size: 0.9rem; text-align: left; cursor: pointer;
+    }
+    .btn-instrucciones-toggle:hover { background: #e9ecef; }
+    .btn-instrucciones-toggle .oi { font-size: 0.75rem; opacity: 0.8; }
+    .instrucciones-openai-collapse .modal-textarea { margin-top: 0.35rem; }
+    .observaciones-desc-fila {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        margin-bottom: 0.5rem;
+    }
+    .observaciones-desc-input {
+        width: 100%;
+        padding: 0.35rem 0.5rem;
+        font-size: 0.9rem;
+        border-radius: 6px;
+        box-sizing: border-box;
+    }
+    .observaciones-desc-larga { border: 2px solid #e6b800; background: #fffef5; }
+    .observaciones-desc-larga:focus { outline: none; border-color: #b38600; box-shadow: 0 0 0 2px rgba(230, 184, 0, 0.25); }
+    .observaciones-desc-corta { border: 2px solid #0dcaf0; background: #f0fbff; }
+    .observaciones-desc-corta:focus { outline: none; border-color: #0aa2c0; box-shadow: 0 0 0 2px rgba(13, 202, 240, 0.25); }
     .observaciones-preview-wrap {
-        min-height: 200px;
-        max-height: 360px;
+        min-height: 120px;
+        max-height: 220px;
         overflow-y: auto;
-        padding: 0.75rem 1rem;
+        padding: 0.5rem 0.75rem;
         border: 1px solid #dee2e6;
         border-radius: 8px;
         background: #fff;
-        font-size: 0.95rem;
-        line-height: 1.5;
+        font-size: 0.9rem;
+        line-height: 1.4;
     }
     .observaciones-preview-wrap .rtf-preview {
         margin: 0;
@@ -1033,6 +1158,18 @@
     }
     .modal-busqueda-info { font-size: 0.9rem; color: #6c757d; margin-bottom: 1rem; }
     .modal-busqueda-desc { font-size: 1rem; margin: 0 0 1rem 0; color: #1a1a2e; }
+    .opciones-generacion-checks { margin-bottom: 1rem; }
+    .opcion-check { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; cursor: pointer; }
+    .opcion-check input { width: auto; }
+    .opciones-generacion-prompts { margin-top: 1rem; }
+    .opcion-prompt-row { margin-bottom: 0.75rem; }
+    .opcion-prompt-row .prompt-edit { margin-top: 0.35rem; width: 100%; }
+    .descripciones-generadas { margin-top: 1rem; }
+    .descripciones-generadas label { display: block; margin-bottom: 0.35rem; }
+    .desc-corta-text { min-height: 3rem; }
+    .desc-larga-text { min-height: 6rem; }
+    .modal-card-wide.modal-card-observaciones { max-height: 90vh; display: flex; flex-direction: column; }
+    .modal-card-wide.modal-card-observaciones .modal-body { flex: 1; min-height: 0; overflow-y: auto; }
     .busqueda-web-query-edit { margin-bottom: 1rem; }
     .busqueda-web-query-edit label { display: block; font-size: 0.9rem; font-weight: 500; color: #495057; margin-bottom: 0.35rem; }
     .busqueda-web-query-row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }

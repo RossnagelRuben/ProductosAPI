@@ -15,6 +15,16 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="7.0.19" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="7.0.19" PrivateAssets="all" />
+    <!-- Necesario para recursos binarios (.resx con imágenes, iconos, etc.) en tiempo de ejecución -->
+    <PackageReference Include="System.Resources.Extensions" Version="7.0.0" />
+  </ItemGroup>
+
+  <!-- Excluir la carpeta "RepositorioDRR - copia" del build sin borrarla -->
+  <ItemGroup>
+    <Compile Remove="RepositorioDRR - copia\**" />
+    <Content Remove="RepositorioDRR - copia\**" />
+    <EmbeddedResource Remove="RepositorioDRR - copia\**" />
+    <None Remove="RepositorioDRR - copia\**" />
   </ItemGroup>
 
   <ItemGroup>

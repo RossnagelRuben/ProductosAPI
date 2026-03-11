@@ -252,6 +252,22 @@ public static class RtfToHtmlConverter
                 continue;
             }
 
+            // Saltos de línea literales en el RTF → <br/> para que la vista previa muestre los párrafos correctamente
+            if (c == '\r')
+            {
+                i++;
+                if (i < trimmed.Length && trimmed[i] == '\n') i++;
+                if (!EndsWithBr(sb)) sb.Append("<br/>");
+                continue;
+            }
+            if (c == '\n')
+            {
+                i++;
+                // No duplicar <br/> si acabamos de emitir uno (ej. por \par\n)
+                if (!EndsWithBr(sb)) sb.Append("<br/>");
+                continue;
+            }
+
             sb.Append(EscapeHtml(c.ToString()));
             i++;
         }
@@ -262,6 +278,14 @@ public static class RtfToHtmlConverter
         if (inBullet) sb.Append("</li>");
 
         var html = sb.ToString();
+        // Quitar todos los dígitos (0-9) del contenido de observaciones. El modelo a veces genera "este1", "3 opciones", etc.
+        // y el usuario NO quiere ver números en las observaciones generadas ni en la vista previa.
+        html = System.Text.RegularExpressions.Regex.Replace(
+            html,
+            @"\d+",
+            string.Empty,
+            System.Text.RegularExpressions.RegexOptions.None,
+            TimeSpan.FromMilliseconds(50));
         // Quitar basura al principio del contenido (ej. �0, caracteres de control antes del primer texto o tag)
         html = System.Text.RegularExpressions.Regex.Replace(
             html,
@@ -310,6 +334,15 @@ public static class RtfToHtmlConverter
         var word = s.Substring(start, i - start);
         while (i < s.Length && (s[i] == ' ' || s[i] == '\t')) i++;
         return (word, i - start);
+    }
+
+    private static bool EndsWithBr(StringBuilder sb)
+    {
+        const string br = "<br/>";
+        if (sb.Length < br.Length) return false;
+        for (int k = 0; k < br.Length; k++)
+            if (sb[sb.Length - br.Length + k] != br[k]) return false;
+        return true;
     }
 
     private static string EscapeHtml(string? text)

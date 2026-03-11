@@ -1,0 +1,149 @@
+{ EJEMPLO BIEN
+    "status": "ok",
+    "pageNumber": 1,
+    "pageSize": 50,
+    "totalPages": 1,
+    "totalRecords": 1,
+    "data": [
+        {
+            "codigoBaseID": 13,
+            "codigoID": 13,
+            "descripcionLarga": "YOGURISIMO MIX CEREALES CRUJIENTE X 167G",
+            "familiaID": 767,
+            "rubroCodigo": "767/13",
+            "fechaModificacion": "2026-03-05T18:59:29.83+00:00",
+            "aplicaPorSucursal": 0,
+            "controlStock": false,
+            "codigoFabrica": "11201",
+            "inhabilitado": false,
+            "marcaID": 209,
+            "clasificacionID": null,
+            "defaultPresentacionVentaID": 1,
+            "defaultPresentacionCompraID": 1,
+            "precioCompra": 17.2150,
+            "coeficienteCosto": 0.0000,
+            "precioCosto": 17.2150,
+            "actualizaMoneda": null,
+            "monedaID": null,
+            "precioCostoMoneda": null,
+            "esVentaDepartamento": null,
+            "productoTipoID": 1024,
+            "caracteristica1ID": null,
+            "caracteristica2ID": null,
+            "caracteristica3ID": null,
+            "sectorID": 1,
+            "imagen": null,
+            "imagenWeb": null,
+            "observacion": "{\\rtf1\\ansi\\b YOGURISIMO MIX CEREALES CRUJIENTE X 167G\\b0\\par\nEste delicioso yogur combina la cremosidad del yogur con el crocante de los cereales, ofreciendo una mezcla \\'fanica de sabor y textura. Ideal para disfrutar en cualquier momento del d\\'eda, es una excelente opci\\'f3n para un desayuno nutritivo o como snack en la tarde.\\par\n\\b Caracter\\'edsticas:\\b0\\par\n- Presentaci\\'f3n: 167g\\par\n- Mezcla de yogur con cereales crujientes.\\par\n- Alto en calcio.\\par\n- Sin conservantes artificiales.\\par\n- Sabor natural.\\par\n\\b Uso:\\b0\\par\nDisfrutar solo o acompa\\'f1ado de frutas frescas. Ideal para el desayuno, como refrigerio o postre.\\par\nC\\'f3digo de barras: 7791337613027}",
+            "obsBytes": 676,
+            "impuestos": [
+                {
+                    "impuestoID": 100,
+                    "porcImpuesto": 21.000,
+                    "impImpuesto": null
+                }
+            ],
+            "presentaciones": [
+                {
+                    "productoPresenstacionID": 22464,
+                    "presentacionID": 0,
+                    "fracciones": 1.0000,
+                    "empaqueID": null,
+                    "listaCodigoBarra": [
+                        {
+                            "codigoBarra": ""
+                        }
+                    ],
+                    "listaPrecio": [
+                        {
+                            "listaPrecID": 0,
+                            "precio": 17.5590,
+                            "precioFinal": 21.2464,
+                            "fechaActualizacion": "2019-08-20T10:45:55.42+00:00"
+                        },
+                        {
+                            "listaPrecID": 2,
+                            "precio": 15.8031,
+                            "precioFinal": 19.1218,
+                            "fechaActualizacion": "2023-10-03T08:55:38.867+00:00"
+                        },
+                        {
+                            "listaPrecID": 3,
+                            "precio": 18.9637,
+                            "precioFinal": 22.9461,
+                            "fechaActualizacion": "2019-08-20T10:45:55.42+00:00"
+                        },
+                        {
+                            "listaPrecID": 14,
+                            "precio": 59.7006,
+                            "precioFinal": 72.2377,
+                            "fechaActualizacion": "2020-06-22T19:16:56+00:00"
+                        },
+                        {
+                            "listaPrecID": 15,
+                            "precio": 23.7047,
+                            "precioFinal": 28.6827,
+                            "fechaActualizacion": "2021-08-11T19:39:15+00:00"
+                        },
+                        {
+                            "listaPrecID": 17,
+                            "precio": 13.1693,
+                            "precioFinal": 15.9349,
+                            "fechaActualizacion": "2021-11-02T17:31:00+00:00"
+                        }
+                    ]
+                },
+                {
+                    "productoPresenstacionID": 22465,
+                    "presentacionID": 1,
+                    "fracciones": 1.0000,
+                    "empaqueID": null,
+                    "listaCodigoBarra": [
+                        {
+                            "codigoBarra": "7791337613027"
+                        }
+                    ],
+                    "listaPrecio": [
+                        {
+                            "listaPrecID": 0,
+                            "precio": 21.5187,
+                            "precioFinal": 26.0376,
+                            "fechaActualizacion": "2019-08-20T10:45:55.42+00:00"
+                        },
+                        {
+                            "listaPrecID": 2,
+                            "precio": 19.3669,
+                            "precioFinal": 23.4339,
+                            "fechaActualizacion": "2023-10-03T08:55:38.867+00:00"
+                        },
+                        {
+                            "listaPrecID": 3,
+                            "precio": 23.2402,
+                            "precioFinal": 28.1206,
+                            "fechaActualizacion": "2019-08-20T10:45:55.42+00:00"
+                        },
+                        {
+                            "listaPrecID": 14,
+                            "precio": 73.1636,
+                            "precioFinal": 88.5280,
+                            "fechaActualizacion": "2020-06-22T19:16:56+00:00"
+                        },
+                        {
+                            "listaPrecID": 15,
+                            "precio": 29.0502,
+                            "precioFinal": 35.1507,
+                            "fechaActualizacion": "2021-08-11T19:39:15+00:00"
+                        },
+                        {
+                            "listaPrecID": 45,
+                            "precio": 25.8225,
+                            "precioFinal": 31.2452,
+                            "fechaActualizacion": "2026-02-20T18:13:29.19+00:00"
+                        }
+                    ]
+                }
+            ],
+            "depositoStock": null
+        }
+    ]
+}

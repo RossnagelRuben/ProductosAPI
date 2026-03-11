@@ -36,6 +36,7 @@ public partial class AsignarImagenes
     private ProductoQueryFilter _filter = new();
     private string _filtroImagenOption = "Todos";
     private string _filtroCodigoBarraOption = "Todos";
+    private string _filtroObservacionOption = "Todos";
     private int _busquedaId;
     private List<ProductoConImagenDto> _items = new();
     private List<FamiliaItem> _familias = new();
@@ -71,6 +72,8 @@ public partial class AsignarImagenes
     private string? _busquedaWebPreviewUrl;
     /// <summary>Cancelación de la descarga actual para no quedar en "Descargando imagen" y poder elegir otra.</summary>
     private CancellationTokenSource? _busquedaWebCts;
+    /// <summary>Causa de la última cancelación (para el LOG cuando aparece "Descarga cancelada").</summary>
+    private string? _busquedaWebCancelacionRazon;
     /// <summary>Si true, en el próximo OnAfterRender se fuerza el valor del input de búsqueda desde JS para que respete código de barra + descripción completa.</summary>
     private bool _busquedaWebInputNeedsSync;
 
@@ -86,8 +89,25 @@ public partial class AsignarImagenes
     private bool _observacionesPreviewNeedsSyncFromRtf = false;
     /// <summary>Si true, el próximo blur del contenteditable no debe pisar _observacionesRtf (evita que el blur al hacer clic en Generar borre el resultado).</summary>
     private bool _observacionesSkipNextSyncFromPreview = false;
-    /// <summary>Prompt que se envía a OpenAI para generar observaciones RTF; el usuario puede editarlo en el modal.</summary>
-    private string _observacionesPromptOpenAI = "";
+    /// <summary>Texto adicional opcional que el usuario puede agregar al prompt por defecto de OpenAI para observaciones.</summary>
+    private string _observacionesPromptExtra = "";
+    /// <summary>Descripción corta generada por IA (editable en modal Observaciones).</summary>
+    private string? _descripcionCortaGenerada;
+    /// <summary>Descripción larga generada por IA (editable en modal Observaciones).</summary>
+    private string? _descripcionLargaGenerada;
+
+    /// <summary>Modal de opciones antes de generar con OpenAI: abreviar descripción corta, autocompletar descripción larga, editar prompts.</summary>
+    private bool _showModalOpcionesGeneracion;
+    /// <summary>Instrucciones adicionales para OpenAI: colapsado por defecto; al hacer clic se expande.</summary>
+    private bool _showInstruccionesOpenAI;
+    /// <summary>True si la generación es masiva (lista); false si es un solo producto (modal Observaciones).</summary>
+    private bool _opcionesGeneracionEsMasivo;
+    private bool _opcionesAbreviarCorta = true;
+    private bool _opcionesAutocompletarLarga = true;
+    private bool _editandoPromptAbreviar;
+    private bool _editandoPromptLarga;
+    private string _promptAbreviarCorta = "";
+    private string _promptDescripcionLarga = "";
 
     /// <summary>Mensaje de notificación (toast) para operaciones de guardado (éxito / error).</summary>
     private string? _toastMessage;
@@ -124,8 +144,8 @@ public partial class AsignarImagenes
 
     /// <summary>Cantidad de productos con imagen pendiente de guardar en la API (solo en memoria).</summary>
     private int CantidadPendienteGuardar => _items.Count(p => p.ImagenPendienteGuardar);
-    /// <summary>Cantidad de productos con observaciones pendientes de guardar.</summary>
-    private int CantidadObservacionesPendienteGuardar => _items.Count(p => p.ObservacionesPendienteGuardar);
+    /// <summary>Cantidad de productos con observaciones y/o descripciones (corta/larga) pendientes de guardar.</summary>
+    private int CantidadObservacionesPendienteGuardar => _items.Count(p => p.ObservacionesPendienteGuardar || p.DescripcionCortaPendienteGuardar || p.DescripcionLargaPendienteGuardar);
 
     /// <summary>True = filtros colapsados después de buscar (solo se muestra el botón para expandir).</summary>
     private bool _filtersCollapsed;
@@ -231,7 +251,8 @@ public partial class AsignarImagenes
             FechaModifDesde = f.FechaModifDesde,
             FechaModifHasta = f.FechaModifHasta,
             FiltroImagen = f.FiltroImagen,
-            FiltroCodigoBarra = f.FiltroCodigoBarra
+            FiltroCodigoBarra = f.FiltroCodigoBarra,
+            FiltroObservacion = f.FiltroObservacion
         };
     }
 
@@ -259,6 +280,12 @@ public partial class AsignarImagenes
             "Sin" => false,
             _ => null
         };
+        _filter.FiltroObservacion = _filtroObservacionOption switch
+        {
+            "Con" => true,
+            "Sin" => false,
+            _ => null
+        };
         try
         {
             var swTotal = Stopwatch.StartNew();
@@ -266,20 +293,20 @@ public partial class AsignarImagenes
             _seleccionados.Clear(); // Nueva búsqueda: limpia selección en vista lista (SOLID: estado coherente).
             bool tieneFiltroImagen = _filter.FiltroImagen.HasValue;
             bool tieneFiltroCodigo = _filter.FiltroCodigoBarra.HasValue;
+            bool tieneFiltroObservacion = _filter.FiltroObservacion.HasValue;
 
-            // Solo filtro código de barras: la API aplica ConCodigoBarra → UNA sola llamada, búsqueda rápida.
-            // Filtro de imagen: la API no filtra por imagen → hay que acumular en cliente; usamos página grande y pocas llamadas.
-            if (tieneFiltroImagen)
+            // Cuando hay filtro de imagen o de observación, la API no filtra por esos criterios (Include=2 trae todos).
+            // Hay que pedir varias páginas a la API, filtrar en cliente y acumular hasta llenar la página pedida.
+            if (tieneFiltroImagen || tieneFiltroObservacion)
             {
                 var paginaUsuario = _filter.PageNumber;
                 var pageSizeUsuario = _filter.PageSize;
                 var acumulada = new List<ProductoConImagenDto>();
                 var apiPage = 1;
-                const int maxPages = 5;
+                const int maxPages = 10;
                 const int pageSizeApi = 100;
                 var necesarios = paginaUsuario * pageSizeUsuario;
 
-                // Usar un filtro temporal para la API; no modificar _filter.PageSize para que el input "Cantidad" no cambie a 100.
                 var filtroApi = CloneFilterWithPageSize(_filter, pageSizeApi);
                 while (acumulada.Count < necesarios && apiPage <= maxPages)
                 {
@@ -288,14 +315,27 @@ public partial class AsignarImagenes
                     if (chunk.Count == 0) break;
 
                     var queCumplen = chunk.AsEnumerable();
-                    if (filtroApi.FiltroImagen == true)
-                        queCumplen = queCumplen.Where(p => !string.IsNullOrWhiteSpace(p.ImagenUrl));
-                    else
-                        queCumplen = queCumplen.Where(p => string.IsNullOrWhiteSpace(p.ImagenUrl));
-                    if (filtroApi.FiltroCodigoBarra == true)
-                        queCumplen = queCumplen.Where(p => !string.IsNullOrWhiteSpace(p.CodigoBarra));
-                    else if (filtroApi.FiltroCodigoBarra == false)
-                        queCumplen = queCumplen.Where(p => string.IsNullOrWhiteSpace(p.CodigoBarra));
+                    if (tieneFiltroImagen)
+                    {
+                        if (filtroApi.FiltroImagen == true)
+                            queCumplen = queCumplen.Where(p => !string.IsNullOrWhiteSpace(p.ImagenUrl));
+                        else
+                            queCumplen = queCumplen.Where(p => string.IsNullOrWhiteSpace(p.ImagenUrl));
+                    }
+                    if (tieneFiltroCodigo)
+                    {
+                        if (filtroApi.FiltroCodigoBarra == true)
+                            queCumplen = queCumplen.Where(p => !string.IsNullOrWhiteSpace(p.CodigoBarra));
+                        else
+                            queCumplen = queCumplen.Where(p => string.IsNullOrWhiteSpace(p.CodigoBarra));
+                    }
+                    if (tieneFiltroObservacion)
+                    {
+                        if (filtroApi.FiltroObservacion == true)
+                            queCumplen = queCumplen.Where(p => p.Observaciones != null);
+                        else
+                            queCumplen = queCumplen.Where(p => p.Observaciones == null);
+                    }
 
                     acumulada.AddRange(queCumplen.ToList());
                     if (acumulada.Count >= necesarios) break;
@@ -308,11 +348,10 @@ public partial class AsignarImagenes
                     .Take(pageSizeUsuario)
                     .ToList();
                 _filter.PageNumber = paginaUsuario;
-                // _filter.PageSize no se tocó; sigue siendo el valor del usuario (p. ej. 4).
             }
             else
             {
-                // Sin filtro de imagen: una sola llamada (filtro código lo aplica la API con ConCodigoBarra).
+                // Sin filtro de imagen ni observación: una sola llamada (filtro código lo aplica la API).
                 _items = (await ProductoQuery.GetProductosAsync(_filter, _token)).ToList();
                 if (tieneFiltroCodigo)
                 {
@@ -326,8 +365,8 @@ public partial class AsignarImagenes
             // Cargar imágenes en segundo plano (no bloquear la lista): la grilla/tabla se muestra al instante
             _ = CargarImagenesConTokenAsync(_items);
 
-            // Cuando no usamos el bucle (una sola llamada), aplicar en cliente por imagen/código por si acaso.
-            if (!tieneFiltroImagen)
+            // Si no usamos el bucle (una sola llamada), aplicar en cliente por imagen/código/observación por si acaso.
+            if (!tieneFiltroImagen && !tieneFiltroObservacion)
             {
                 if (_filtroImagenOption == "Con")
                     _items = _items.Where(p => !string.IsNullOrWhiteSpace(p.ImagenUrl)).ToList();
@@ -337,6 +376,10 @@ public partial class AsignarImagenes
                     _items = _items.Where(p => !string.IsNullOrWhiteSpace(p.CodigoBarra)).ToList();
                 else if (_filter.FiltroCodigoBarra == false)
                     _items = _items.Where(p => string.IsNullOrWhiteSpace(p.CodigoBarra)).ToList();
+                if (_filter.FiltroObservacion == true)
+                    _items = _items.Where(p => p.Observaciones != null).ToList();
+                else if (_filter.FiltroObservacion == false)
+                    _items = _items.Where(p => p.Observaciones == null).ToList();
             }
 
             swTotal.Stop();
@@ -348,7 +391,8 @@ public partial class AsignarImagenes
                     tiempoSeg = Math.Round(swTotal.Elapsed.TotalSeconds, 2),
                     itemsMostrados = _items.Count,
                     filtroImagen = tieneFiltroImagen,
-                    filtroCodigo = tieneFiltroCodigo
+                    filtroCodigo = tieneFiltroCodigo,
+                    filtroObservacion = tieneFiltroObservacion
                 }));
             }
             catch { }
@@ -462,6 +506,7 @@ public partial class AsignarImagenes
         _filter = new ProductoQueryFilter();
         _filtroImagenOption = "Todos";
         _filtroCodigoBarraOption = "Todos";
+        _filtroObservacionOption = "Todos";
         _filter.PageNumber = 1;
         _items = new List<ProductoConImagenDto>();
         _error = null;
@@ -626,12 +671,15 @@ public partial class AsignarImagenes
         if (p == null) return;
         _productoObservaciones = p;
         _observacionesRtf = p.Observaciones ?? "";
+        _observacionesPromptExtra = "";
+        _showInstruccionesOpenAI = false;
+        _descripcionCortaGenerada = p.DescripcionCorta;
+        _descripcionLargaGenerada = p.DescripcionLarga;
         _errorObservaciones = null;
         _generandoObservaciones = false;
         _geminiApiKeyModal = await LocalStorage.GetItemAsync(LsGeminiKey) ?? "";
         _observacionesVistaCodigo = false; // por defecto mostrar Vista previa
         _observacionesPreviewNeedsSyncFromRtf = true;
-        _observacionesPromptOpenAI = BuildPromptObservacionesRtfOpenAI(p.DescripcionLarga ?? "", p.CodigoBarra ?? "");
         await InvokeAsync(StateHasChanged);
     }
 
@@ -639,11 +687,109 @@ public partial class AsignarImagenes
     {
         _productoObservaciones = null;
         _observacionesRtf = "";
+        _descripcionCortaGenerada = null;
+        _descripcionLargaGenerada = null;
         _errorObservaciones = null;
         _generandoObservaciones = false;
         _guardandoObservaciones = false;
         _observacionesVistaCodigo = true;
         StateHasChanged();
+    }
+
+    /// <summary>Abre la modal de opciones antes de generar con OpenAI (un producto o masivo).</summary>
+    private void AbrirModalOpcionesGeneracion(bool esMasivo)
+    {
+        _opcionesGeneracionEsMasivo = esMasivo;
+        if (string.IsNullOrWhiteSpace(_promptAbreviarCorta))
+            _promptAbreviarCorta = GetPromptAbreviarCortaDefault();
+        if (string.IsNullOrWhiteSpace(_promptDescripcionLarga))
+            _promptDescripcionLarga = GetPromptDescripcionLargaDefault();
+        _showModalOpcionesGeneracion = true;
+        StateHasChanged();
+    }
+
+    private void CerrarModalOpcionesGeneracion()
+    {
+        _showModalOpcionesGeneracion = false;
+        _editandoPromptAbreviar = false;
+        _editandoPromptLarga = false;
+        StateHasChanged();
+    }
+
+    /// <summary>Prompt por defecto: descripción corta = solo el nombre del producto abreviado (lo que nosotros llamamos descripción).</summary>
+    private static string GetPromptAbreviarCortaDefault()
+    {
+        return "Genera ÚNICAMENTE el nombre del producto abreviado (máximo 30 caracteres). Es solo el nombre, acortado para listados o etiquetas. No agregues características, ni uso, ni párrafos: solo el nombre del producto. Sin RTF, sin código de barras. Responde solo con ese nombre abreviado.";
+    }
+
+    /// <summary>Prompt por defecto: descripción larga = solo el nombre del producto extendido (lo que nosotros llamamos descripción).</summary>
+    private static string GetPromptDescripcionLargaDefault()
+    {
+        return "Genera ÚNICAMENTE el nombre del producto en su forma extendida o completa. Es solo el nombre (lo que nosotros llamamos descripción): puede incluir variante, presentación o tamaño si aplica, pero sin párrafos, sin características ni texto de marketing. Sin RTF, sin código de barras. Responde solo con ese nombre extendido.";
+    }
+
+    private void OnModalOpcionesGeneracionKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") CerrarModalOpcionesGeneracion();
+    }
+
+    /// <summary>Al editar la descripción larga en la modal, actualiza el estado y el ítem en _items para que quede en memoria (al cerrar y reabrir se vea igual).</summary>
+    private void OnDescripcionLargaInput(ChangeEventArgs e)
+    {
+        _descripcionLargaGenerada = e.Value?.ToString();
+        var item = _productoObservaciones != null ? _items.FirstOrDefault(x => x.ProductoID == _productoObservaciones.ProductoID) : null;
+        if (item != null)
+        {
+            item.DescripcionLarga = _descripcionLargaGenerada;
+            item.DescripcionLargaPendienteGuardar = true;
+        }
+        StateHasChanged();
+    }
+
+    /// <summary>Al editar la descripción corta en la modal, actualiza el estado y el ítem en _items para que quede en memoria (al cerrar y reabrir se vea igual).</summary>
+    private void OnDescripcionCortaInput(ChangeEventArgs e)
+    {
+        _descripcionCortaGenerada = e.Value?.ToString();
+        var item = _productoObservaciones != null ? _items.FirstOrDefault(x => x.ProductoID == _productoObservaciones.ProductoID) : null;
+        if (item != null)
+        {
+            item.DescripcionCorta = _descripcionCortaGenerada;
+            item.DescripcionCortaPendienteGuardar = true;
+        }
+        StateHasChanged();
+    }
+
+    /// <summary>True si el producto actual tiene descripción corta o larga pendiente de guardar (editadas a mano o generadas con OpenAI).</summary>
+    private bool TieneDescripcionesPendientesGuardar
+    {
+        get
+        {
+            if (_productoObservaciones == null) return false;
+            var item = _items.FirstOrDefault(x => x.ProductoID == _productoObservaciones.ProductoID);
+            return item != null && (item.DescripcionCortaPendienteGuardar || item.DescripcionLargaPendienteGuardar);
+        }
+    }
+
+    /// <summary>True si el producto actual tiene observación pendiente de guardar (generada o editada). Habilita solo "Guardar observaciones".</summary>
+    private bool TieneObservacionesPendientesGuardar
+    {
+        get
+        {
+            if (_productoObservaciones == null) return false;
+            var item = _items.FirstOrDefault(x => x.ProductoID == _productoObservaciones.ProductoID);
+            return item != null && item.ObservacionesPendienteGuardar;
+        }
+    }
+
+    /// <summary>True si hay observación y/o descripciones pendientes de guardar (modificadas a mano o generadas con OpenAI). Usado para habilitar el botón verde.</summary>
+    private bool TieneObservacionesODescripcionesPendientesGuardar
+    {
+        get
+        {
+            if (_productoObservaciones == null) return false;
+            var item = _items.FirstOrDefault(x => x.ProductoID == _productoObservaciones.ProductoID);
+            return item != null && (item.ObservacionesPendienteGuardar || item.DescripcionCortaPendienteGuardar || item.DescripcionLargaPendienteGuardar);
+        }
     }
 
     /// <summary>HTML generado desde el RTF para la vista previa (negritas, viñetas, etc.). ToHtml no lanza y sanea la entrada.</summary>
@@ -664,57 +810,120 @@ public partial class AsignarImagenes
     }
 
     /// <summary>
-    /// Corrige secuencias RTF mal formadas que el modelo o la API a veces introducen, para que todas las observaciones
-    /// se guarden bien. Se aplica antes de normalizar (modal y modo lista).
+    /// Corrige solo secuencias RTF claramente mal formadas que rompen el RichTextBox del sistema viejo.
+    /// NO intenta “mejorar” el castellano ni cambiar palabras: únicamente quita basura técnica (dobles barras,
+    /// comillas extra después de \'xx, \u769?, \~n, etc.). Se aplica antes de normalizar (modal y modo lista).
     /// </summary>
     private static string RepairRtfEscapesFromModel(string rtf)
     {
         if (string.IsNullOrEmpty(rtf)) return rtf ?? "";
         var s = rtf;
-        // Evitar doble escape: \\' debe ser \' (si no, la API guarda d\'\'eda y el visor falla). Colapsar en bucle por si hay \\\\' etc.
+        // 1) Doble escape: \\\' debe ser \' (si no, la API guarda d\'\'eda y el visor falla). Colapsar en bucle por si hay \\\\' etc.
         while (s.Contains("\\\\'", StringComparison.Ordinal))
             s = s.Replace("\\\\'", "\\'", StringComparison.Ordinal);
-        // Colapsar \' \' (secuencia duplicada) → \' (ej. d\'\'eda, presentaci\'\'f3n, peque\'\'f1os). En bucle por si hay más.
+        // 2) Secuencia \'\' (apóstrofo duplicado) → \' (ej. d\'\'eda, presentaci\'\'f3n, peque\'\'f1os).
         while (s.Contains("\\'\\'", StringComparison.Ordinal))
             s = s.Replace("\\'\\'", "\\'", StringComparison.Ordinal);
-        // Unicode ú mal escrito: \'u00fa o \'u00fa, → \'fa (formato correcto del ejemplo BIEN)
+        // 3) Comilla/apóstrofo extra después de \'XX (ej. decoraci\'f3'n). Esto rompe el parser RTF.
+        s = System.Text.RegularExpressions.Regex.Replace(
+            s,
+            @"(\\'[0-9a-fA-F]{2})'",
+            "$1",
+            System.Text.RegularExpressions.RegexOptions.None);
+        // 4) ñ mal guardada como \~n (ej. Dise~nado) → \'f1 (ñ en RTF).
+        s = s.Replace("\\~n", "\\'f1", StringComparison.Ordinal);
+        // 5) Unicode ú mal escrito: \'u00fa o \'u00fa, → \'fa (latin-1 ú). El patrón original no es RTF válido.
         s = s.Replace("\\'u00fa,", "\\'fa", StringComparison.Ordinal);
         s = s.Replace("\\'u00fa", "\\'fa", StringComparison.Ordinal);
-        // í en "probióticos": \'io → \'edo
-        s = s.Replace("\\'io", "\\'edo", StringComparison.Ordinal);
-        // è → é (modelo suele confundir)
-        s = s.Replace("\\'e8", "\\'e9", StringComparison.Ordinal);
-        // \'o inválido (ó mal escrito) → \'f3
-        s = s.Replace("\\'o", "\\'f3", StringComparison.Ordinal);
-        // práctica: \'a! → \'e1 (á)
-        s = s.Replace("\\'a!", "\\'e1", StringComparison.Ordinal);
-        // Restos de entidad "eacute": \'eacutelico → ético, \'eacutica → ética (estética, etc.)
-        s = s.Replace("\\'eacutelico", "\\'e9tico", StringComparison.Ordinal);
-        s = s.Replace("\\'eacutelica", "\\'e9tica", StringComparison.Ordinal);
-        s = s.Replace("\\'eacutica", "\\'e9tica", StringComparison.Ordinal);
-        // \d1 (subscript) usado por error en medio de palabra → d
+        // 6) \d o \d1 incrustados en palabras (ej. m\'f3\delo). \d no es una secuencia RTF válida aquí y rompe el RichTextBox.
         s = s.Replace("\\d1", "d", StringComparison.Ordinal);
-        // ú: \'fa) (paréntesis pegado) → \'fa
-        s = s.Replace("\\'fa)", "\\'fa", StringComparison.Ordinal);
-        // ó: \'f; (punto y coma en vez de 3) → \'f3 (ej. "módulo" → "m;dulo")
-        s = s.Replace("\\'f;", "\\'f3", StringComparison.Ordinal);
-        // Espacio erróneo tras secuencia RTF (ej. "autom\'f3 viles" → "autom\'f3viles", "clim\'a ticas" → á)
-        s = s.Replace("\\'f3 ", "\\'f3", StringComparison.Ordinal);
-        s = s.Replace("\\'e1 ", "\\'e1", StringComparison.Ordinal);
-        s = s.Replace("\\'e9 ", "\\'e9", StringComparison.Ordinal);
-        s = s.Replace("\\'fa ", "\\'fa", StringComparison.Ordinal);
-        s = s.Replace("\\'ed ", "\\'ed", StringComparison.Ordinal);
-        s = s.Replace("\\'f1 ", "\\'f1", StringComparison.Ordinal);
-        // á mal guardado como \'a + espacio (solo un hex) → \'e1
-        s = s.Replace("\\'a ", "\\'e1", StringComparison.Ordinal);
-        // á mal guardado como \'a1 (0xA1 = ¡ en Latin-1; en descripciones suele ser á) → \'e1
-        s = s.Replace("\\'a1", "\\'e1", StringComparison.Ordinal);
-        // á mal: \'a + letra (ej. neum\'altico, clim\'aticas) → \'e1 + letra. En RTF \' exige 2 hex; \'a+letra es inválido.
-        s = System.Text.RegularExpressions.Regex.Replace(s, @"\\'a([a-zA-Z])", "\\'e1$1", System.Text.RegularExpressions.RegexOptions.None);
-        // í mal: \'ia (ej. d\'ia = día) → \'eda (í en RTF = \'ed, luego 'a')
-        s = s.Replace("\\'ia", "\\'eda", StringComparison.Ordinal);
-        // Entidad HTML "acute;" pegada tras \'XX (ej. m\'f3acute;dulo → m\'f3dulo)
-        s = System.Text.RegularExpressions.Regex.Replace(s, @"(\\'[0-9a-fA-F]{2})acute;", "$1", System.Text.RegularExpressions.RegexOptions.None);
+        s = System.Text.RegularExpressions.Regex.Replace(
+            s,
+            @"\\d([a-zA-Z])",
+            "d$1",
+            System.Text.RegularExpressions.RegexOptions.None);
+        // 7) Secuencias \'vocal sin hex (\'a, \'e, \'i, \'o, \'u) que NO van seguidas de dos dígitos hex:
+        //    el modelo a veces escribe \'o n, \'i a, etc. Eso no es RTF válido y rompe el RichTextBox.
+        //    Las mapeamos a sus códigos Latin-1 correctos.
+        s = System.Text.RegularExpressions.Regex.Replace(
+            s,
+            @"\\'a(?![0-9a-fA-F]{2})",
+            "\\'e1",
+            System.Text.RegularExpressions.RegexOptions.None);
+        s = System.Text.RegularExpressions.Regex.Replace(
+            s,
+            @"\\'e(?![0-9a-fA-F]{2})",
+            "\\'e9",
+            System.Text.RegularExpressions.RegexOptions.None);
+        s = System.Text.RegularExpressions.Regex.Replace(
+            s,
+            @"\\'i(?![0-9a-fA-F]{2})",
+            "\\'ed",
+            System.Text.RegularExpressions.RegexOptions.None);
+        s = System.Text.RegularExpressions.Regex.Replace(
+            s,
+            @"\\'o(?![0-9a-fA-F]{2})",
+            "\\'f3",
+            System.Text.RegularExpressions.RegexOptions.None);
+        s = System.Text.RegularExpressions.Regex.Replace(
+            s,
+            @"\\'u(?![0-9a-fA-F]{2})",
+            "\\'fa",
+            System.Text.RegularExpressions.RegexOptions.None);
+
+        // Caso real visto: "\'e91reas" (áreas) → "\'e1reas".
+        // El modelo mezcló \'e9 (é) con un "1" suelto. Convertimos al código correcto para á.
+        s = s.Replace("\\'e91reas", "\\'e1reas", StringComparison.Ordinal);
+        // Variante general: est\'e91 dise\'f1ado, contempor\'e91neo, tr\'e91nsito → est\'e1..., contempor\'e1neo, tr\'e1nsito.
+        s = System.Text.RegularExpressions.Regex.Replace(
+            s,
+            @"\\'e91([A-Za-zñÑ])",
+            "\\'e1$1",
+            System.Text.RegularExpressions.RegexOptions.None);
+        // Dígitos pegados inmediatamente después de una secuencia \'xx (ej. despu\'e99s → despu\'e9s).
+        // El usuario no quiere números en observaciones, y en RTF correcto no debería haber dígitos justo detrás de \'xx.
+        s = System.Text.RegularExpressions.Regex.Replace(
+            s,
+            @"(\\'[0-9a-fA-F]{2})\d+",
+            "$1",
+            System.Text.RegularExpressions.RegexOptions.None);
+
+        // 8) Espacio ilegal entre la secuencia \'xx y la letra siguiente en medio de palabra:
+        //    ejemplos: "decoraci\'f3 n", "clim\'e1 ticas". El espacio rompe la palabra y en vista previa se ve "decoració n".
+        //    Para vocales y ñ, si hay un espacio seguido de letra, lo colapsamos.
+        s = System.Text.RegularExpressions.Regex.Replace(
+            s,
+            @"(\\'(?:e1|e9|ed|f3|fa|f1|fc))\s+([A-Za-zñÑ])",
+            "$1$2",
+            System.Text.RegularExpressions.RegexOptions.None);
+
+        // 9) Caso muy frecuente: el modelo escribe mal "Características" como "Caracter\'e9dsticas" (é + d...).
+        //    Lo normalizamos a la forma correcta "Caracter\'edsticas" (í en RTF).
+        s = s.Replace("Caracter\\'e9dsticas", "Caracter\\'edsticas", StringComparison.Ordinal);
+        s = s.Replace("caracter\\'e9dsticas", "caracter\\'edsticas", StringComparison.Ordinal);
+
+        // 8) Restos de entidades HTML "acute" pegadas a \'XX (ej. m\'f3acute;dulo, ergon\'f3acutemico).
+        s = System.Text.RegularExpressions.Regex.Replace(
+            s,
+            @"(\\'[0-9a-fA-F]{2})acute;?",
+            "$1",
+            System.Text.RegularExpressions.RegexOptions.None);
+        s = System.Text.RegularExpressions.Regex.Replace(
+            s,
+            @"(\\'[0-9a-fA-F]{2})acut([a-zA-Z])",
+            "$1$2",
+            System.Text.RegularExpressions.RegexOptions.None);
+        // 9) Acento combinatorio Unicode \u769? (a veces devuelto por modelos). El RichTextBox del sistema viejo no lo entiende.
+        s = System.Text.RegularExpressions.Regex.Replace(
+            s,
+            @"(\\'[0-9a-fA-F]{2})\\u769\?",
+            "$1",
+            System.Text.RegularExpressions.RegexOptions.None);
+        s = System.Text.RegularExpressions.Regex.Replace(
+            s,
+            @"\\u769\?",
+            "",
+            System.Text.RegularExpressions.RegexOptions.None);
         return s;
     }
 
@@ -756,7 +965,9 @@ public partial class AsignarImagenes
         if (rtf.StartsWith("{\\rtf", StringComparison.OrdinalIgnoreCase))
         {
             rtf = RepairRtfEscapesFromModel(rtf);
-            return NormalizeRtfForApi(rtf);
+            rtf = NormalizeRtfForApi(rtf);
+            // Usar exactamente el mismo formato que espera la API / RichTextBox (incluye quitar "d " inicial, \deff0, etc.)
+            return EnsureRtfMatchesApiExample(rtf);
         }
         // Texto plano: envolver en RTF mínimo para que la vista previa y el RichTextBox lo muestren y almacenen correctamente
         var escaped = new StringBuilder();
@@ -770,7 +981,8 @@ public partial class AsignarImagenes
             else escaped.Append(c);
         }
         var minimalRtf = "{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 Calibri;}}\\f0\\par\n" + escaped + "\\par }";
-        return NormalizeRtfForApi(minimalRtf);
+        minimalRtf = NormalizeRtfForApi(minimalRtf);
+        return EnsureRtfMatchesApiExample(minimalRtf);
     }
 
     /// <summary>
@@ -786,12 +998,129 @@ public partial class AsignarImagenes
         s = s.Replace("\\deff0{\\fonttbl{\\f0 Calibri;}}\\f0\\par\n", "", StringComparison.Ordinal);
         // Formato del ejemplo BIEN: \ansi\b sin espacio entre ambos (en MAL aparece "\\ansi \\b")
         s = s.Replace("\\ansi \\b", "\\ansi\\b", StringComparison.Ordinal);
+        // \ansi \n (espacio + salto) → \ansi\par\n como en el ejemplo BIEN
+        s = s.Replace("\\ansi \n", "\\ansi\\par\n", StringComparison.Ordinal);
+        // Salto de línea suelto (sin \par delante) → \par\n para consistencia con el ejemplo BIEN (no tocar el \n que ya va tras \par)
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"(?<!\\par)\n", "\\par\n", System.Text.RegularExpressions.RegexOptions.None);
         // Ejemplo BIEN no tiene espacio tras \par\n; MAL sí ("\\par\n Este"). Quitar espacio tras \par\n.
         while (s.Contains("\\par\n ", StringComparison.Ordinal))
             s = s.Replace("\\par\n ", "\\par\n", StringComparison.Ordinal);
+        // Quitar espacio antes de \par (ej. " \\par" → "\par")
+        while (s.Contains(" \\par", StringComparison.Ordinal))
+            s = s.Replace(" \\par", "\\par", StringComparison.Ordinal);
+        // "d " sobrante justo después de uno o más \par (ej. "\par\n\par\nd Este producto...").
+        // El patrón "(\\par(\r?\n)) + d " se reemplaza por los mismos \par + saltos pero SIN la "d ".
+        s = System.Text.RegularExpressions.Regex.Replace(
+            s,
+            @"(\\par(?:\r?\n))+d ",
+            "$1",
+            System.Text.RegularExpressions.RegexOptions.None);
         // Asegurar \par seguido de \n como en el ejemplo (evita problemas de parsing)
         s = System.Text.RegularExpressions.Regex.Replace(s, @"\\par(?!\n)", "\\par\n", System.Text.RegularExpressions.RegexOptions.None);
         return s;
+    }
+
+    /// <summary>
+    /// Convierte TEXTO PLANO (en español) devuelto por OpenAI en un RTF canónico para observaciones,
+    /// con el mismo estilo que las observaciones creadas desde el RepositorioDRR:
+    /// - Cabecera mínima {\rtf1\ansi
+    /// - Párrafos con \par
+    /// - Encabezados en negrita "Características:" y "Uso:".
+    /// - Viñetas como líneas que empiezan con "- ".
+    /// </summary>
+    private static string PlainTextObservacionesToRtf(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return "{\\rtf1\\ansi\\par\n}";
+
+        var sb = new StringBuilder();
+        sb.Append("{\\rtf1\\ansi\\par\n");
+
+        var normalized = text.Replace("\r\n", "\n").Replace("\r", "\n");
+        // Quitar CUALQUIER número del texto de observación (el modelo a veces mete "esté1", "3 opciones", etc.
+        // y el usuario no quiere ver dígitos en las observaciones generadas).
+        normalized = System.Text.RegularExpressions.Regex.Replace(
+            normalized,
+            @"\d+",
+            "",
+            System.Text.RegularExpressions.RegexOptions.None);
+        var lines = normalized.Split('\n');
+
+        foreach (var rawLine in lines)
+        {
+            var line = rawLine.TrimEnd();
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                sb.Append("\\par\n");
+                continue;
+            }
+
+            var trimmed = line.Trim();
+            if (trimmed.Equals("Características:", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.Equals("Caracteristicas:", StringComparison.OrdinalIgnoreCase))
+            {
+                sb.Append("\\b Caracter\\'edsticas:\\b0\\par\n");
+                continue;
+            }
+
+            if (trimmed.Equals("Uso:", StringComparison.OrdinalIgnoreCase))
+            {
+                sb.Append("\\b Uso:\\b0\\par\n");
+                continue;
+            }
+
+            // Viñetas: línea que empieza con "- "
+            if (trimmed.StartsWith("- ", StringComparison.Ordinal))
+            {
+                AppendPlainTextAsRtf(sb, trimmed);
+                sb.Append("\\par\n");
+                continue;
+            }
+
+            // Párrafo normal
+            AppendPlainTextAsRtf(sb, trimmed);
+            sb.Append("\\par\n");
+        }
+
+        sb.Append("}");
+        // Pasar por el mismo pipeline de normalización / compatibilidad que el resto del sistema.
+        var rtf = sb.ToString();
+        rtf = RepairRtfEscapesFromModel(rtf);
+        rtf = NormalizeRtfForApi(rtf);
+        rtf = EnsureRtfMatchesApiExample(rtf);
+        return rtf;
+    }
+
+    /// <summary>
+    /// Escapa una línea de texto plano a RTF (backslash, llaves, saltos de línea y caracteres no ASCII -> \'xx o \uNNN?).
+    /// Lógica equivalente a HtmlToRtfConverter.AppendCharToRtf pero aplicada a texto plano.
+    /// </summary>
+    private static void AppendPlainTextAsRtf(StringBuilder sb, string line)
+    {
+        foreach (var c in line)
+        {
+            if (c == '\\') { sb.Append("\\\\"); continue; }
+            if (c == '{') { sb.Append("\\{"); continue; }
+            if (c == '}') { sb.Append("\\}"); continue; }
+            if (c == '\n' || c == '\r') { sb.Append("\\par "); continue; }
+
+            if (c >= 0x20 && c <= 0x7E)
+            {
+                sb.Append(c);
+                continue;
+            }
+
+            var code = (int)c;
+            if (code >= 0x80 && code <= 0xFF)
+            {
+                sb.Append("\\'").Append(code.ToString("x2"));
+                continue;
+            }
+            if (code > 0 && code <= 0xFFFF)
+                sb.Append("\\u").Append(code).Append('?');
+            else
+                sb.Append('?');
+        }
     }
 
     /// <summary>
@@ -888,7 +1217,12 @@ public partial class AsignarImagenes
             if (_generandoObservaciones) return;
             if (_observacionesSkipNextSyncFromPreview) { _observacionesSkipNextSyncFromPreview = false; return; }
             if (html != null)
+            {
                 _observacionesRtf = HtmlToRtfConverter.ToRtf(html);
+                // Marcar observación como pendiente de guardar en el ítem para habilitar botones de guardar.
+                var item = _productoObservaciones != null ? _items.FirstOrDefault(x => x.ProductoID == _productoObservaciones.ProductoID) : null;
+                if (item != null) { item.Observaciones = _observacionesRtf; item.ObservacionesPendienteGuardar = true; }
+            }
             await InvokeAsync(StateHasChanged);
         }
         catch (Exception)
@@ -990,19 +1324,16 @@ Responde ÚNICAMENTE con texto plano en español. Usa acentos y ñ correctamente
     }
 
     /// <summary>
-    /// Genera observaciones en RTF usando solo OpenAI (Chat Completions).
-    /// Misma lógica de prompt RTF que SerpAPI+Gemini pero sin búsqueda web; el modelo genera a partir de descripción y código de barra.
-    /// SOLID: la construcción del prompt y el uso del resultado se mantienen en esta página; el servicio solo genera texto.
+    /// Abre la modal de opciones (abreviar corta, autocompletar larga, editar prompts) antes de generar con OpenAI.
     /// </summary>
-    private async Task GenerarObservacionesConOpenAIAsync()
+    private void GenerarObservacionesConOpenAIAsync()
     {
         if (_productoObservaciones == null) return;
-        var productId = _productoObservaciones.ProductoID;
-        try { await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarObservacionesOpenAI INICIO", JsonSerializer.Serialize(new { productId })); } catch { }
         var apiKey = _openAiKey?.Trim();
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             _errorObservaciones = "Ingresá la API key de OpenAI en «Configurar API keys» (modal al entrar si falta).";
+            StateHasChanged();
             return;
         }
         var desc = _productoObservaciones.DescripcionLarga ?? "";
@@ -1010,62 +1341,208 @@ Responde ÚNICAMENTE con texto plano en español. Usa acentos y ñ correctamente
         if (string.IsNullOrWhiteSpace(desc) && string.IsNullOrWhiteSpace(barra))
         {
             _errorObservaciones = "El producto debe tener descripción o código de barras.";
+            StateHasChanged();
             return;
         }
         _errorObservaciones = null;
+        AbrirModalOpcionesGeneracion(esMasivo: false);
+    }
+
+    /// <summary>
+    /// Construye el prompt por defecto para que OpenAI genere observaciones en TEXTO PLANO (no RTF),
+    /// con buena ortografía en español. El nombre y el código de barras se usan solo como contexto,
+    /// pero el modelo tiene prohibido devolverlos en el texto generado.
+    /// </summary>
+    private static string BuildPromptObservacionesRtfOpenAI(string descripcion, string codigoBarra)
+    {
+        return $@"Eres un asistente que escribe observaciones de productos para un catálogo. Responde ÚNICAMENTE con TEXTO PLANO en español (sin RTF, sin markdown, sin ```), listo para que otro sistema lo convierta a RTF.
+
+Contexto (SOLO para que lo tengas en cuenta, NO para repetirlo en la respuesta):
+- Nombre del producto: {descripcion}
+- Código de barras: {codigoBarra}
+
+Reglas de contenido (MUY IMPORTANTE):
+- NO escribas el nombre/título específico del producto en ningún lugar del texto.
+- NO escribas el código de barras ni números que parezcan un código de barras.
+- No escribas listados de precios ni porcentajes.
+- Solo escribe una descripción genérica del tipo de producto, sus características y su uso.
+
+Formato del TEXTO PLANO que debes devolver:
+1) No uses RTF ni markdown. Escribe texto normal con saltos de línea.
+2) Usa exactamente la palabra ""Características:"" como encabezado de la sección de características, en una línea separada.
+3) Usa exactamente la palabra ""Uso:"" como encabezado de la sección de uso, en una línea separada.
+4) Debajo de ""Características:"" escribe viñetas con el formato ""- texto de la característica"" (un guion, un espacio y el texto).
+5) Debajo de ""Uso:"" escribe uno o dos párrafos explicando el uso recomendado.
+
+Estructura sugerida del TEXTO:
+- Párrafo inicial describiendo de forma genérica para qué sirve el producto.
+- Encabezado ""Características:"" en una línea.
+- Viñetas con ""- "" para cada característica.
+- Encabezado ""Uso:"" en una línea.
+- Uno o dos párrafos explicando recomendaciones de uso en forma genérica.
+
+Verificación antes de responder (MUY IMPORTANTE, HAZLO SIEMPRE):
+- Lee mentalmente TODO el texto ANTES de devolverlo y aplícale una revisión ortográfica estricta en español.
+- Asegúrate de que:
+  - Todas las palabras estén completas y separadas por espacios (nunca pegues palabras como ""reproduccioncontinua"" o ""diseñop""; conviértelas en frases correctas como ""reproducción continua"" o ""diseño que permite..."").
+  - No haya sílabas sueltas ni cortes raros (""mfavorita"", ""comp-to"", ""est3tico"", ""clá1sico"", etc.). Corrige cualquier palabra rota por su versión correcta en español.
+  - Los acentos y la ñ estén correctamente escritos en texto normal: á, é, í, ó, ú, ñ.
+  - Las oraciones tengan sentido, usen puntuación básica y no repitan constantemente las mismas frases.
+  - No haya faltas de ortografía evidentes en español: corrige palabras mal escritas como ""Caracteristicas"", ""caracteristcias"", ""deoración"", ""estetico"", ""clasico"", etc., y devuelve siempre la forma correcta ""Características"", ""características"", ""decoración"", ""estético"", ""clásico"", etc.
+- Si detectas una palabra rara, sin sentido, con números mezclados o pegada, corrígela por una forma clara y natural en español ANTES de devolver la respuesta.
+
+Devuelve solo el TEXTO PLANO cuando estés seguro de que la respuesta es correcta, natural en español, SIN errores ortográficos y completa.
+
+En ningún momento escribas el nombre real del producto ni el código de barras.";
+    }
+
+    /// <summary>Construye un único prompt para que OpenAI devuelva observación + opcional descripción corta + opcional descripción larga, con delimitadores.</summary>
+    private string BuildPromptObservacionesYDescripcionesOpenAI(string descripcion, string codigoBarra, bool incluirCorta, bool incluirLarga)
+    {
+        var sb = new StringBuilder();
+        sb.Append(BuildPromptObservacionesRtfOpenAI(descripcion, codigoBarra));
+        sb.Append("\n\n---\n\nIMPORTANTE - Formato de respuesta:\n");
+        sb.Append("1) Responde PRIMERO con el texto de la OBSERVACIÓN en texto plano (la misma estructura: Características:, Uso:, viñetas). No uses delimitadores antes ni después de la observación.\n");
+        if (incluirCorta)
+        {
+            sb.Append("2) Después de la observación, escribe exactamente en una línea: ---DESC_CORTA---\n");
+            sb.Append("3) En la siguiente línea escribe ÚNICAMENTE la descripción corta abreviada (máx. 30 caracteres).\n");
+            sb.Append("Instrucciones para la descripción corta: ");
+            sb.Append(_promptAbreviarCorta?.Trim() ?? GetPromptAbreviarCortaDefault());
+            sb.Append("\n");
+        }
+        if (incluirLarga)
+        {
+            sb.Append(incluirCorta ? "4" : "2");
+            sb.Append(") Luego escribe exactamente en una línea: ---DESC_LARGA---\n");
+            sb.Append(incluirCorta ? "5" : "3");
+            sb.Append(") En la(s) siguiente(s) línea(s) escribe ÚNICAMENTE la descripción larga.\n");
+            sb.Append("Instrucciones para la descripción larga: ");
+            sb.Append(_promptDescripcionLarga?.Trim() ?? GetPromptDescripcionLargaDefault());
+            sb.Append("\n");
+        }
+        sb.Append("\nResponde solo con el contenido solicitado, usando los delimitadores exactos cuando corresponda.");
+        return sb.ToString();
+    }
+
+    /// <summary>Parsea la respuesta de OpenAI que puede contener observación y opcionalmente ---DESC_CORTA--- y ---DESC_LARGA---.</summary>
+    private static void ParseObservacionesYDescripcionesResponse(string raw, bool pedirCorta, bool pedirLarga,
+        out string observacionPlano, out string? descripcionCorta, out string? descripcionLarga)
+    {
+        observacionPlano = "";
+        descripcionCorta = null;
+        descripcionLarga = null;
+        if (string.IsNullOrWhiteSpace(raw)) return;
+
+        const string delimCorta = "---DESC_CORTA---";
+        const string delimLarga = "---DESC_LARGA---";
+        var text = raw.Trim();
+
+        if (pedirCorta && text.Contains(delimCorta, StringComparison.OrdinalIgnoreCase))
+        {
+            var idx = text.IndexOf(delimCorta, StringComparison.OrdinalIgnoreCase);
+            observacionPlano = text.Substring(0, idx).Trim();
+            var afterCorta = text.Substring(idx + delimCorta.Length).Trim();
+            if (pedirLarga && afterCorta.Contains(delimLarga, StringComparison.OrdinalIgnoreCase))
+            {
+                var idxL = afterCorta.IndexOf(delimLarga, StringComparison.OrdinalIgnoreCase);
+                descripcionCorta = afterCorta.Substring(0, idxL).Trim();
+                descripcionLarga = afterCorta.Substring(idxL + delimLarga.Length).Trim();
+            }
+            else
+            {
+                descripcionCorta = afterCorta;
+            }
+        }
+        else if (pedirLarga && text.Contains(delimLarga, StringComparison.OrdinalIgnoreCase))
+        {
+            var idx = text.IndexOf(delimLarga, StringComparison.OrdinalIgnoreCase);
+            observacionPlano = text.Substring(0, idx).Trim();
+            descripcionLarga = text.Substring(idx + delimLarga.Length).Trim();
+        }
+        else
+        {
+            observacionPlano = text;
+        }
+    }
+
+    /// <summary>Se ejecuta al hacer clic en "Generar" en la modal de opciones. Un producto: actualiza modal; masivo: recorre selección.</summary>
+    private async Task EjecutarGeneracionOpenAIConfirmarAsync()
+    {
+        var apiKey = _openAiKey?.Trim();
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            _errorObservaciones = "Falta la API key de OpenAI.";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        if (_opcionesGeneracionEsMasivo)
+        {
+            CerrarModalOpcionesGeneracion();
+            await GenerarObservacionesMasivoOpenAIConLoopAsync();
+            return;
+        }
+
+        // Un solo producto
+        if (_productoObservaciones == null) { CerrarModalOpcionesGeneracion(); return; }
+        var desc = _productoObservaciones.DescripcionLarga ?? "";
+        var barra = _productoObservaciones.CodigoBarra ?? "";
+        if (string.IsNullOrWhiteSpace(desc) && string.IsNullOrWhiteSpace(barra))
+        {
+            _errorObservaciones = "El producto debe tener descripción o código de barras.";
+            CerrarModalOpcionesGeneracion();
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
         _generandoObservaciones = true;
+        CerrarModalOpcionesGeneracion();
         await InvokeAsync(StateHasChanged);
+
         try
         {
-            if (_productoObservaciones == null) { _generandoObservaciones = false; await InvokeAsync(StateHasChanged); return; }
-            var prompt = string.IsNullOrWhiteSpace(_observacionesPromptOpenAI?.Trim()) ? BuildPromptObservacionesRtfOpenAI(desc, barra) : _observacionesPromptOpenAI!.Trim();
+            var basePrompt = BuildPromptObservacionesYDescripcionesOpenAI(desc, barra, _opcionesAbreviarCorta, _opcionesAutocompletarLarga);
+            var extra = _observacionesPromptExtra?.Trim();
+            var prompt = string.IsNullOrWhiteSpace(extra)
+                ? basePrompt
+                : $"{basePrompt}\n\n---\n\nInstrucciones adicionales del usuario:\n{extra}";
             var result = await OpenAITextService.GenerateTextAsync(prompt, apiKey);
             if (_productoObservaciones == null) { _generandoObservaciones = false; await InvokeAsync(StateHasChanged); return; }
             if (result != null && result.Success && !string.IsNullOrWhiteSpace(result.Text))
             {
-                // Garantizar RTF válido para vista previa y para guardar en API (RichTextBox en desktop).
-                _observacionesRtf = EnsureValidRtfFromOpenAI(result.Text);
+                ParseObservacionesYDescripcionesResponse(result.Text, _opcionesAbreviarCorta, _opcionesAutocompletarLarga,
+                    out var observacionPlano, out var corta, out var larga);
+                _observacionesRtf = PlainTextObservacionesToRtf(observacionPlano);
+                _descripcionCortaGenerada = corta;
+                _descripcionLargaGenerada = larga;
+                // Dejar en memoria en el ítem para que al cerrar y reabrir la modal se vea lo generado y quede pendiente de guardar.
+                if (_productoObservaciones != null)
+                {
+                    var it = _items.FirstOrDefault(x => x.ProductoID == _productoObservaciones.ProductoID);
+                    if (it != null)
+                    {
+                        it.Observaciones = _observacionesRtf;
+                        it.ObservacionesPendienteGuardar = true;
+                        if (corta != null) { it.DescripcionCorta = corta; it.DescripcionCortaPendienteGuardar = true; }
+                        if (larga != null) { it.DescripcionLarga = larga; it.DescripcionLargaPendienteGuardar = true; }
+                    }
+                }
                 _observacionesPreviewNeedsSyncFromRtf = true;
                 _observacionesSkipNextSyncFromPreview = true;
-                try { await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarObservacionesOpenAI OK", JsonSerializer.Serialize(new { productId, rtfLen = _observacionesRtf.Length })); } catch { }
             }
             else
-            {
                 _errorObservaciones = result?.ErrorMessage ?? "OpenAI no devolvió texto.";
-                try { await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarObservacionesOpenAI sin texto", JsonSerializer.Serialize(new { productId, error = _errorObservaciones })); } catch { }
-            }
         }
         catch (Exception ex)
         {
             _errorObservaciones = ex.Message;
-            try { await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarObservacionesOpenAI EXCEPCIÓN", JsonSerializer.Serialize(new { productId, mensaje = ex.Message })); } catch { }
         }
         finally
         {
             _generandoObservaciones = false;
             await InvokeAsync(StateHasChanged);
         }
-    }
-
-    /// <summary>Construye el prompt por defecto para que OpenAI genere observaciones en RTF con el formato exacto que almacena la API.</summary>
-    private static string BuildPromptObservacionesRtfOpenAI(string descripcion, string codigoBarra)
-    {
-        return $@"Eres un asistente que escribe observaciones de productos en formato RTF para un catálogo. Responde ÚNICAMENTE con el bloque RTF, sin texto antes ni después.
-
-Producto: {descripcion}
-Código de barras: {codigoBarra}
-
-Formato obligatorio:
-1) Empieza con {{\rtf1\ansi y termina con }}. No uses markdown ni ```.
-2) Título del producto en negrita: \b NOMBRE DEL PRODUCTO\b0\par
-3) Párrafos separados con \par
-4) Acentos y ñ: usa SOLO la secuencia barra invertida + apóstrofo + dos letras hex en minúscula. Sin espacios ni entidades HTML.
-   \'e1=á  \'e9=é  \'ed=í  \'f3=ó  \'fa=ú  \'f1=ñ  \'fc=ü
-   Ejemplos correctos: soluci\'f3n, d\'eda, Caracter\'edsticas, C\'f3digo, \'fanica, acompa\'f1ado.
-5) Subtítulos en negrita: \b Caracter\'edsticas:\b0\par y \b Uso:\b0\par
-6) Cierre con: C\'f3digo de barras: [número]
-
-Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negrita con viñetas, Uso en negrita con texto, y al final C\'f3digo de barras: [código]. Todo en una sola cadena RTF.";
     }
 
     private async Task MostrarToastAsync(string mensaje, bool esError)
@@ -1176,7 +1653,7 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
                 }));
             }
             catch { }
-            CerrarModalObservaciones();
+            // No cerrar la modal: el usuario puede seguir editando descripciones o guardar todo junto.
         }
         catch (Exception ex)
         {
@@ -1187,6 +1664,104 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
                 await JS.InvokeVoidAsync("__logAsignarImagenes", "PATCH Observaciones EXCEPCIÓN", JsonSerializer.Serialize(new { request, ex = ex.Message }));
             }
             catch { }
+        }
+        finally
+        {
+            _guardandoObservaciones = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>
+    /// Guarda solo descripción corta y/o larga.
+    /// IMPORTANTE: el PATCH de descripciones aún NO está disponible en la API,
+    /// por lo que por ahora solo actualizamos el estado en memoria y mostramos un aviso.
+    /// Cuando el backend soporte descripcionCorta/descripcionLarga, se puede reactivar el PATCH comentado más abajo.
+    /// </summary>
+    private async Task GuardarDescripcionesEnProductoAsync()
+    {
+        if (_productoObservaciones == null || string.IsNullOrWhiteSpace(_token)) return;
+        var tieneCorta = !string.IsNullOrWhiteSpace(_descripcionCortaGenerada);
+        var tieneLarga = !string.IsNullOrWhiteSpace(_descripcionLargaGenerada);
+        if (!tieneCorta && !tieneLarga) return;
+
+        var item = _items.FirstOrDefault(x => x.ProductoID == _productoObservaciones.ProductoID);
+        if (item != null)
+        {
+            if (tieneCorta) { item.DescripcionCorta = _descripcionCortaGenerada; item.DescripcionCortaPendienteGuardar = false; }
+            if (tieneLarga) { item.DescripcionLarga = _descripcionLargaGenerada; item.DescripcionLargaPendienteGuardar = false; }
+        }
+
+        // Por ahora NO llamamos a PATCH para descripciones porque el contrato de la API todavía no las soporta.
+        await MostrarToastAsync("Descripciones actualizadas en memoria.", false);
+    }
+
+    /// <summary>
+    /// Guarda observación (PATCH a la API) y descripciones (en memoria; PATCH aún no disponible).
+    /// No cierra la modal. Funciona igual en grid y en lista.
+    /// </summary>
+    private async Task GuardarObservacionesYDescripcionesEnProductoAsync()
+    {
+        if (_productoObservaciones == null || string.IsNullOrWhiteSpace(_token)) return;
+
+        var item = _items.FirstOrDefault(x => x.ProductoID == _productoObservaciones.ProductoID);
+        var guardarObservacion = !string.IsNullOrWhiteSpace(_observacionesRtf);
+        var guardarDescripciones = !string.IsNullOrWhiteSpace(_descripcionCortaGenerada) || !string.IsNullOrWhiteSpace(_descripcionLargaGenerada);
+
+        if (!guardarObservacion && !guardarDescripciones) return;
+
+        _guardandoObservaciones = true;
+        _errorObservaciones = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            if (guardarObservacion)
+            {
+                var rtfAntes = _observacionesRtf;
+                var texto = EnsureRtfMatchesApiExample(NormalizeRtfForApi(RepairRtfEscapesFromModel(rtfAntes ?? "")));
+                if (item != null)
+                {
+                    item.Observaciones = texto;
+                    item.ObservacionesPendienteGuardar = false;
+                }
+                var request = new ProductoPatchRequest
+                {
+                    CodigoID = _productoObservaciones.ProductoID,
+                    ImagenEspecified = false,
+                    Imagen = "null",
+                    ObservacionEspecified = true,
+                    Observacion = texto
+                };
+                var result = await ProductoPatch.PatchProductoAsync(request, _token);
+                if (!result.Success)
+                {
+                    _errorObservaciones = "No se pudo guardar las observaciones en la API.";
+                    await MostrarToastAsync(_errorObservaciones, true);
+                    return;
+                }
+                await MostrarToastAsync("Observaciones guardadas correctamente.", false);
+            }
+
+            if (guardarDescripciones && item != null)
+            {
+                if (!string.IsNullOrWhiteSpace(_descripcionCortaGenerada))
+                {
+                    item.DescripcionCorta = _descripcionCortaGenerada;
+                    item.DescripcionCortaPendienteGuardar = false;
+                }
+                if (!string.IsNullOrWhiteSpace(_descripcionLargaGenerada))
+                {
+                    item.DescripcionLarga = _descripcionLargaGenerada;
+                    item.DescripcionLargaPendienteGuardar = false;
+                }
+                await MostrarToastAsync(guardarObservacion ? "Observaciones y descripciones actualizadas." : "Descripciones actualizadas en memoria.", false);
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorObservaciones = ex.Message;
+            await MostrarToastAsync("Error: " + ex.Message, true);
         }
         finally
         {
@@ -1330,8 +1905,8 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
 
         var barra = (p.CodigoBarra ?? "").Trim();
         var desc = (p.DescripcionLarga ?? "").Trim();
-        // Query corta para la API y para el textbox: barra + primeras palabras (ej. "7791337601024 YOGURISIMO"), no la descripción completa.
-        var queryInicialCorta = ImageSearchQueryHelper.ConstruirQueryInicialCorta(barra, desc);
+        // Query completa para la API DRR: siempre código de barra + descripción completa (no se acorta).
+        var queryInicial = ImageSearchQueryHelper.ConstruirQuery(barra, desc);
 
         try
         {
@@ -1341,15 +1916,15 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
                     productoID = p.ProductoID,
                     codigoBarra = string.IsNullOrWhiteSpace(barra) ? "(vacío)" : barra,
                     descripcionLongitud = desc.Length,
-                    queryEnviadaALaApi = queryInicialCorta,
-                    mensaje = "Al abrir el modal se envía a la API exactamente esta query (barra + primeras palabras)."
+                    queryEnviadaALaApi = queryInicial,
+                    mensaje = "Al abrir el modal se envía a la API código de barra + descripción completa (sin acortar)."
                 }));
         }
         catch { /* logging no crítico */ }
 
         _error = null;
-        // Textbox muestra y envía a la API esta query corta; el usuario puede editarla y "Buscar de nuevo" enviará lo que escriba.
-        var textoBusquedaInicial = queryInicialCorta;
+        // Textbox muestra y envía a la API la query completa (barra + desc); el usuario puede editarla y "Buscar de nuevo" enviará lo que escriba.
+        var textoBusquedaInicial = queryInicial;
         _busquedaWeb = new BusquedaWebState
         {
             ProductoID = p.ProductoID,
@@ -1379,16 +1954,55 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
 
         try
         {
-            // Primera llamada: exactamente la query corta que está en el textbox (ej. "7791337601024 YOGURISIMO").
+            // Primera llamada: código de barra + descripción completa. Si la API lanza (ej. status:"error") o devuelve vacío, reintentar una vez (la API DRR a veces falla a la primera).
             IReadOnlyList<string>? urls = null;
-            if (!string.IsNullOrWhiteSpace(queryInicialCorta))
+            if (!string.IsNullOrWhiteSpace(queryInicial))
             {
-                urls = await IntegrationImageSearch.SearchImageUrlsAsync(queryInicialCorta, _token!);
+                try
+                {
+                    urls = await IntegrationImageSearch.SearchImageUrlsAsync(queryInicial, _token!);
+                }
+                catch
+                {
+                    urls = null;
+                }
+                if ((urls == null || urls.Count == 0) && _busquedaWeb != null)
+                {
+                    await Task.Delay(600);
+                    try
+                    {
+                        if (_busquedaWeb != null)
+                            urls = await IntegrationImageSearch.SearchImageUrlsAsync(queryInicial, _token!);
+                    }
+                    catch
+                    {
+                        urls ??= Array.Empty<string>();
+                    }
+                }
             }
-            // Si no hay resultados con la query corta, reintentar con descripción completa y luego abreviada.
             if ((urls == null || urls.Count == 0) && _busquedaWeb != null)
             {
-                urls = await BuscarUrlsIntegracionPorProductoAsync(barra, desc);
+                try
+                {
+                    urls = await BuscarUrlsIntegracionPorProductoAsync(barra, desc);
+                }
+                catch
+                {
+                    urls = null;
+                }
+                if ((urls == null || urls.Count == 0) && _busquedaWeb != null)
+                {
+                    await Task.Delay(600);
+                    try
+                    {
+                        if (_busquedaWeb != null)
+                            urls = await BuscarUrlsIntegracionPorProductoAsync(barra, desc);
+                    }
+                    catch
+                    {
+                        urls ??= Array.Empty<string>();
+                    }
+                }
             }
             if (_busquedaWeb != null)
             {
@@ -1453,16 +2067,28 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
 
         var tieneBarra = !string.IsNullOrWhiteSpace(barra);
 
-        // Primera llamada: siempre según regla (barra+desc o solo desc).
+        // Primera llamada: siempre según regla (barra+desc o solo desc). Si lanza (ej. status:"error") o vacío, reintentar una vez.
+        IReadOnlyList<string>? urls = null;
         try
         {
-            var urls = await IntegrationImageSearch.SearchImageUrlsAsync(query, _token!);
+            urls = await IntegrationImageSearch.SearchImageUrlsAsync(query, _token!);
             if (urls != null && urls.Count > 0)
                 return urls;
         }
         catch
         {
-            // La API puede devolver status "error" en body con HTTP 200; cae aquí.
+            urls = null;
+        }
+        await Task.Delay(600);
+        try
+        {
+            urls = await IntegrationImageSearch.SearchImageUrlsAsync(query, _token!);
+            if (urls != null && urls.Count > 0)
+                return urls;
+        }
+        catch
+        {
+            // Seguimos al fallback solo descripción.
         }
 
         // Fallback: si usamos barra+desc y no hubo resultados, probar solo descripción (la API a veces solo responde a desc).
@@ -1476,7 +2102,7 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
             catch { }
             try
             {
-                var urls = await IntegrationImageSearch.SearchImageUrlsAsync(desc.Trim(), _token!);
+                urls = await IntegrationImageSearch.SearchImageUrlsAsync(desc.Trim(), _token!);
                 if (urls != null && urls.Count > 0)
                     return urls;
             }
@@ -1501,9 +2127,21 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
         {
             if (string.IsNullOrWhiteSpace(q))
                 continue;
+            IReadOnlyList<string>? urls = null;
             try
             {
-                var urls = await IntegrationImageSearch.SearchImageUrlsAsync(q, _token!);
+                urls = await IntegrationImageSearch.SearchImageUrlsAsync(q, _token!);
+                if (urls != null && urls.Count > 0)
+                    return urls;
+            }
+            catch
+            {
+                urls = null;
+            }
+            await Task.Delay(600);
+            try
+            {
+                urls = await IntegrationImageSearch.SearchImageUrlsAsync(q, _token!);
                 if (urls != null && urls.Count > 0)
                     return urls;
             }
@@ -1637,6 +2275,7 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
 
     private void CerrarBusquedaWeb()
     {
+        _busquedaWebCancelacionRazon = "Se cerró el modal de búsqueda mientras se descargaba la imagen.";
         _busquedaWebCts?.Cancel();
         _busquedaWebCts?.Dispose();
         _busquedaWebCts = null;
@@ -1713,12 +2352,15 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
         if (_busquedaWeb.Descargando) return;
         if (!_busquedaWeb.EsParaProducto(productId)) return;
 
+        _busquedaWeb.Descargando = true;
+        _busquedaWeb.Error = null;
+        StateHasChanged();
+
+        _busquedaWebCancelacionRazon = "Se inició otra descarga (se eligió otra imagen o se volvió a guardar).";
         _busquedaWebCts?.Cancel();
         _busquedaWebCts?.Dispose();
         _busquedaWebCts = new CancellationTokenSource();
-
-        _busquedaWeb.Descargando = true;
-        _busquedaWeb.Error = null;
+        _busquedaWebCancelacionRazon = null;
         await InvokeAsync(StateHasChanged);
         try
         {
@@ -1787,7 +2429,35 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
         }
         catch (OperationCanceledException)
         {
-            _busquedaWeb.Error = "Descarga cancelada. Elegí otra imagen.";
+            bool fueNuestraCancelacion = _busquedaWebCts?.Token.IsCancellationRequested == true;
+            bool tuvoRazonExplicita = !string.IsNullOrWhiteSpace(_busquedaWebCancelacionRazon);
+            var razon = _busquedaWebCancelacionRazon
+                ?? (fueNuestraCancelacion
+                    ? "Motivo no registrado (posible cierre del modal o pestaña en segundo plano)."
+                    : "La descarga fue interrumpida por la red o el servidor (timeout, conexión cerrada o imagen no accesible). No fue una cancelación manual.");
+            var errorUsuario = (fueNuestraCancelacion || tuvoRazonExplicita)
+                ? "Descarga cancelada. Elegí otra imagen."
+                : "La descarga se interrumpió (timeout o servidor). Probá con otra imagen.";
+            var logDetail = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                evento = "Descarga cancelada",
+                razon,
+                productId,
+                imageUrl = imageUrl?.Length > 200 ? imageUrl.Substring(0, 200) + "…" : imageUrl,
+                timestamp = DateTime.UtcNow.ToString("o"),
+                mensaje = "Ver el campo 'razon' para el detalle."
+            }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            _busquedaWebCancelacionRazon = null;
+            if (_busquedaWeb != null)
+            {
+                _busquedaWeb.Error = errorUsuario;
+                _busquedaWeb.ErrorLogDetail = logDetail;
+            }
+            try
+            {
+                await JS.InvokeVoidAsync("__logAsignarImagenes", "DESCARGA_CANCELADA", logDetail);
+            }
+            catch { }
         }
         finally
         {
@@ -1802,15 +2472,27 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
     /// <summary>Cancela la descarga en curso para poder elegir otra imagen sin esperar.</summary>
     private void CancelarDescargaImagen()
     {
+        _busquedaWebCancelacionRazon = "El usuario hizo clic en «Cancelar» durante la descarga.";
         _busquedaWebCts?.Cancel();
     }
 
-    /// <summary>Al hacer clic en una miniatura de SerpAPI se selecciona y se abre la modal de vista en grande (Escape cierra esa modal y vuelve a la de resultados).</summary>
+    /// <summary>Un clic en una miniatura: solo la selecciona (para luego guardar). No abre la modal de vista en grande.</summary>
     private void SeleccionarPreviewImagenSerpApi(string imageUrl)
     {
         if (_busquedaWeb == null) return;
         _busquedaWeb.SelectedImageUrl = imageUrl;
         _busquedaWeb.Error = null;
+        _busquedaWeb.ErrorLogDetail = null;
+        StateHasChanged();
+    }
+
+    /// <summary>Doble clic en una miniatura: abre la modal de vista en grande para ver la imagen.</summary>
+    private void AbrirPreviewImagenBusquedaWeb(string imageUrl)
+    {
+        if (_busquedaWeb == null) return;
+        _busquedaWeb.SelectedImageUrl = imageUrl;
+        _busquedaWeb.Error = null;
+        _busquedaWeb.ErrorLogDetail = null;
         _busquedaWebPreviewUrl = imageUrl;
         StateHasChanged();
     }
@@ -1819,15 +2501,21 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
     private async Task GuardarImagenSeleccionadaSerpApiAsync()
     {
         if (_busquedaWeb == null || string.IsNullOrWhiteSpace(_busquedaWeb.SelectedImageUrl) || _busquedaWeb.ProductoID == 0) return;
+        if (_busquedaWeb.Descargando) return;
 
         var imageUrl = _busquedaWeb.SelectedImageUrl;
         var productId = _busquedaWeb.ProductoID;
 
+        // Marcar como descargando de inmediato para evitar doble clic (sobre todo en modo lista).
+        _busquedaWeb.Descargando = true;
+        _busquedaWeb.Error = null;
+        StateHasChanged();
+
+        _busquedaWebCancelacionRazon = "Se inició otra descarga (por ejemplo, doble clic en Guardar).";
         _busquedaWebCts?.Cancel();
         _busquedaWebCts?.Dispose();
         _busquedaWebCts = new CancellationTokenSource();
-        _busquedaWeb.Descargando = true;
-        _busquedaWeb.Error = null;
+        _busquedaWebCancelacionRazon = null;
         await InvokeAsync(StateHasChanged);
 
         try
@@ -1875,7 +2563,35 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
         }
         catch (OperationCanceledException)
         {
-            _busquedaWeb.Error = "Descarga cancelada.";
+            bool fueNuestraCancelacion = _busquedaWebCts?.Token.IsCancellationRequested == true;
+            bool tuvoRazonExplicita = !string.IsNullOrWhiteSpace(_busquedaWebCancelacionRazon);
+            var razon = _busquedaWebCancelacionRazon
+                ?? (fueNuestraCancelacion
+                    ? "Motivo no registrado (posible cierre del modal o pestaña en segundo plano)."
+                    : "La descarga fue interrumpida por la red o el servidor (timeout, conexión cerrada o imagen no accesible). No fue una cancelación manual.");
+            var errorUsuario = (fueNuestraCancelacion || tuvoRazonExplicita)
+                ? "Descarga cancelada."
+                : "La descarga se interrumpió (timeout o servidor). Probá con otra imagen.";
+            var logDetail = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                evento = "Descarga cancelada",
+                razon,
+                productId,
+                imageUrl = imageUrl?.Length > 200 ? imageUrl.Substring(0, 200) + "…" : imageUrl,
+                timestamp = DateTime.UtcNow.ToString("o"),
+                mensaje = "Ver el campo 'razon' para el detalle."
+            }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            _busquedaWebCancelacionRazon = null;
+            if (_busquedaWeb != null)
+            {
+                _busquedaWeb.Error = errorUsuario;
+                _busquedaWeb.ErrorLogDetail = logDetail;
+            }
+            try
+            {
+                await JS.InvokeVoidAsync("__logAsignarImagenes", "DESCARGA_CANCELADA", logDetail);
+            }
+            catch { }
         }
         finally
         {
@@ -1884,6 +2600,21 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
             if (_busquedaWeb != null)
                 _busquedaWeb.Descargando = false;
             await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>Copia el log de detalle (ej. descarga cancelada) al portapapeles y muestra toast.</summary>
+    private async Task CopiarLogBusquedaWebAsync()
+    {
+        if (_busquedaWeb?.ErrorLogDetail == null) return;
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _busquedaWeb.ErrorLogDetail);
+            await MostrarToastAsync("LOG copiado al portapapeles.", false);
+        }
+        catch
+        {
+            await MostrarToastAsync("No se pudo copiar al portapapeles.", true);
         }
     }
 
@@ -1966,8 +2697,9 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
             return;
         }
         var pendientesImagen = _items.Where(p => p.ImagenPendienteGuardar && !string.IsNullOrWhiteSpace(p.ImagenUrl)).ToList();
-        var pendientesObservaciones = _items.Where(p => p.ObservacionesPendienteGuardar).ToList();
-        if (pendientesImagen.Count == 0 && pendientesObservaciones.Count == 0)
+        // Por ahora solo enviamos PATCH de observaciones; las descripciones corta/larga no están soportadas en la API.
+        var pendientesPatch = _items.Where(p => p.ObservacionesPendienteGuardar).ToList();
+        if (pendientesImagen.Count == 0 && pendientesPatch.Count == 0)
         {
             await MostrarToastAsync("No hay cambios pendientes de guardar.", false);
             return;
@@ -1987,9 +2719,9 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
                 if (ok) { item.ImagenPendienteGuardar = false; okImg++; } else failImg++;
                 await InvokeAsync(StateHasChanged);
             }
-            for (int i = 0; i < pendientesObservaciones.Count; i++)
+            for (int i = 0; i < pendientesPatch.Count; i++)
             {
-                var item = pendientesObservaciones[i];
+                var item = pendientesPatch[i];
                 var observacionNormalizada = EnsureRtfMatchesApiExample(NormalizeRtfForApi(RepairRtfEscapesFromModel(item.Observaciones ?? "")));
                 var request = new ProductoPatchRequest
                 {
@@ -2001,15 +2733,15 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
                 };
                 try
                 {
-                    var noAscii = observacionNormalizada.Count(c => (int)c > 0x7F);
+                    var noAscii = (observacionNormalizada?.Count(c => (int)c > 0x7F) ?? 0);
                     await JS.InvokeVoidAsync("__logAsignarImagenes", "PATCH Observaciones MASIVO ANTES", JsonSerializer.Serialize(new
                     {
                         indice = i + 1,
-                        total = pendientesObservaciones.Count,
+                        total = pendientesPatch.Count,
                         codigoID = request.CodigoID,
-                        observacionLongitud = observacionNormalizada.Length,
+                        observacionLongitud = observacionNormalizada?.Length ?? 0,
                         noAsciiEnEnvio = noAscii,
-                        preview = observacionNormalizada.Length > 120 ? observacionNormalizada.Substring(0, 120) + "…" : observacionNormalizada
+                        preview = (observacionNormalizada?.Length ?? 0) > 120 ? observacionNormalizada!.Substring(0, 120) + "…" : observacionNormalizada
                     }));
                 }
                 catch { }
@@ -2019,14 +2751,15 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
                 swPatch.Stop();
                 if (result.Success)
                 {
-                    item.ObservacionesPendienteGuardar = false;
+                    // Solo marcamos observaciones como guardadas; descripciones se guardan solo en memoria.
+                    if (item.ObservacionesPendienteGuardar) item.ObservacionesPendienteGuardar = false;
                     okObs++;
                     try
                     {
                         await JS.InvokeVoidAsync("__logAsignarImagenes", "PATCH Observaciones MASIVO OK", JsonSerializer.Serialize(new
                         {
                             indice = i + 1,
-                            total = pendientesObservaciones.Count,
+                            total = pendientesPatch.Count,
                             tiempoMs = swPatch.ElapsedMilliseconds,
                             codigoID = request.CodigoID,
                             statusCode = result.StatusCode
@@ -2042,7 +2775,7 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
                         await JS.InvokeVoidAsync("__logAsignarImagenes", "PATCH Observaciones MASIVO ERROR", JsonSerializer.Serialize(new
                         {
                             indice = i + 1,
-                            total = pendientesObservaciones.Count,
+                            total = pendientesPatch.Count,
                             tiempoMs = swPatch.ElapsedMilliseconds,
                             codigoID = request.CodigoID,
                             statusCode = result.StatusCode,
@@ -2081,10 +2814,10 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
     private const int MaxUrlsToTryPerProductoMasivo = 20;
 
     /// <summary>
-    /// Intenta descargar una imagen desde una lista de URLs (SOLID: responsabilidad única).
-    /// Requisito de negocio: en modo lista + búsqueda masiva, se debe usar SIEMPRE la primera imagen de la
-    /// respuesta de la API (posición 0). Por eso acá solo se intenta descargar la primera URL; si falla,
-    /// no se prueban alternativas para respetar exactamente el orden devuelto por la API.
+    /// Intenta descargar una imagen desde la lista de URLs (búsqueda masiva).
+    /// Se prueba la primera URL; si falla (timeout, cancelación, red), se reintenta una vez tras 600 ms.
+    /// Si sigue fallando, se prueban las siguientes URLs (hasta 5) con un intento y un reintento cada una,
+    /// para asignar imagen automáticamente sin que el usuario tenga que abrir la modal y guardar a mano.
     /// </summary>
     /// <param name="productId">ID del producto (para logs).</param>
     /// <param name="codigo">Código del producto (para logs).</param>
@@ -2099,76 +2832,58 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
         int indice,
         int total)
     {
-        // Sin URLs, no hay nada que descargar.
         if (urls == null || urls.Count == 0)
             return (null, -1);
 
-        // Regla de negocio: solo se intenta la PRIMERA URL de la respuesta.
-        var imageUrl = urls[0];
-        if (string.IsNullOrWhiteSpace(imageUrl))
-            return (null, -1);
+        const int maxUrlsToTry = 5;
+        int urlsToTry = Math.Min(maxUrlsToTry, urls.Count);
 
-        try
+        for (int urlIdx = 0; urlIdx < urlsToTry; urlIdx++)
         {
-            await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration INTENTO_PRIMERA_URL",
-                JsonSerializer.Serialize(new
-                {
-                    indice,
-                    total,
-                    productId,
-                    codigo,
-                    urlsDisponibles = urls.Count,
-                    urlIndex = 1,
-                    mensaje = "Se intentará descargar solo la primera URL devuelta por la API para respetar el orden de resultados."
-                }));
-        }
-        catch { }
+            var imageUrl = urls[urlIdx];
+            if (string.IsNullOrWhiteSpace(imageUrl))
+                continue;
 
-        try
-        {
-            var dataUrl = await GoogleImageSearch.FetchImageAsDataUrlAsync(imageUrl);
+            int urlIndex1Based = urlIdx + 1;
+            try
+            {
+                await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration INTENTO_URL",
+                    JsonSerializer.Serialize(new { indice, total, productId, codigo, urlIndex = urlIndex1Based, urlsDisponibles = urls.Count }));
+            }
+            catch { }
+
+            // Primer intento de descarga para esta URL.
+            string? dataUrl = await DescargarUnaImagenUrlAsync(imageUrl, productId, codigo, indice, total, urlIndex1Based, intento: 1);
             if (!string.IsNullOrWhiteSpace(dataUrl) && dataUrl.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
             {
                 try
                 {
-                    await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration FETCH_OK_PRIMERA_URL",
-                        JsonSerializer.Serialize(new { indice, total, productId, codigo, urlIndex = 1 }));
+                    await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration FETCH_OK",
+                        JsonSerializer.Serialize(new { indice, total, productId, codigo, urlIndex = urlIndex1Based }));
                 }
                 catch { }
-                return (dataUrl, 1);
+                return (dataUrl, urlIndex1Based);
             }
-        }
-        catch (Exception exFetch)
-        {
-            try
+
+            // Reintento tras 600 ms (mismo comportamiento que en la modal: si falla por timeout/cancelación, suele funcionar al reintentar).
+            await Task.Delay(600);
+            dataUrl = await DescargarUnaImagenUrlAsync(imageUrl, productId, codigo, indice, total, urlIndex1Based, intento: 2);
+            if (!string.IsNullOrWhiteSpace(dataUrl) && dataUrl.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
             {
-                await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration ERROR_FETCH_PRIMERA_URL",
-                    JsonSerializer.Serialize(new
-                    {
-                        indice,
-                        total,
-                        productId,
-                        codigo,
-                        urlIndex = 1,
-                        error = exFetch.Message,
-                        imageUrlPreview = imageUrl.Length > 100 ? imageUrl.Substring(0, 100) + "…" : imageUrl
-                    }));
+                try
+                {
+                    await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration FETCH_OK_REINTENTO",
+                        JsonSerializer.Serialize(new { indice, total, productId, codigo, urlIndex = urlIndex1Based, mensaje = "Éxito en el segundo intento." }));
+                }
+                catch { }
+                return (dataUrl, urlIndex1Based);
             }
-            catch { }
         }
 
         try
         {
-            await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration FALLA_PRIMERA_URL",
-                JsonSerializer.Serialize(new
-                {
-                    indice,
-                    total,
-                    productId,
-                    codigo,
-                    urlsDisponibles = urls.Count,
-                    mensaje = "No se pudo descargar la primera URL; no se probarán alternativas para respetar el orden de la API."
-                }));
+            await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration FALLA_TODAS_URLS",
+                JsonSerializer.Serialize(new { indice, total, productId, codigo, urlsProbadas = urlsToTry, mensaje = "No se pudo descargar ninguna URL tras intentos y reintentos." }));
         }
         catch { }
 
@@ -2176,9 +2891,49 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
     }
 
     /// <summary>
-    /// Asignación masiva de imágenes: para cada producto seleccionado busca en la API DRR (código de barra + descripción,
-    /// o solo descripción si no tiene código de barra). Si no encuentra imágenes, reintenta con descripción abreviada (8, 5, 3, 2 palabras).
-    /// Descarga la primera imagen válida y la asigna en memoria (ImagenPendienteGuardar); el usuario guarda con «Guardar cambios».
+    /// Descarga una sola URL a data URL. Usado por búsqueda masiva para intentar/reintentar cada imagen.
+    /// Devuelve null si falla o el resultado no es una imagen válida.
+    /// </summary>
+    private async Task<string?> DescargarUnaImagenUrlAsync(
+        string imageUrl,
+        int productId,
+        string? codigo,
+        int indice,
+        int total,
+        int urlIndex1Based,
+        int intento)
+    {
+        try
+        {
+            var dataUrl = await GoogleImageSearch.FetchImageAsDataUrlAsync(imageUrl);
+            return dataUrl;
+        }
+        catch (Exception exFetch)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration ERROR_FETCH",
+                    JsonSerializer.Serialize(new
+                    {
+                        indice,
+                        total,
+                        productId,
+                        codigo,
+                        urlIndex = urlIndex1Based,
+                        intento,
+                        error = exFetch.Message,
+                        imageUrlPreview = imageUrl.Length > 100 ? imageUrl.Substring(0, 100) + "…" : imageUrl
+                    }));
+            }
+            catch { }
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Asignación masiva de imágenes: para cada producto seleccionado busca en la API DRR (código de barra + descripción completa).
+    /// Para cada producto obtiene URLs, descarga la primera imagen válida (con reintento automático si falla por timeout/red)
+    /// y la asigna en memoria (ImagenPendienteGuardar). El usuario confirma con «Guardar cambios».
     /// </summary>
     private async Task BuscarImagenMasivoSerpApiAsync()
     {
@@ -2256,17 +3011,9 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
 
                 var desc = (p.DescripcionLarga ?? "").Trim();
                 var barra = (p.CodigoBarra ?? "").Trim();
-                // Query para API DRR: siempre código de barra + descripción (o solo descripción si no hay barra).
+                // Query para API DRR: siempre código de barra + descripción completa (no se acorta).
                 var queryPrimera = ImageSearchQueryHelper.ConstruirQuery(barra, desc);
-                try
-                {
-                    await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration QUERY_POR_PRODUCTO",
-                        JsonSerializer.Serialize(new { productId = p.ProductoID, codigo = p.Codigo, barra, descCorta = desc.Length > 50 ? desc.Substring(0, 50) + "…" : desc, queryEnviadaALaApi = queryPrimera }));
-                }
-                catch { }
-                // Variantes: descripción completa y luego abreviada (8, 5, 3, 2 palabras) por si la API no responde a la completa.
-                var variantesDesc = ImageSearchQueryHelper.ObtenerVariantesDescripcion(desc);
-                if (variantesDesc.Count == 0)
+                if (string.IsNullOrWhiteSpace(queryPrimera))
                 {
                     idsSinImagen.Add(new { productId = p.ProductoID, codigo = p.Codigo, motivo = "descripción vacía" });
                     _bulkSearchingCurrent = i + 1;
@@ -2276,151 +3023,67 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
 
                 try
                 {
+                    await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration QUERY_POR_PRODUCTO",
+                        JsonSerializer.Serialize(new { productId = p.ProductoID, codigo = p.Codigo, barra, descCorta = desc.Length > 50 ? desc.Substring(0, 50) + "…" : desc, queryEnviadaALaApi = queryPrimera, mensaje = "Código de barra + descripción completa (sin acortar)." }));
+                }
+                catch { }
+
+                try
+                {
                     await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration PROCESANDO",
-                        JsonSerializer.Serialize(new
-                        {
-                            indice = i + 1,
-                            total,
-                            productId = p.ProductoID,
-                            codigo = p.Codigo,
-                            variantesDescripcion = variantesDesc.Count,
-                            tieneBarra = !string.IsNullOrWhiteSpace(barra),
-                            descCorta = desc.Length > 40 ? desc.Substring(0, 40) + "…" : desc
-                        }));
+                        JsonSerializer.Serialize(new { indice = i + 1, total, productId = p.ProductoID, codigo = p.Codigo, tieneBarra = !string.IsNullOrWhiteSpace(barra), descCorta = desc.Length > 40 ? desc.Substring(0, 40) + "…" : desc }));
                 }
                 catch { }
 
                 string? dataUrlAsignada = null;
                 int urlIndexUsada = -1;
                 IReadOnlyList<string>? urlsFinales = null;
-                var intentoVariante = 0;
 
-                foreach (var descVariante in variantesDesc)
+                IReadOnlyList<string>? urls;
+                try
                 {
-                    intentoVariante++;
-                    if (intentoVariante > 1)
-                    {
-                        try
-                        {
-                            await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration REINTENTO_DESC_ACORTADA",
-                                JsonSerializer.Serialize(new
-                                {
-                                    indice = i + 1,
-                                    total,
-                                    productId = p.ProductoID,
-                                    codigo = p.Codigo,
-                                    intento = intentoVariante,
-                                    descVariante = descVariante.Length > 60 ? descVariante.Substring(0, 60) + "…" : descVariante,
-                                    mensaje = "Reintentando búsqueda con descripción acortada para obtener otras URLs."
-                                }));
-                        }
-                        catch { }
-                    }
-
-                    IReadOnlyList<string> urls;
+                    urls = await BuscarUrlsIntegracionPorProductoAsync(barra, desc);
+                }
+                catch (Exception exApi)
+                {
                     try
                     {
-                        urls = await BuscarUrlsIntegracionPorProductoAsync(barra, descVariante);
+                        await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration ERROR_API",
+                            JsonSerializer.Serialize(new { indice = i + 1, total, p.ProductoID, p.Codigo, descCorta = desc.Length > 40 ? desc.Substring(0, 40) + "…" : desc, error = exApi.Message }));
                     }
-                    catch (Exception exApi)
-                    {
-                        try
-                        {
-                            await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration ERROR_API",
-                                JsonSerializer.Serialize(new { indice = i + 1, total, p.ProductoID, p.Codigo, descVariante = descVariante.Length > 40 ? descVariante.Substring(0, 40) + "…" : descVariante, error = exApi.Message }));
-                        }
-                        catch { }
-                        continue; // Siguiente variante.
-                    }
+                    catch { }
+                    idsSinImagen.Add(new { productId = p.ProductoID, codigo = p.Codigo, motivo = exApi.Message });
+                    _bulkSearchingCurrent = i + 1;
+                    await InvokeAsync(StateHasChanged);
+                    continue;
+                }
 
-                    if (urls == null || urls.Count == 0)
-                    {
-                        try
-                        {
-                            await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration SIN_URLS",
-                                JsonSerializer.Serialize(new { indice = i + 1, total, p.ProductoID, p.Codigo, descVariante = descVariante.Length > 40 ? descVariante.Substring(0, 40) + "…" : descVariante }));
-                        }
-                        catch { }
-                        continue;
-                    }
-
+                if (urls != null && urls.Count > 0)
+                {
                     try
                     {
                         await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration URLs_OBTENIDAS",
-                            JsonSerializer.Serialize(new { indice = i + 1, total, p.ProductoID, p.Codigo, urlsCount = urls.Count, intentoVariante, primeraUrl = urls[0] }));
+                            JsonSerializer.Serialize(new { indice = i + 1, total, p.ProductoID, p.Codigo, urlsCount = urls.Count, primeraUrl = urls[0] }));
                     }
                     catch { }
 
                     _urlsBusquedaCachePorProducto[p.ProductoID] = new List<string>(urls);
                     var (dataUrl, urlIndex) = await IntentarDescargarAlgunaImagenDeUrlsAsync(p.ProductoID, p.Codigo, urls, i + 1, total);
-
                     if (!string.IsNullOrWhiteSpace(dataUrl))
                     {
                         dataUrlAsignada = dataUrl;
                         urlIndexUsada = urlIndex;
                         urlsFinales = urls;
-                        break; // Éxito con esta variante.
                     }
                 }
-
-                // Fallback extra: si después de probar todas las variantes (completa, 8, 5, 3, 2 palabras)
-                // no se pudo asignar ninguna imagen, intentar una última búsqueda con descripción mínima (1 palabra).
-                if (string.IsNullOrWhiteSpace(dataUrlAsignada) && !string.IsNullOrWhiteSpace(desc))
+                else
                 {
-                    var palabrasDesc = desc.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-                    var descMinima = palabrasDesc.Length > 0 ? palabrasDesc[0].Trim() : string.Empty;
-                    if (!string.IsNullOrWhiteSpace(descMinima))
+                    try
                     {
-                        var intentoFallback = variantesDesc.Count + 1;
-                        try
-                        {
-                            await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration REINTENTO_DESC_MINIMA",
-                                JsonSerializer.Serialize(new
-                                {
-                                    indice = i + 1,
-                                    total,
-                                    productId = p.ProductoID,
-                                    codigo = p.Codigo,
-                                    intento = intentoFallback,
-                                    descMinima,
-                                    mensaje = "Reintentando búsqueda con descripción mínima (1 palabra) para intentar obtener al menos una imagen."
-                                }));
-                        }
-                        catch { }
-
-                        try
-                        {
-                            var urlsFallback = await BuscarUrlsIntegracionPorProductoAsync(barra, descMinima);
-                            if (urlsFallback != null && urlsFallback.Count > 0)
-                            {
-                                try
-                                {
-                                    await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration URLs_OBTENIDAS_DESC_MINIMA",
-                                        JsonSerializer.Serialize(new { indice = i + 1, total, p.ProductoID, p.Codigo, urlsCount = urlsFallback.Count, intento = intentoFallback, primeraUrl = urlsFallback[0] }));
-                                }
-                                catch { }
-
-                                _urlsBusquedaCachePorProducto[p.ProductoID] = new List<string>(urlsFallback);
-                                var (dataUrlFallback, urlIndexFallback) = await IntentarDescargarAlgunaImagenDeUrlsAsync(p.ProductoID, p.Codigo, urlsFallback, i + 1, total);
-                                if (!string.IsNullOrWhiteSpace(dataUrlFallback))
-                                {
-                                    dataUrlAsignada = dataUrlFallback;
-                                    urlIndexUsada = urlIndexFallback;
-                                    urlsFinales = urlsFallback;
-                                    intentoVariante = intentoFallback;
-                                }
-                            }
-                        }
-                        catch (Exception exApiMin)
-                        {
-                            try
-                            {
-                                await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration ERROR_API_DESC_MINIMA",
-                                    JsonSerializer.Serialize(new { indice = i + 1, total, p.ProductoID, p.Codigo, descMinima, error = exApiMin.Message }));
-                            }
-                            catch { }
-                        }
+                        await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration SIN_URLS",
+                            JsonSerializer.Serialize(new { indice = i + 1, total, p.ProductoID, p.Codigo, queryEnviada = queryPrimera }));
                     }
+                    catch { }
                 }
 
                 if (!string.IsNullOrWhiteSpace(dataUrlAsignada) && urlsFinales != null)
@@ -2433,36 +3096,20 @@ Estructura: título en negrita, párrafo descriptivo, Caracter\'edsticas en negr
                     try
                     {
                         await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration ASIGNACIÓN_OK",
-                            JsonSerializer.Serialize(new
-                            {
-                                indice = i + 1,
-                                total,
-                                productId = p.ProductoID,
-                                codigo = p.Codigo,
-                                urlIndexUsada = urlIndexUsada,
-                                urlsDisponibles = urlsFinales.Count,
-                                intentoVariante,
-                                mensaje = $"Imagen asignada (URL #{urlIndexUsada} de {urlsFinales.Count}, variante #{intentoVariante})."
-                            }));
+                            JsonSerializer.Serialize(new { indice = i + 1, total, productId = p.ProductoID, codigo = p.Codigo, urlIndexUsada, urlsDisponibles = urlsFinales.Count, mensaje = $"Imagen asignada (URL #{urlIndexUsada} de {urlsFinales.Count})." }));
                     }
                     catch { }
                 }
                 else
                 {
-                    var motivoFalla = $"Se probaron {variantesDesc.Count} variante(s) de descripción y ninguna permitió descargar una imagen.";
+                    var motivoFalla = (urls != null && urls.Count > 0)
+                        ? "No se pudo descargar ninguna imagen (tras reintentos automáticos)."
+                        : "No se encontraron imágenes con código de barra + descripción completa, ni al reintentar solo con descripción.";
                     idsSinImagen.Add(new { productId = p.ProductoID, codigo = p.Codigo, motivo = motivoFalla });
                     try
                     {
                         await JS.InvokeVoidAsync("__logAsignarImagenes", "BuscarImagenMasivoIntegration FALLA_ITEM",
-                            JsonSerializer.Serialize(new
-                            {
-                                indice = i + 1,
-                                total,
-                                p.ProductoID,
-                                p.Codigo,
-                                variantesProbadas = variantesDesc.Count,
-                                motivo = motivoFalla
-                            }));
+                            JsonSerializer.Serialize(new { indice = i + 1, total, p.ProductoID, p.Codigo, motivo = motivoFalla }));
                     }
                     catch { }
                 }
@@ -2688,9 +3335,9 @@ Responde ÚNICAMENTE con texto plano en español. Usa acentos y ñ correctamente
                 var result = await GeminiService.GenerateTextAsync(prompt, apiKeyGemini!);
                 if (result != null && result.Success && !string.IsNullOrWhiteSpace(result.Text))
                 {
-                    // Texto plano → RTF válido sin símbolos raros.
-                    var normalizedRtf = EnsureValidRtfFromOpenAI(result.Text);
-                    p.Observaciones = SanitizeRtfForPreview(normalizedRtf);
+                    // Texto plano → RTF canónico (mismo formato que el escritorio).
+                    var rtf = PlainTextObservacionesToRtf(result.Text);
+                    p.Observaciones = rtf;
                     p.ObservacionesPendienteGuardar = true;
                     okCount++;
                     try { await JS.InvokeVoidAsync("__logAsignarImagenes", "GenerarObservacionesMasivo item OK", JsonSerializer.Serialize(new { indice = i + 1, total, productId = p.ProductoID, rtfLen = p.Observaciones?.Length ?? 0 })); } catch { }
@@ -2709,10 +3356,7 @@ Responde ÚNICAMENTE con texto plano en español. Usa acentos y ñ correctamente
         }
     }
 
-    /// <summary>
-    /// Genera observaciones con OpenAI (Chat Completions) para cada producto seleccionado; las deja en memoria (ObservacionesPendienteGuardar = true).
-    /// Usa la misma lógica de prompt RTF que en la modal; no requiere SerpAPI.
-    /// </summary>
+    /// <summary>Abre la modal de opciones; al confirmar se ejecuta el loop masivo con OpenAI.</summary>
     private async Task GenerarObservacionesMasivoOpenAIAsync()
     {
         var apiKey = _openAiKey?.Trim();
@@ -2729,37 +3373,59 @@ Responde ÚNICAMENTE con texto plano en español. Usa acentos y ñ correctamente
             .ToList();
         if (idsToProcess.Count == 0)
         {
-            await MostrarToastAsync("Seleccioná al menos un producto con descripción o código de barras.", false);
+            _ = MostrarToastAsync("Seleccioná al menos un producto con descripción o código de barras.", false);
             return;
         }
+        AbrirModalOpcionesGeneracion(esMasivo: true);
+    }
+
+    /// <summary>Loop masivo de generación con OpenAI usando las opciones elegidas (abreviar corta, autocompletar larga, prompts).</summary>
+    private async Task GenerarObservacionesMasivoOpenAIConLoopAsync()
+    {
+        var apiKey = _openAiKey?.Trim();
+        if (string.IsNullOrWhiteSpace(apiKey))
+            apiKey = await LocalStorage.GetItemAsync(LsOpenAiKey);
+        if (string.IsNullOrWhiteSpace(apiKey?.Trim()))
+        {
+            await MostrarToastAsync("Configurá la API key de OpenAI en «Configurar API keys».", true);
+            return;
+        }
+        var idsToProcess = _items
+            .Where(p => _seleccionados.Contains(p.ProductoID) && (!string.IsNullOrWhiteSpace(p.DescripcionLarga) || !string.IsNullOrWhiteSpace(p.CodigoBarra)))
+            .Select(p => p.ProductoID)
+            .ToList();
+        if (idsToProcess.Count == 0) return;
+
         _bulkGeneratingObservaciones = true;
         _bulkGeneratingObservacionesTotal = idsToProcess.Count;
         _bulkGeneratingObservacionesCurrent = 0;
         await InvokeAsync(StateHasChanged);
         var okCount = 0;
-        var total = idsToProcess.Count;
         try
         {
-            for (int i = 0; i < total; i++)
+            for (int i = 0; i < idsToProcess.Count; i++)
             {
                 var p = _items.FirstOrDefault(x => x.ProductoID == idsToProcess[i]);
                 if (p == null) { _bulkGeneratingObservacionesCurrent = i + 1; await InvokeAsync(StateHasChanged); continue; }
                 var desc = p.DescripcionLarga ?? "";
                 var barra = p.CodigoBarra ?? "";
-                var prompt = BuildPromptObservacionesRtfOpenAI(desc, barra);
-                var result = await OpenAITextService.GenerateTextAsync(prompt, apiKey!);
+                var prompt = BuildPromptObservacionesYDescripcionesOpenAI(desc, barra, _opcionesAbreviarCorta, _opcionesAutocompletarLarga);
+                var result = await OpenAITextService.GenerateTextAsync(prompt, apiKey);
                 if (result != null && result.Success && !string.IsNullOrWhiteSpace(result.Text))
                 {
-                    var normalizedRtf = EnsureValidRtfFromOpenAI(result.Text);
-                    p.Observaciones = SanitizeRtfForPreview(normalizedRtf);
+                    ParseObservacionesYDescripcionesResponse(result.Text, _opcionesAbreviarCorta, _opcionesAutocompletarLarga,
+                        out var observacionPlano, out var corta, out var larga);
+                    p.Observaciones = PlainTextObservacionesToRtf(observacionPlano);
                     p.ObservacionesPendienteGuardar = true;
+                    if (corta != null) { p.DescripcionCorta = corta; p.DescripcionCortaPendienteGuardar = true; }
+                    if (larga != null) { p.DescripcionLarga = larga; p.DescripcionLargaPendienteGuardar = true; }
                     okCount++;
                 }
                 _bulkGeneratingObservacionesCurrent = i + 1;
                 await InvokeAsync(StateHasChanged);
             }
             await MostrarToastAsync(
-                okCount > 0 ? $"Se generaron {okCount} observación(es) con OpenAI. Usá «Guardar cambios»." : "No se pudo generar ninguna observación con OpenAI.",
+                okCount > 0 ? $"Se generaron {okCount} producto(s) con OpenAI. Usá «Guardar cambios»." : "No se pudo generar con OpenAI.",
                 okCount == 0);
         }
         finally

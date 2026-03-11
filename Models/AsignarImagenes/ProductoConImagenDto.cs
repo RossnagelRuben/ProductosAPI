@@ -8,6 +8,8 @@ public sealed class ProductoConImagenDto
 {
     public int ProductoID { get; set; }
     public string? Codigo { get; set; }
+    /// <summary>Descripción corta del producto (p. ej. para listados). Puede generarse con IA y guardarse por PATCH.</summary>
+    public string? DescripcionCorta { get; set; }
     public string? DescripcionLarga { get; set; }
     public string? CodigoBarra { get; set; }
     /// <summary>Código de rubro del producto (ej. para etiquetado en el grid).</summary>
@@ -30,4 +32,10 @@ public sealed class ProductoConImagenDto
     /// True si las observaciones fueron generadas o editadas en memoria y aún no se han enviado a la API (PATCH).
     /// </summary>
     public bool ObservacionesPendienteGuardar { get; set; }
+
+    /// <summary>True si la descripción corta fue generada o editada y aún no se envió por PATCH.</summary>
+    public bool DescripcionCortaPendienteGuardar { get; set; }
+
+    /// <summary>True si la descripción larga fue generada o editada y aún no se envió por PATCH.</summary>
+    public bool DescripcionLargaPendienteGuardar { get; set; }
 }

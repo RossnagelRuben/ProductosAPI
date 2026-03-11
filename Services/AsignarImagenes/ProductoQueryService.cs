@@ -129,6 +129,7 @@ public sealed class ProductoQueryService : IProductoQueryService
                 codigo = codigoID.ToString();
             // Usar la descripción más larga disponible (evita que descripcionLarga truncada provoque búsquedas como "YOG" en vez del producto).
             var descripcionLarga = GetDescripcionMasLarga(el);
+            string? descripcionCorta = GetDescripcionCortaFromElement(el);
             string? codigoBarra = GetCodigoBarraFromElement(el);
             string? presentacion = "Unidad";
             if (el.TryGetProperty("presentaciones", out var pres) && pres.ValueKind == JsonValueKind.Array && pres.GetArrayLength() > 0)
@@ -145,6 +146,7 @@ public sealed class ProductoQueryService : IProductoQueryService
             {
                 ProductoID = codigoID,
                 Codigo = codigo,
+                DescripcionCorta = descripcionCorta,
                 DescripcionLarga = descripcionLarga,
                 CodigoBarra = codigoBarra,
                 RubroCodigo = rubroCodigo,
@@ -158,6 +160,32 @@ public sealed class ProductoQueryService : IProductoQueryService
         {
             return null;
         }
+    }
+
+    /// <summary>Obtiene la descripción corta del producto desde el JSON (descripcionCorta, descripcionBreve, etc.).</summary>
+    private static string? GetDescripcionCortaFromElement(JsonElement el)
+    {
+        var names = new[] { "descripcionCorta", "DescripcionCorta", "descripcionBreve", "DescripcionBreve", "descripcion", "Descripcion" };
+        foreach (var name in names)
+        {
+            if (el.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.String)
+            {
+                var s = prop.GetString();
+                if (!string.IsNullOrWhiteSpace(s)) return s;
+            }
+        }
+        if (el.TryGetProperty("producto", out var prod) && prod.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var name in names)
+            {
+                if (prod.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.String)
+                {
+                    var s = prop.GetString();
+                    if (!string.IsNullOrWhiteSpace(s)) return s;
+                }
+            }
+        }
+        return null;
     }
 
     /// <summary>Obtiene la descripción más larga disponible en el JSON (raíz y objetos anidados) para que la búsqueda use siempre código de barra + descripción completa.</summary>

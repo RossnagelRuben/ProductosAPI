@@ -89,14 +89,8 @@ public sealed class ProductoPatchService : IProductoPatchService
 }
 
 /// <summary>
-/// DTO mínimo para PATCH /Producto según Swagger:
-/// {
-///   "codigoID": 0,
-///   "imagenEspecified": true,
-///   "imagen": "string",
-///   "observacionEspecified": true,
-///   "observacion": "string"
-/// }
+/// DTO mínimo para PATCH /Producto según Swagger.
+/// Incluye opcionales descripcionCorta y descripcionLarga por si la API los soporta.
 /// </summary>
 public sealed class ProductoPatchRequest
 {
@@ -114,6 +108,18 @@ public sealed class ProductoPatchRequest
 
     [JsonPropertyName("observacion")]
     public string? Observacion { get; set; }
+
+    [JsonPropertyName("descripcionCortaEspecified")]
+    public bool DescripcionCortaEspecified { get; set; }
+
+    [JsonPropertyName("descripcionCorta")]
+    public string? DescripcionCorta { get; set; }
+
+    [JsonPropertyName("descripcionLargaEspecified")]
+    public bool DescripcionLargaEspecified { get; set; }
+
+    [JsonPropertyName("descripcionLarga")]
+    public string? DescripcionLarga { get; set; }
 }
 
 /// <summary>
