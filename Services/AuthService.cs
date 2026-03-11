@@ -5,11 +5,16 @@ using System.Text.Json;
 
 namespace BlazorApp_ProductosAPI.Services
 {
+    /// <summary>Resultado de GetTokenUser: éxito, token user, token final (tokenDev.tokenUser) y compañía.</summary>
     public class TokenUserResult
     {
         public bool Success { get; set; }
         public string? ErrorMessage { get; set; }
         public string? Company { get; set; }
+        /// <summary>Token de usuario devuelto por GetTokenUser.</summary>
+        public string? TokenUser { get; set; }
+        /// <summary>Token final para Bearer: tokenDev + "." + tokenUser.</summary>
+        public string? TokenFinal { get; set; }
     }
     public interface IAuthService
     {
@@ -58,16 +63,19 @@ namespace BlazorApp_ProductosAPI.Services
             _jsRuntime = jsRuntime;
         }
 
+        /// <summary>
+        /// Flujo de login:
+        /// 1) Llamar a GetTokenDeveloper (Auth/GetTokenDeveloper) con token de empresa → devuelve TOKEN DEV.
+        /// 2) Llamar a GetTokenUser (Auth/GetTokenUser) con TOKEN DEV en Bearer → devuelve TOKEN USER.
+        /// 3) Token final para las APIs = TOKEN_DEV + "." + TOKEN_USER (ese es el Bearer que se guarda en auth_token).
+        /// </summary>
         public async Task<LoginResponse?> LoginAsync(string user, string password, string? tokenDevOverride = null, string? tokenEmpresaOverride = null)
         {
             try
             {
-                // 1) Obtener TOKEN DEV:
-                //    - Si se pasa un tokenDevOverride desde el login, se usa directamente (modo debug / manual)
-                //    - Si no, se sigue el flujo de la documentación:
-                //         POST Auth/GetTokenDeveloper
-                //         Header: Authorization = Bearer TOKEN_EMPRESA (token de la empresa)
-                //         Body JSON: { user, pwd, usePublicLogin }
+                // --- Paso 1: Obtener TOKEN DEV ---
+                // Si se pasa tokenDevOverride (ej. desde formulario de login en modo debug), se usa ese.
+                // Si no, se llama a la API GetTokenDeveloper con el token de empresa (TOKEN_DRR por defecto).
                 string? tokenDev;
 
                 if (!string.IsNullOrWhiteSpace(tokenDevOverride))
@@ -97,12 +105,15 @@ namespace BlazorApp_ProductosAPI.Services
                     Console.WriteLine($"TOKEN DEV obtenido correctamente desde API: {tokenDev}");
                 }
 
-                // 2) Con el TOKEN DEV, obtener TOKEN USER
+                // --- Paso 2: Con el TOKEN DEV, obtener TOKEN USER (Auth/GetTokenUser con Bearer = tokenDev) ---
                 var tokenUserResult = await GetTokenUserAsync(user, password, tokenDev);
                 
-                if (tokenUserResult.Success)
+                if (tokenUserResult.Success && !string.IsNullOrEmpty(tokenUserResult.TokenFinal))
                 {
-                    // Si la validación fue exitosa, crear respuesta de login exitoso
+                    // Token final = tokenDev + "." + tokenUser (es el que debe usarse como Bearer en el resto de APIs)
+                    var tokenFinal = tokenUserResult.TokenFinal;
+
+                    // Respuesta de login exitoso; Token en Data es el token final (Bearer) para las llamadas API
                     var loginResponse = new LoginResponse
                     {
                         Status = "ok",
@@ -110,17 +121,19 @@ namespace BlazorApp_ProductosAPI.Services
                         {
                             User = user,
                             Company = tokenUserResult.Company ?? "DRR Systemas",
-                            Token = tokenDev,
+                            Token = tokenFinal,
                             DateUTC = DateTime.UtcNow
                         }
                     };
 
-                    // Guardar datos básicos en localStorage
-                    await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "auth_token", tokenDev);
+                    // Guardar en localStorage: auth_token debe ser el token FINAL (tokenDev.tokenUser) para las peticiones API
+                    await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "auth_token", tokenFinal);
                     await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "auth_user", user);
                     await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "auth_company", tokenUserResult.Company ?? "DRR Systemas");
                     await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "auth_date", DateTime.UtcNow.ToString("O"));
                     await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "auth_token_dev", tokenDev);
+                    await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "auth_token_user", tokenUserResult.TokenUser ?? "");
+                    await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "auth_token_final", tokenFinal);
 
                     return loginResponse;
                 }
@@ -237,11 +250,14 @@ namespace BlazorApp_ProductosAPI.Services
             }
         }
 
+        /// <summary>Devuelve el token final (tokenDev.tokenUser) para Bearer. Lee auth_token_final y, si está vacío, auth_token.</summary>
         public async Task<string?> GetTokenFINALAsync()
         {
             try
             {
-                return await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", "auth_token_final");
+                var final = await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", "auth_token_final");
+                if (!string.IsNullOrWhiteSpace(final)) return final;
+                return await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", "auth_token");
             }
             catch
             {
@@ -262,10 +278,10 @@ namespace BlazorApp_ProductosAPI.Services
         }
 
         /// <summary>
-        /// Paso 1: Obtener TOKEN DEV usando el token de la empresa (empresaToken) y las credenciales de login.
-        /// POST Auth/GetTokenDeveloper
-        ///     Header: Authorization = Bearer empresaToken
-        ///     Body: { user, pwd, usePublicLogin }
+        /// Paso 1 del login: obtiene TOKEN DEV desde la API.
+        /// POST https://drrsystemas4.azurewebsites.net/Auth/GetTokenDeveloper
+        /// Header: Authorization = Bearer empresaToken (token de empresa, ej. TOKEN_DRR)
+        /// Body: { "User": user, "Pwd": password, "UsePublicLogin": false }
         /// </summary>
         private async Task<(bool Success, string? TokenDev, string? ErrorMessage)> GetTokenDeveloperAsync(string user, string password, string empresaToken)
         {
@@ -324,11 +340,18 @@ namespace BlazorApp_ProductosAPI.Services
             }
         }
 
+        /// <summary>
+        /// Paso 2 del login: obtiene TOKEN USER usando el TOKEN DEV.
+        /// POST https://drrsystemas4.azurewebsites.net/Auth/GetTokenUser
+        /// Header: Authorization = Bearer tokenDev (el devuelto por GetTokenDeveloper)
+        /// Body: { "User", "Pwd", "UsePublicLogin" }
+        /// El token final para Bearer en el resto de APIs es: tokenDev + "." + tokenUser.
+        /// </summary>
         private async Task<TokenUserResult> GetTokenUserAsync(string user, string password, string tokenDev)
         {
             try
             {
-                // Usar el tokenDev que se pasa como parámetro (obtenido desde GetTokenDeveloper o desde override)
+                // Bearer = tokenDev obtenido en el paso 1 (GetTokenDeveloper) o por override
                 var tokenUserRequest = new LoginRequest
                 {
                     User = user,
@@ -381,22 +404,24 @@ namespace BlazorApp_ProductosAPI.Services
 
                     if (tokenUserResponse?.Status == "ok" && tokenUserResponse.Data != null)
                     {
-                        var tokenUser = tokenUserResponse.Data.Token;
+                        var tokenUser = tokenUserResponse.Data.Token ?? "";
+                        // Token final = tokenDev + "." + tokenUser (formato Bearer para el resto de APIs)
                         var tokenFinal = $"{tokenDev}.{tokenUser}";
 
-                        // Guardar TOKEN USER y TOKEN FINAL
+                        // Guardar en localStorage (LoginAsync también guarda auth_token con tokenFinal)
                         await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "auth_token_user", tokenUser);
                         await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "auth_token_final", tokenFinal);
 
                         Console.WriteLine($"✅ TOKEN USER guardado: {tokenUser}");
-                        Console.WriteLine($"✅ TOKEN FINAL guardado: {tokenFinal}");
+                        Console.WriteLine($"✅ TOKEN FINAL (Bearer): {tokenFinal?.Substring(0, Math.Min(40, tokenFinal?.Length ?? 0))}...");
                         Console.WriteLine($"✅ Usuario autenticado correctamente: {user}");
 
-                        // Devolver éxito con información de la empresa
                         return new TokenUserResult
                         {
                             Success = true,
-                            Company = tokenUserResponse.Data.EntidadSucursal?.RazonSocial ?? "DRR Systemas"
+                            Company = tokenUserResponse.Data.EntidadSucursal?.RazonSocial ?? "DRR Systemas",
+                            TokenUser = tokenUser,
+                            TokenFinal = tokenFinal
                         };
                     }
                     else

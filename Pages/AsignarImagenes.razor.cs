@@ -210,7 +210,10 @@ public partial class AsignarImagenes
 
     private async Task CargarTokenYCatalogos()
     {
+        // Token para APIs = tokenDev + "." + tokenUser. Se guarda en auth_token_final y también en auth_token.
         _token = await Auth.GetTokenFINALAsync();
+        if (string.IsNullOrWhiteSpace(_token))
+            _token = await Auth.GetTokenAsync();
         if (string.IsNullOrWhiteSpace(_token))
         {
             _error = "Debes iniciar sesión para buscar productos.";

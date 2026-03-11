@@ -63,28 +63,32 @@ namespace BlazorApp_ProductosAPI.Models
         public object? Config { get; set; }
     }
 
+    /// <summary>Usuario dentro de entidadSucursal. La API puede devolver sucursalID/sectorID como número o null.</summary>
     public class Usuario
     {
         public int AlmaUserID { get; set; }
         public string? UserName { get; set; }
         public object? UsuarioPerfilID { get; set; }
         public int PerfilID { get; set; }
-        public string? SucursalID { get; set; }
+        /// <summary>API devuelve número (ej. 1); no string.</summary>
+        public int? SucursalID { get; set; }
         public object? ExeptoSucursal { get; set; }
-        public string? SectorID { get; set; }
+        /// <summary>API puede devolver número o null.</summary>
+        public int? SectorID { get; set; }
         public object? ExeptoSector { get; set; }
         public object? RestringirAccion { get; set; }
     }
 
+    /// <summary>Usuario AlmaNET. Misma estructura que Usuario; sucursalID/sectorID como número o null.</summary>
     public class UsuarioAlmaNET
     {
         public int AlmaUserID { get; set; }
         public string? UserName { get; set; }
         public object? UsuarioPerfilID { get; set; }
         public int PerfilID { get; set; }
-        public string? SucursalID { get; set; }
+        public int? SucursalID { get; set; }
         public object? ExeptoSucursal { get; set; }
-        public string? SectorID { get; set; }
+        public int? SectorID { get; set; }
         public object? ExeptoSector { get; set; }
         public object? RestringirAccion { get; set; }
     }
